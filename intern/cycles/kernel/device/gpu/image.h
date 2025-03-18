@@ -59,11 +59,11 @@ ccl_device float cubic_h1(const float a)
 
 /* Fast bicubic texture lookup using 4 bilinear lookups, adapted from CUDA samples. */
 template<typename T>
-ccl_device_noinline T kernel_tex_image_interp_bicubic(const ccl_global TextureInfo &info,
+ccl_device_noinline T kernel_image_interp_bicubic(const ccl_global KernelImageInfo &info,
                                                       float x,
                                                       float y)
 {
-  ccl_gpu_tex_object_2D tex = (ccl_gpu_tex_object_2D)info.data;
+  ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info.data;
 
   x = (x * info.width) - 0.5f;
   y = (y * info.height) - 0.5f;
@@ -81,18 +81,18 @@ ccl_device_noinline T kernel_tex_image_interp_bicubic(const ccl_global TextureIn
   float y0 = (py + cubic_h0(fy) + 0.5f) / info.height;
   float y1 = (py + cubic_h1(fy) + 0.5f) / info.height;
 
-  return cubic_g0(fy) * (g0x * ccl_gpu_tex_object_read_2D<T>(tex, x0, y0) +
-                         g1x * ccl_gpu_tex_object_read_2D<T>(tex, x1, y0)) +
-         cubic_g1(fy) * (g0x * ccl_gpu_tex_object_read_2D<T>(tex, x0, y1) +
-                         g1x * ccl_gpu_tex_object_read_2D<T>(tex, x1, y1));
+  return cubic_g0(fy) * (g0x * ccl_gpu_image_object_read_2D<T>(tex, x0, y0) +
+                         g1x * ccl_gpu_image_object_read_2D<T>(tex, x1, y0)) +
+         cubic_g1(fy) * (g0x * ccl_gpu_image_object_read_2D<T>(tex, x0, y1) +
+                         g1x * ccl_gpu_image_object_read_2D<T>(tex, x1, y1));
 }
 
 /* Fast tricubic texture lookup using 8 trilinear lookups. */
 template<typename T>
 ccl_device_noinline T
-kernel_tex_image_interp_tricubic(const ccl_global TextureInfo &info, float x, float y, float z)
+kernel_image_interp_tricubic(const ccl_global KernelImageInfo &info, float x, float y, float z)
 {
-  ccl_gpu_tex_object_3D tex = (ccl_gpu_tex_object_3D)info.data;
+  ccl_gpu_image_object_3D tex = (ccl_gpu_image_object_3D)info.data;
 
   x = (x * info.width) - 0.5f;
   y = (y * info.height) - 0.5f;
@@ -120,19 +120,19 @@ kernel_tex_image_interp_tricubic(const ccl_global TextureInfo &info, float x, fl
   float z0 = (pz + cubic_h0(fz) + 0.5f) / info.depth;
   float z1 = (pz + cubic_h1(fz) + 0.5f) / info.depth;
 
-  return g0z * (g0y * (g0x * ccl_gpu_tex_object_read_3D<T>(tex, x0, y0, z0) +
-                       g1x * ccl_gpu_tex_object_read_3D<T>(tex, x1, y0, z0)) +
-                g1y * (g0x * ccl_gpu_tex_object_read_3D<T>(tex, x0, y1, z0) +
-                       g1x * ccl_gpu_tex_object_read_3D<T>(tex, x1, y1, z0))) +
-         g1z * (g0y * (g0x * ccl_gpu_tex_object_read_3D<T>(tex, x0, y0, z1) +
-                       g1x * ccl_gpu_tex_object_read_3D<T>(tex, x1, y0, z1)) +
-                g1y * (g0x * ccl_gpu_tex_object_read_3D<T>(tex, x0, y1, z1) +
-                       g1x * ccl_gpu_tex_object_read_3D<T>(tex, x1, y1, z1)));
+  return g0z * (g0y * (g0x * ccl_gpu_image_object_read_3D<T>(tex, x0, y0, z0) +
+                       g1x * ccl_gpu_image_object_read_3D<T>(tex, x1, y0, z0)) +
+                g1y * (g0x * ccl_gpu_image_object_read_3D<T>(tex, x0, y1, z0) +
+                       g1x * ccl_gpu_image_object_read_3D<T>(tex, x1, y1, z0))) +
+         g1z * (g0y * (g0x * ccl_gpu_image_object_read_3D<T>(tex, x0, y0, z1) +
+                       g1x * ccl_gpu_image_object_read_3D<T>(tex, x1, y0, z1)) +
+                g1y * (g0x * ccl_gpu_image_object_read_3D<T>(tex, x0, y1, z1) +
+                       g1x * ccl_gpu_image_object_read_3D<T>(tex, x1, y1, z1)));
 }
 
 #ifdef WITH_NANOVDB
 template<typename OutT, typename Acc>
-ccl_device OutT kernel_tex_image_interp_trilinear_nanovdb(ccl_private Acc &acc,
+ccl_device OutT kernel_image_interp_trilinear_nanovdb(ccl_private Acc &acc,
                                                           const float x,
                                                           float y,
                                                           const float z)
@@ -160,7 +160,7 @@ ccl_device OutT kernel_tex_image_interp_trilinear_nanovdb(ccl_private Acc &acc,
 }
 
 template<typename OutT, typename Acc>
-ccl_device OutT kernel_tex_image_interp_tricubic_nanovdb(ccl_private Acc &acc,
+ccl_device OutT kernel_image_interp_tricubic_nanovdb(ccl_private Acc &acc,
                                                          const float x,
                                                          const float y,
                                                          const float z)
@@ -224,14 +224,14 @@ ccl_device OutT kernel_tex_image_interp_tricubic_nanovdb(ccl_private Acc &acc,
 
 #  if defined(__KERNEL_METAL__)
 template<typename OutT, typename T>
-__attribute__((noinline)) OutT kernel_tex_image_interp_nanovdb(const ccl_global TextureInfo &info,
+__attribute__((noinline)) OutT kernel_image_interp_nanovdb(const ccl_global KernelImageInfo &info,
                                                                const float x,
                                                                const float y,
                                                                const float z,
                                                                const uint interpolation)
 #  else
 template<typename OutT, typename T>
-ccl_device_noinline OutT kernel_tex_image_interp_nanovdb(const ccl_global TextureInfo &info,
+ccl_device_noinline OutT kernel_image_interp_nanovdb(const ccl_global KernelImageInfo &info,
                                                          const float x,
                                                          const float y,
                                                          const float z,
@@ -250,19 +250,19 @@ ccl_device_noinline OutT kernel_tex_image_interp_nanovdb(const ccl_global Textur
     }
     case INTERPOLATION_LINEAR: {
       CachedReadAccessor<T> acc(grid->tree().root());
-      return kernel_tex_image_interp_trilinear_nanovdb<OutT>(acc, x, y, z);
+      return kernel_image_interp_trilinear_nanovdb<OutT>(acc, x, y, z);
     }
     default: {
       CachedReadAccessor<T> acc(grid->tree().root());
-      return kernel_tex_image_interp_tricubic_nanovdb<OutT>(acc, x, y, z);
+      return kernel_image_interp_tricubic_nanovdb<OutT>(acc, x, y, z);
     }
   }
 }
 #endif
 
-ccl_device float4 kernel_tex_image_interp(KernelGlobals kg, const int id, const float x, float y)
+ccl_device float4 kernel_image_interp(KernelGlobals kg, const int id, const float x, float y)
 {
-  const ccl_global TextureInfo &info = kernel_data_fetch(texture_info, id);
+  const ccl_global KernelImageInfo &info = kernel_data_fetch(image_info, id);
 
   /* float4, byte4, ushort4 and half4 */
   const int texture_type = info.data_type;
@@ -270,11 +270,11 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals kg, const int id, const 
       texture_type == IMAGE_DATA_TYPE_HALF4 || texture_type == IMAGE_DATA_TYPE_USHORT4)
   {
     if (info.interpolation == INTERPOLATION_CUBIC || info.interpolation == INTERPOLATION_SMART) {
-      return kernel_tex_image_interp_bicubic<float4>(info, x, y);
+      return kernel_image_interp_bicubic<float4>(info, x, y);
     }
     else {
-      ccl_gpu_tex_object_2D tex = (ccl_gpu_tex_object_2D)info.data;
-      return ccl_gpu_tex_object_read_2D<float4>(tex, x, y);
+      ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info.data;
+      return ccl_gpu_image_object_read_2D<float4>(tex, x, y);
     }
   }
   /* float, byte and half */
@@ -282,23 +282,23 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals kg, const int id, const 
     float f;
 
     if (info.interpolation == INTERPOLATION_CUBIC || info.interpolation == INTERPOLATION_SMART) {
-      f = kernel_tex_image_interp_bicubic<float>(info, x, y);
+      f = kernel_image_interp_bicubic<float>(info, x, y);
     }
     else {
-      ccl_gpu_tex_object_2D tex = (ccl_gpu_tex_object_2D)info.data;
-      f = ccl_gpu_tex_object_read_2D<float>(tex, x, y);
+      ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info.data;
+      f = ccl_gpu_image_object_read_2D<float>(tex, x, y);
     }
 
     return make_float4(f, f, f, 1.0f);
   }
 }
 
-ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals kg,
+ccl_device float4 kernel_image_interp_3d(KernelGlobals kg,
                                              const int id,
                                              float3 P,
                                              InterpolationType interp)
 {
-  const ccl_global TextureInfo &info = kernel_data_fetch(texture_info, id);
+  const ccl_global KernelImageInfo &info = kernel_data_fetch(image_info, id);
 
   if (info.use_transform_3d) {
     P = transform_point(&info.transform_3d, P);
@@ -313,20 +313,20 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals kg,
 
 #ifdef WITH_NANOVDB
   if (texture_type == IMAGE_DATA_TYPE_NANOVDB_FLOAT) {
-    float f = kernel_tex_image_interp_nanovdb<float, float>(info, x, y, z, interpolation);
+    float f = kernel_image_interp_nanovdb<float, float>(info, x, y, z, interpolation);
     return make_float4(f, f, f, 1.0f);
   }
   if (texture_type == IMAGE_DATA_TYPE_NANOVDB_FLOAT3) {
-    float3 f = kernel_tex_image_interp_nanovdb<float3, packed_float3>(
+    float3 f = kernel_image_interp_nanovdb<float3, packed_float3>(
         info, x, y, z, interpolation);
     return make_float4(f, 1.0f);
   }
   if (texture_type == IMAGE_DATA_TYPE_NANOVDB_FPN) {
-    float f = kernel_tex_image_interp_nanovdb<float, nanovdb::FpN>(info, x, y, z, interpolation);
+    float f = kernel_image_interp_nanovdb<float, nanovdb::FpN>(info, x, y, z, interpolation);
     return make_float4(f, f, f, 1.0f);
   }
   if (texture_type == IMAGE_DATA_TYPE_NANOVDB_FP16) {
-    float f = kernel_tex_image_interp_nanovdb<float, nanovdb::Fp16>(info, x, y, z, interpolation);
+    float f = kernel_image_interp_nanovdb<float, nanovdb::Fp16>(info, x, y, z, interpolation);
     return make_float4(f, f, f, 1.0f);
   }
 #endif
@@ -334,22 +334,22 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals kg,
       texture_type == IMAGE_DATA_TYPE_HALF4 || texture_type == IMAGE_DATA_TYPE_USHORT4)
   {
     if (interpolation == INTERPOLATION_CUBIC || interpolation == INTERPOLATION_SMART) {
-      return kernel_tex_image_interp_tricubic<float4>(info, x, y, z);
+      return kernel_image_interp_tricubic<float4>(info, x, y, z);
     }
     else {
-      ccl_gpu_tex_object_3D tex = (ccl_gpu_tex_object_3D)info.data;
-      return ccl_gpu_tex_object_read_3D<float4>(tex, x, y, z);
+      ccl_gpu_image_object_3D tex = (ccl_gpu_image_object_3D)info.data;
+      return ccl_gpu_image_object_read_3D<float4>(tex, x, y, z);
     }
   }
   else {
     float f;
 
     if (interpolation == INTERPOLATION_CUBIC || interpolation == INTERPOLATION_SMART) {
-      f = kernel_tex_image_interp_tricubic<float>(info, x, y, z);
+      f = kernel_image_interp_tricubic<float>(info, x, y, z);
     }
     else {
-      ccl_gpu_tex_object_3D tex = (ccl_gpu_tex_object_3D)info.data;
-      f = ccl_gpu_tex_object_read_3D<float>(tex, x, y, z);
+      ccl_gpu_image_object_3D tex = (ccl_gpu_image_object_3D)info.data;
+      f = ccl_gpu_image_object_read_3D<float>(tex, x, y, z);
     }
 
     return make_float4(f, f, f, 1.0f);

@@ -80,11 +80,11 @@ typedef unsigned long long uint64_t;
 /* GPU texture objects */
 
 typedef unsigned long long CUtexObject;
-typedef CUtexObject ccl_gpu_tex_object_2D;
-typedef CUtexObject ccl_gpu_tex_object_3D;
+typedef CUtexObject ccl_gpu_image_object_2D;
+typedef CUtexObject ccl_gpu_image_object_3D;
 
 template<typename T>
-ccl_device_forceinline T ccl_gpu_tex_object_read_2D(const ccl_gpu_tex_object_2D texobj,
+ccl_device_forceinline T ccl_gpu_image_object_read_2D(const ccl_gpu_image_object_2D texobj,
                                                     const float x,
                                                     const float y)
 {
@@ -92,7 +92,7 @@ ccl_device_forceinline T ccl_gpu_tex_object_read_2D(const ccl_gpu_tex_object_2D 
 }
 
 template<typename T>
-ccl_device_forceinline T ccl_gpu_tex_object_read_3D(const ccl_gpu_tex_object_3D texobj,
+ccl_device_forceinline T ccl_gpu_image_object_read_3D(const ccl_gpu_image_object_3D texobj,
                                                     const float x,
                                                     const float y,
                                                     const float z)

@@ -229,7 +229,7 @@ template<typename TexT, typename OutT = float4> struct TextureInterpolator {
 
   /* ********  2D interpolation ******** */
 
-  static ccl_always_inline OutT interp_closest(const TextureInfo &info, const float x, float y)
+  static ccl_always_inline OutT interp_closest(const KernelImageInfo &info, const float x, float y)
   {
     const int width = info.width;
     const int height = info.height;
@@ -264,7 +264,7 @@ template<typename TexT, typename OutT = float4> struct TextureInterpolator {
     return read(data, ix, iy, width, height);
   }
 
-  static ccl_always_inline OutT interp_linear(const TextureInfo &info, const float x, float y)
+  static ccl_always_inline OutT interp_linear(const KernelImageInfo &info, const float x, float y)
   {
     const int width = info.width;
     const int height = info.height;
@@ -318,7 +318,7 @@ template<typename TexT, typename OutT = float4> struct TextureInterpolator {
            ty * tx * read(data, nix, niy, width, height);
   }
 
-  static ccl_always_inline OutT interp_cubic(const TextureInfo &info, const float x, float y)
+  static ccl_always_inline OutT interp_cubic(const KernelImageInfo &info, const float x, float y)
   {
     const int width = info.width;
     const int height = info.height;
@@ -407,7 +407,7 @@ template<typename TexT, typename OutT = float4> struct TextureInterpolator {
 #undef DATA
   }
 
-  static ccl_always_inline OutT interp(const TextureInfo &info, const float x, float y)
+  static ccl_always_inline OutT interp(const KernelImageInfo &info, const float x, float y)
   {
     switch (info.interpolation) {
       case INTERPOLATION_CLOSEST:
@@ -421,7 +421,7 @@ template<typename TexT, typename OutT = float4> struct TextureInterpolator {
 
   /* ********  3D interpolation ******** */
 
-  static ccl_always_inline OutT interp_3d_closest(const TextureInfo &info,
+  static ccl_always_inline OutT interp_3d_closest(const KernelImageInfo &info,
                                                   const float x,
                                                   const float y,
                                                   const float z)
@@ -466,7 +466,7 @@ template<typename TexT, typename OutT = float4> struct TextureInterpolator {
     return read(data, ix, iy, iz, width, height, depth);
   }
 
-  static ccl_always_inline OutT interp_3d_linear(const TextureInfo &info,
+  static ccl_always_inline OutT interp_3d_linear(const KernelImageInfo &info,
                                                  const float x,
                                                  const float y,
                                                  const float z)
@@ -579,7 +579,7 @@ template<typename TexT, typename OutT = float4> struct TextureInterpolator {
   static ccl_never_inline
 #endif
       OutT
-      interp_3d_cubic(const TextureInfo &info, const float x, float y, const float z)
+      interp_3d_cubic(const KernelImageInfo &info, const float x, float y, const float z)
   {
     int width = info.width;
     int height = info.height;
@@ -687,7 +687,7 @@ template<typename TexT, typename OutT = float4> struct TextureInterpolator {
   }
 
   static ccl_always_inline OutT interp_3d(
-      const TextureInfo &info, const float x, float y, const float z, InterpolationType interp)
+      const KernelImageInfo &info, const float x, float y, const float z, InterpolationType interp)
   {
     switch ((interp == INTERPOLATION_NONE) ? info.interpolation : interp) {
       case INTERPOLATION_CLOSEST:
@@ -805,7 +805,7 @@ template<typename TexT, typename OutT> struct NanoVDBInterpolator {
   }
 
   static ccl_always_inline OutT interp_3d(
-      const TextureInfo &info, const float x, float y, const float z, InterpolationType interp)
+      const KernelImageInfo &info, const float x, float y, const float z, InterpolationType interp)
   {
     using namespace nanovdb;
 
@@ -831,9 +831,9 @@ template<typename TexT, typename OutT> struct NanoVDBInterpolator {
 
 #undef SET_CUBIC_SPLINE_WEIGHTS
 
-ccl_device float4 kernel_tex_image_interp(KernelGlobals kg, const int id, const float x, float y)
+ccl_device float4 kernel_image_interp(KernelGlobals kg, const int id, const float x, float y)
 {
-  const TextureInfo &info = kernel_data_fetch(texture_info, id);
+  const KernelImageInfo &info = kernel_data_fetch(image_info, id);
 
   if (UNLIKELY(!info.data)) {
     return zero_float4();
@@ -867,16 +867,16 @@ ccl_device float4 kernel_tex_image_interp(KernelGlobals kg, const int id, const 
     default:
       assert(0);
       return make_float4(
-          TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
+          IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
   }
 }
 
-ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals kg,
+ccl_device float4 kernel_image_interp_3d(KernelGlobals kg,
                                              const int id,
                                              float3 P,
                                              InterpolationType interp)
 {
-  const TextureInfo &info = kernel_data_fetch(texture_info, id);
+  const KernelImageInfo &info = kernel_data_fetch(image_info, id);
 
   if (UNLIKELY(!info.data)) {
     return zero_float4();
@@ -931,7 +931,7 @@ ccl_device float4 kernel_tex_image_interp_3d(KernelGlobals kg,
     default:
       assert(0);
       return make_float4(
-          TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
+          IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
   }
 }
 

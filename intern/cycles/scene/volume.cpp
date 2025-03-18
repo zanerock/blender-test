@@ -427,7 +427,7 @@ bool VolumeMeshBuilder::empty_grid() const
 
 #ifdef WITH_OPENVDB
 template<typename GridType>
-static openvdb::GridBase::ConstPtr openvdb_grid_from_device_texture(device_texture *image_memory,
+static openvdb::GridBase::ConstPtr openvdb_grid_from_device_image(device_image *image_memory,
                                                                     const float volume_clipping,
                                                                     Transform transform_3d)
 {
@@ -689,18 +689,18 @@ void GeometryManager::create_volume_mesh(const Scene *scene, Volume *volume, Pro
 
     /* Else fall back to creating an OpenVDB grid from the dense volume data. */
     if (!grid) {
-      device_texture *image_memory = handle.image_memory();
+      device_image *image_memory = handle.image_memory();
 
       if (image_memory->data_elements == 1) {
-        grid = openvdb_grid_from_device_texture<openvdb::FloatGrid>(
+        grid = openvdb_grid_from_device_image<openvdb::FloatGrid>(
             image_memory, volume->get_clipping(), handle.metadata().transform_3d);
       }
       else if (image_memory->data_elements == 3) {
-        grid = openvdb_grid_from_device_texture<openvdb::Vec3fGrid>(
+        grid = openvdb_grid_from_device_image<openvdb::Vec3fGrid>(
             image_memory, volume->get_clipping(), handle.metadata().transform_3d);
       }
       else if (image_memory->data_elements == 4) {
-        grid = openvdb_grid_from_device_texture<openvdb::Vec4fGrid>(
+        grid = openvdb_grid_from_device_image<openvdb::Vec4fGrid>(
             image_memory, volume->get_clipping(), handle.metadata().transform_3d);
       }
     }

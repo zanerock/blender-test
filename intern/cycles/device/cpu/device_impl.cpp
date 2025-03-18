@@ -44,7 +44,7 @@
 CCL_NAMESPACE_BEGIN
 
 CPUDevice::CPUDevice(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_, bool headless_)
-    : Device(info_, stats_, profiler_, headless_), texture_info(this, "texture_info", MEM_GLOBAL)
+    : Device(info_, stats_, profiler_, headless_), image_info(this, "image_info", MEM_GLOBAL)
 {
   /* Pick any kernel, all of them are supposed to have same level of microarchitecture
    * optimization. */
@@ -58,7 +58,7 @@ CPUDevice::CPUDevice(const DeviceInfo &info_, Stats &stats_, Profiler &profiler_
 #ifdef WITH_EMBREE
   embree_device = rtcNewDevice("verbose=0");
 #endif
-  need_texture_info = false;
+  need_image_info = false;
 }
 
 CPUDevice::~CPUDevice()
@@ -67,7 +67,7 @@ CPUDevice::~CPUDevice()
   rtcReleaseDevice(embree_device);
 #endif
 
-  texture_info.free();
+  image_info.free();
 }
 
 BVHLayoutMask CPUDevice::get_bvh_layout_mask(uint /*kernel_features*/) const
@@ -79,22 +79,22 @@ BVHLayoutMask CPUDevice::get_bvh_layout_mask(uint /*kernel_features*/) const
   return bvh_layout_mask;
 }
 
-bool CPUDevice::load_texture_info()
+bool CPUDevice::load_image_info()
 {
-  if (!need_texture_info) {
+  if (!need_image_info) {
     return false;
   }
 
-  texture_info.copy_to_device();
-  need_texture_info = false;
+  image_info.copy_to_device();
+  need_image_info = false;
 
   return true;
 }
 
 void CPUDevice::mem_alloc(device_memory &mem)
 {
-  if (mem.type == MEM_TEXTURE) {
-    assert(!"mem_alloc not supported for textures.");
+  if (mem.type == MEM_IMAGE) {
+    assert(!"mem_alloc not supported for images.");
   }
   else if (mem.type == MEM_GLOBAL) {
     assert(!"mem_alloc not supported for global memory.");
@@ -127,9 +127,9 @@ void CPUDevice::mem_copy_to(device_memory &mem)
     global_free(mem);
     global_alloc(mem);
   }
-  else if (mem.type == MEM_TEXTURE) {
-    tex_free((device_texture &)mem);
-    tex_alloc((device_texture &)mem);
+  else if (mem.type == MEM_IMAGE) {
+    image_free((device_image &)mem);
+    image_alloc((device_image &)mem);
   }
   else {
     if (!mem.device_pointer) {
@@ -167,8 +167,8 @@ void CPUDevice::mem_free(device_memory &mem)
   if (mem.type == MEM_GLOBAL) {
     global_free(mem);
   }
-  else if (mem.type == MEM_TEXTURE) {
-    tex_free((device_texture &)mem);
+  else if (mem.type == MEM_IMAGE) {
+    image_free((device_image &)mem);
   }
   else if (mem.device_pointer) {
     if (mem.type == MEM_DEVICE_ONLY) {
@@ -221,7 +221,7 @@ void CPUDevice::global_free(device_memory &mem)
   }
 }
 
-void CPUDevice::tex_alloc(device_texture &mem)
+void CPUDevice::image_alloc(device_image &mem)
 {
   VLOG_WORK << "Texture allocate: " << mem.name << ", "
             << string_human_readable_number(mem.memory_size()) << " bytes. ("
@@ -232,23 +232,23 @@ void CPUDevice::tex_alloc(device_texture &mem)
   stats.mem_alloc(mem.device_size);
 
   const uint slot = mem.slot;
-  if (slot >= texture_info.size()) {
+  if (slot >= image_info.size()) {
     /* Allocate some slots in advance, to reduce amount of re-allocations. */
-    texture_info.resize(slot + 128);
+    image_info.resize(slot + 128);
   }
 
-  texture_info[slot] = mem.info;
-  texture_info[slot].data = (uint64_t)mem.host_pointer;
-  need_texture_info = true;
+  image_info[slot] = mem.info;
+  image_info[slot].data = (uint64_t)mem.host_pointer;
+  need_image_info = true;
 }
 
-void CPUDevice::tex_free(device_texture &mem)
+void CPUDevice::image_free(device_image &mem)
 {
   if (mem.device_pointer) {
     mem.device_pointer = 0;
     stats.mem_free(mem.device_size);
     mem.device_size = 0;
-    need_texture_info = true;
+    need_image_info = true;
   }
 }
 
@@ -300,8 +300,8 @@ void *CPUDevice::get_guiding_device() const
 void CPUDevice::get_cpu_kernel_thread_globals(
     vector<ThreadKernelGlobalsCPU> &kernel_thread_globals)
 {
-  /* Ensure latest texture info is loaded into kernel globals before returning. */
-  load_texture_info();
+  /* Ensure latest image info is loaded into kernel globals before returning. */
+  load_image_info();
 
   kernel_thread_globals.clear();
   OSLGlobals *osl_globals = get_cpu_osl_memory();

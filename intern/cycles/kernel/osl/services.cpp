@@ -1224,11 +1224,10 @@ bool OSLRenderServices::texture(OSLUStringHash filename,
 
       float4 rgba;
       if (id == -1) {
-        rgba = make_float4(
-            TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
+        rgba = make_float4(IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
       }
       else {
-        rgba = kernel_tex_image_interp(kernel_globals, id, s, 1.0f - t);
+        rgba = kernel_image_interp(kernel_globals, id, s, 1.0f - t);
       }
 
       result[0] = rgba[0];
@@ -1342,7 +1341,7 @@ bool OSLRenderServices::texture3d(OSLUStringHash filename,
       /* Packed texture. */
       const int slot = handle->svm_slots[0].y;
       const float3 P_float3 = make_float3(P.x, P.y, P.z);
-      float4 rgba = kernel_tex_image_interp_3d(kernel_globals, slot, P_float3, INTERPOLATION_NONE);
+      float4 rgba = kernel_image_interp_3d(kernel_globals, slot, P_float3, INTERPOLATION_NONE);
 
       result[0] = rgba[0];
       if (nchannels > 1) {

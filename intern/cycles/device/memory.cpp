@@ -75,7 +75,7 @@ void device_memory::host_and_device_free()
 
 void device_memory::device_alloc()
 {
-  assert(!device_pointer && type != MEM_TEXTURE && type != MEM_GLOBAL);
+  assert(!device_pointer && type != MEM_IMAGE && type != MEM_GLOBAL);
   device->mem_alloc(*this);
 }
 
@@ -95,7 +95,7 @@ void device_memory::device_move_to_host()
 
 void device_memory::device_copy_from(const size_t y, const size_t w, size_t h, const size_t elem)
 {
-  assert(type != MEM_TEXTURE && type != MEM_READ_ONLY && type != MEM_GLOBAL);
+  assert(type != MEM_IMAGE && type != MEM_READ_ONLY && type != MEM_GLOBAL);
   device->mem_copy_from(*this, y, w, h, elem);
 }
 
@@ -156,13 +156,13 @@ device_sub_ptr::~device_sub_ptr()
 
 /* Device Texture */
 
-device_texture::device_texture(Device *device,
+device_image::device_image(Device *device,
                                const char *name,
                                const uint slot,
                                ImageDataType image_data_type,
                                InterpolationType interpolation,
                                ExtensionType extension)
-    : device_memory(device, name, MEM_TEXTURE), slot(slot)
+    : device_memory(device, name, MEM_IMAGE), slot(slot)
 {
   switch (image_data_type) {
     case IMAGE_DATA_TYPE_FLOAT4:
@@ -211,13 +211,13 @@ device_texture::device_texture(Device *device,
   info.extension = extension;
 }
 
-device_texture::~device_texture()
+device_image::~device_image()
 {
   host_and_device_free();
 }
 
 /* Host memory allocation. */
-void *device_texture::alloc(const size_t width, const size_t height, const size_t depth)
+void *device_image::alloc(const size_t width, const size_t height, const size_t depth)
 {
   const size_t new_size = size(width, height, depth);
 
@@ -239,7 +239,7 @@ void *device_texture::alloc(const size_t width, const size_t height, const size_
   return host_pointer;
 }
 
-void device_texture::copy_to_device()
+void device_image::copy_to_device()
 {
   device_copy_to();
 }

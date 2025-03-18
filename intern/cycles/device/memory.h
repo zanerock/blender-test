@@ -30,7 +30,7 @@ enum MemoryType {
   MEM_READ_WRITE,
   MEM_DEVICE_ONLY,
   MEM_GLOBAL,
-  MEM_TEXTURE,
+  MEM_IMAGE,
 };
 
 /* Supported Data Types */
@@ -586,25 +586,25 @@ class device_sub_ptr {
   device_ptr ptr;
 };
 
-/* Device Texture
+/* Device Image
  *
  * 2D or 3D image texture memory. */
 
-class device_texture : public device_memory {
+class device_image : public device_memory {
  public:
-  device_texture(Device *device,
-                 const char *name,
-                 const uint slot,
-                 ImageDataType image_data_type,
-                 InterpolationType interpolation,
-                 ExtensionType extension);
-  ~device_texture() override;
+  device_image(Device *device,
+               const char *name,
+               const uint slot,
+               ImageDataType image_data_type,
+               InterpolationType interpolation,
+               ExtensionType extension);
+  ~device_image() override;
 
   void *alloc(const size_t width, const size_t height, const size_t depth = 0);
   void copy_to_device();
 
   uint slot = 0;
-  TextureInfo info;
+  KernelImageInfo info;
 
  protected:
   size_t size(const size_t width, const size_t height, const size_t depth)

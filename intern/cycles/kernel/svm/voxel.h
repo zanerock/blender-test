@@ -44,7 +44,7 @@ ccl_device_noinline int svm_node_tex_voxel(KernelGlobals kg,
       co = transform_point(&tfm, co);
     }
 
-    r = kernel_tex_image_interp_3d(kg, id, co, INTERPOLATION_NONE);
+    r = kernel_image_interp_3d(kg, id, co, INTERPOLATION_NONE);
   }
   else
 #endif /* __VOLUME__ */

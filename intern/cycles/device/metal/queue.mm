@@ -310,7 +310,7 @@ bool MetalDeviceQueue::supports_local_atomic_sort() const
 void MetalDeviceQueue::init_execution()
 {
   /* Synchronize all textures and memory copies before executing task. */
-  metal_device_->load_texture_info();
+  metal_device_->load_image_info();
 
   synchronize();
 }
@@ -450,10 +450,10 @@ bool MetalDeviceQueue::enqueue(DeviceKernel kernel,
 
     /* Encode ancillaries */
     [metal_device_->mtlAncillaryArgEncoder setArgumentBuffer:arg_buffer offset:metal_offsets];
-    [metal_device_->mtlAncillaryArgEncoder setBuffer:metal_device_->texture_bindings_2d
+    [metal_device_->mtlAncillaryArgEncoder setBuffer:metal_device_->image_bindings_2d
                                               offset:0
                                              atIndex:0];
-    [metal_device_->mtlAncillaryArgEncoder setBuffer:metal_device_->texture_bindings_3d
+    [metal_device_->mtlAncillaryArgEncoder setBuffer:metal_device_->image_bindings_3d
                                               offset:0
                                              atIndex:1];
     [metal_device_->mtlAncillaryArgEncoder setBuffer:metal_device_->buffer_bindings_1d
@@ -679,7 +679,7 @@ void MetalDeviceQueue::zero_to_device(device_memory &mem)
       return;
     }
 
-    assert(mem.type != MEM_GLOBAL && mem.type != MEM_TEXTURE);
+    assert(mem.type != MEM_GLOBAL && mem.type != MEM_IMAGE);
 
     if (mem.memory_size() == 0) {
       return;
@@ -741,7 +741,7 @@ void MetalDeviceQueue::prepare_resources(DeviceKernel /*kernel*/)
     device_memory *mem = it.first;
 
     MTLResourceUsage usage = MTLResourceUsageRead;
-    if (mem->type != MEM_GLOBAL && mem->type != MEM_READ_ONLY && mem->type != MEM_TEXTURE) {
+    if (mem->type != MEM_GLOBAL && mem->type != MEM_READ_ONLY && mem->type != MEM_IMAGE) {
       usage |= MTLResourceUsageWrite;
     }
 
@@ -756,8 +756,8 @@ void MetalDeviceQueue::prepare_resources(DeviceKernel /*kernel*/)
   }
 
   /* ancillaries */
-  [mtlComputeEncoder_ useResource:metal_device_->texture_bindings_2d usage:MTLResourceUsageRead];
-  [mtlComputeEncoder_ useResource:metal_device_->texture_bindings_3d usage:MTLResourceUsageRead];
+  [mtlComputeEncoder_ useResource:metal_device_->image_bindings_2d usage:MTLResourceUsageRead];
+  [mtlComputeEncoder_ useResource:metal_device_->image_bindings_3d usage:MTLResourceUsageRead];
   [mtlComputeEncoder_ useResource:metal_device_->buffer_bindings_1d usage:MTLResourceUsageRead];
 }
 

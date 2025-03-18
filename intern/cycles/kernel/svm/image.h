@@ -22,10 +22,10 @@ svm_image_texture(KernelGlobals kg, const int id, const float x, float y, const 
 {
   if (id == -1) {
     return make_float4(
-        TEX_IMAGE_MISSING_R, TEX_IMAGE_MISSING_G, TEX_IMAGE_MISSING_B, TEX_IMAGE_MISSING_A);
+        IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
   }
 
-  float4 r = kernel_tex_image_interp(kg, id, x, y);
+  float4 r = kernel_image_interp(kg, id, x, y);
   const float alpha = r.w;
 
   if ((flags & NODE_IMAGE_ALPHA_UNASSOCIATE) && alpha != 1.0f && alpha != 0.0f) {
@@ -74,7 +74,7 @@ ccl_device_noinline int svm_node_tex_image(KernelGlobals kg,
   }
 
   /* TODO(lukas): Consider moving tile information out of the SVM node.
-   * TextureInfo seems a reasonable candidate. */
+   * KernelImageInfo seems a reasonable candidate. */
   int id = -1;
   const int num_nodes = (int)node.y;
   if (num_nodes > 0) {

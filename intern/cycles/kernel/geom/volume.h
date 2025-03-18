@@ -84,13 +84,13 @@ ccl_device float4 volume_attribute_float4(KernelGlobals kg,
   }
   if (desc.element == ATTR_ELEMENT_VOXEL) {
     /* todo: optimize this so we don't have to transform both here and in
-     * kernel_tex_image_interp_3d when possible. Also could optimize for the
+     * kernel_image_interp_3d when possible. Also could optimize for the
      * common case where transform is translation/scale only. */
     float3 P = sd->P;
     object_inverse_position_transform(kg, sd, &P);
     const InterpolationType interp = (sd->flag & SD_VOLUME_CUBIC) ? INTERPOLATION_CUBIC :
                                                                     INTERPOLATION_NONE;
-    return kernel_tex_image_interp_3d(kg, desc.offset, P, interp);
+    return kernel_image_interp_3d(kg, desc.offset, P, interp);
   }
   return zero_float4();
 }
