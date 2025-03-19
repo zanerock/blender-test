@@ -79,6 +79,20 @@ struct KernelImageInfo {
   uint width = 0;
   uint height = 0;
   uint depth = 0;
+};
+
+struct KernelImageTexture {
+  /* Index into image object map. */
+  uint64_t slot = 0;
+  /* Data Type */
+  uint data_type = IMAGE_DATA_NUM_TYPES;
+  /* Interpolation and extension type. */
+  uint interpolation = INTERPOLATION_NONE;
+  uint extension = EXTENSION_REPEAT;
+  /* Dimensions. */
+  uint width = 0;
+  uint height = 0;
+  uint depth = 0;
   /* Transform for 3D textures. */
   uint use_transform_3d = false;
   Transform transform_3d = transform_zero();

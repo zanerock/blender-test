@@ -60,8 +60,8 @@ ccl_device float cubic_h1(const float a)
 /* Fast bicubic texture lookup using 4 bilinear lookups, adapted from CUDA samples. */
 template<typename T>
 ccl_device_noinline T kernel_image_interp_bicubic(const ccl_global KernelImageInfo &info,
-                                                      float x,
-                                                      float y)
+                                                  float x,
+                                                  float y)
 {
   ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info.data;
 
@@ -132,10 +132,8 @@ kernel_image_interp_tricubic(const ccl_global KernelImageInfo &info, float x, fl
 
 #ifdef WITH_NANOVDB
 template<typename OutT, typename Acc>
-ccl_device OutT kernel_image_interp_trilinear_nanovdb(ccl_private Acc &acc,
-                                                          const float x,
-                                                          float y,
-                                                          const float z)
+ccl_device OutT
+kernel_image_interp_trilinear_nanovdb(ccl_private Acc &acc, const float x, float y, const float z)
 {
   int ix, iy, iz;
   const float tx = frac(x - 0.5f, &ix);
@@ -161,9 +159,9 @@ ccl_device OutT kernel_image_interp_trilinear_nanovdb(ccl_private Acc &acc,
 
 template<typename OutT, typename Acc>
 ccl_device OutT kernel_image_interp_tricubic_nanovdb(ccl_private Acc &acc,
-                                                         const float x,
-                                                         const float y,
-                                                         const float z)
+                                                     const float x,
+                                                     const float y,
+                                                     const float z)
 {
   int ix, iy, iz;
   int nix, niy, niz;
@@ -225,17 +223,17 @@ ccl_device OutT kernel_image_interp_tricubic_nanovdb(ccl_private Acc &acc,
 #  if defined(__KERNEL_METAL__)
 template<typename OutT, typename T>
 __attribute__((noinline)) OutT kernel_image_interp_nanovdb(const ccl_global KernelImageInfo &info,
-                                                               const float x,
-                                                               const float y,
-                                                               const float z,
-                                                               const uint interpolation)
+                                                           const float x,
+                                                           const float y,
+                                                           const float z,
+                                                           const uint interpolation)
 #  else
 template<typename OutT, typename T>
 ccl_device_noinline OutT kernel_image_interp_nanovdb(const ccl_global KernelImageInfo &info,
-                                                         const float x,
-                                                         const float y,
-                                                         const float z,
-                                                         const uint interpolation)
+                                                     const float x,
+                                                     const float y,
+                                                     const float z,
+                                                     const uint interpolation)
 #  endif
 {
   using namespace nanovdb;
@@ -294,14 +292,15 @@ ccl_device float4 kernel_image_interp(KernelGlobals kg, const int id, const floa
 }
 
 ccl_device float4 kernel_image_interp_3d(KernelGlobals kg,
-                                             const int id,
-                                             float3 P,
-                                             InterpolationType interp)
+                                         const int id,
+                                         float3 P,
+                                         InterpolationType interp)
 {
-  const ccl_global KernelImageInfo &info = kernel_data_fetch(image_info, id);
+  const ccl_global KernelImageTexture &tex = kernel_data_fetch(image_textures, id);
+  const ccl_global KernelImageInfo &info = kernel_data_fetch(image_info, tex.slot);
 
-  if (info.use_transform_3d) {
-    P = transform_point(&info.transform_3d, P);
+  if (tex.use_transform_3d) {
+    P = transform_point(&tex.transform_3d, P);
   }
 
   const float x = P.x;
@@ -317,8 +316,7 @@ ccl_device float4 kernel_image_interp_3d(KernelGlobals kg,
     return make_float4(f, f, f, 1.0f);
   }
   if (texture_type == IMAGE_DATA_TYPE_NANOVDB_FLOAT3) {
-    float3 f = kernel_image_interp_nanovdb<float3, packed_float3>(
-        info, x, y, z, interpolation);
+    float3 f = kernel_image_interp_nanovdb<float3, packed_float3>(info, x, y, z, interpolation);
     return make_float4(f, 1.0f);
   }
   if (texture_type == IMAGE_DATA_TYPE_NANOVDB_FPN) {

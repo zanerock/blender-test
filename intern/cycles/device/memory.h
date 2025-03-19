@@ -427,6 +427,7 @@ template<typename T> class device_vector : public device_memory {
 
       host_and_device_free();
       host_pointer = new_ptr;
+      modified = true;
       assert(device_pointer == 0);
     }
 
@@ -448,6 +449,7 @@ template<typename T> class device_vector : public device_memory {
     data_height = 0;
     data_depth = 0;
     host_pointer = from.steal_pointer();
+    modified = true;
     assert(device_pointer == 0);
   }
 

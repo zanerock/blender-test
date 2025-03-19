@@ -866,24 +866,24 @@ ccl_device float4 kernel_image_interp(KernelGlobals kg, const int id, const floa
       return TextureInterpolator<float4>::interp(info, x, y);
     default:
       assert(0);
-      return make_float4(
-          IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
+      return make_float4(IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
   }
 }
 
 ccl_device float4 kernel_image_interp_3d(KernelGlobals kg,
-                                             const int id,
-                                             float3 P,
-                                             InterpolationType interp)
+                                         const int id,
+                                         float3 P,
+                                         InterpolationType interp)
 {
-  const KernelImageInfo &info = kernel_data_fetch(image_info, id);
+  const KernelImageTexture &tex = kernel_data_fetch(image_textures, id);
+  const KernelImageInfo &info = kernel_data_fetch(image_info, tex.slot);
 
   if (UNLIKELY(!info.data)) {
     return zero_float4();
   }
 
-  if (info.use_transform_3d) {
-    P = transform_point(&info.transform_3d, P);
+  if (tex.use_transform_3d) {
+    P = transform_point(&tex.transform_3d, P);
   }
   switch (info.data_type) {
     case IMAGE_DATA_TYPE_HALF: {
@@ -930,8 +930,7 @@ ccl_device float4 kernel_image_interp_3d(KernelGlobals kg,
 #endif
     default:
       assert(0);
-      return make_float4(
-          IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
+      return make_float4(IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
   }
 }
 

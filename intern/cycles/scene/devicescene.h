@@ -6,6 +6,8 @@
 
 #include "kernel/types.h"
 
+#include "util/texture.h"
+
 #include "device/device.h"
 #include "device/memory.h"
 
@@ -85,6 +87,9 @@ class DeviceScene {
 
   /* IES lights */
   device_vector<float> ies_lights;
+
+  /* Image textures */
+  device_vector<KernelImageTexture> image_textures;
 
   KernelData data;
 

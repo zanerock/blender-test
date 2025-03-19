@@ -584,7 +584,6 @@ void GeometryManager::device_update_displacement_images(Device *device,
                                                         Progress &progress)
 {
   progress.set_status("Updating Displacement Images");
-  TaskPool pool;
   ImageManager *image_manager = scene->image_manager.get();
   set<int> bump_images;
 #ifdef WITH_OSL
@@ -638,19 +637,12 @@ void GeometryManager::device_update_displacement_images(Device *device,
   }
 #endif
 
-  for (const int slot : bump_images) {
-    pool.push([image_manager, device, scene, slot, &progress] {
-      image_manager->device_update_slot(device, scene, slot, progress);
-    });
-  }
-  pool.wait_work();
+  image_manager->device_load_slots(device, scene, progress, bump_images);
 }
 
 void GeometryManager::device_update_volume_images(Device *device, Scene *scene, Progress &progress)
 {
   progress.set_status("Updating Volume Images");
-  TaskPool pool;
-  ImageManager *image_manager = scene->image_manager.get();
   set<int> volume_images;
 
   for (Geometry *geom : scene->geometry) {
@@ -675,12 +667,7 @@ void GeometryManager::device_update_volume_images(Device *device, Scene *scene, 
     }
   }
 
-  for (const int slot : volume_images) {
-    pool.push([image_manager, device, scene, slot, &progress] {
-      image_manager->device_update_slot(device, scene, slot, progress);
-    });
-  }
-  pool.wait_work();
+  scene->image_manager->device_load_slots(device, scene, progress, volume_images);
 }
 
 void GeometryManager::device_update(Device *device,

@@ -157,11 +157,11 @@ device_sub_ptr::~device_sub_ptr()
 /* Device Texture */
 
 device_image::device_image(Device *device,
-                               const char *name,
-                               const uint slot,
-                               ImageDataType image_data_type,
-                               InterpolationType interpolation,
-                               ExtensionType extension)
+                           const char *name,
+                           const uint slot,
+                           ImageDataType image_data_type,
+                           InterpolationType interpolation,
+                           ExtensionType extension)
     : device_memory(device, name, MEM_IMAGE), slot(slot)
 {
   switch (image_data_type) {

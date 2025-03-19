@@ -79,10 +79,11 @@ KERNEL_DATA_ARRAY(float, lookup_table)
 /* tabulated Sobol sample pattern */
 KERNEL_DATA_ARRAY(float, sample_pattern_lut)
 
-/* image textures */
-KERNEL_DATA_ARRAY(KernelImageInfo, image_info)
-
 /* ies lights */
 KERNEL_DATA_ARRAY(float, ies)
+
+/* image textures */
+KERNEL_DATA_ARRAY(KernelImageTexture, image_textures)
+KERNEL_DATA_ARRAY(KernelImageInfo, image_info)
 
 #undef KERNEL_DATA_ARRAY

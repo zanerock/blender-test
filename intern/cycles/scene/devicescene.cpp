@@ -54,7 +54,8 @@ DeviceScene::DeviceScene(Device *device)
       shaders(device, "shaders", MEM_GLOBAL),
       lookup_table(device, "lookup_table", MEM_GLOBAL),
       sample_pattern_lut(device, "sample_pattern_lut", MEM_GLOBAL),
-      ies_lights(device, "ies", MEM_GLOBAL)
+      ies_lights(device, "ies", MEM_GLOBAL),
+      image_textures(device, "image_textures", MEM_GLOBAL)
 {
   memset((void *)&data, 0, sizeof(data));
 }

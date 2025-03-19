@@ -8,6 +8,7 @@
 
 #include "scene/colorspace.h"
 
+#include "util/set.h"
 #include "util/string.h"
 #include "util/thread.h"
 #include "util/transform.h"
@@ -175,11 +176,12 @@ class ImageManager {
   ImageHandle add_image(vector<unique_ptr<ImageLoader>> &&loaders, const ImageParams &params);
 
   void device_update(Device *device, Scene *scene, Progress &progress);
-  void device_update_slot(Device *device, Scene *scene, const size_t slot, Progress &progress);
   void device_free(Device *device);
 
   void device_load_builtin(Device *device, Scene *scene, Progress &progress);
   void device_free_builtin(Device *device);
+
+  void device_load_slots(Device *device, Scene *scene, Progress &progress, const set<int> &slots);
 
   void set_osl_texture_system(void *texture_system);
   bool set_animation_frame_update(const int frame);
@@ -233,6 +235,9 @@ class ImageManager {
 
   void device_load_image(Device *device, Scene *scene, const size_t slot, Progress &progress);
   void device_free_image(Device *device, const size_t slot);
+
+  void device_resize_image_textures(Scene *scene);
+  void device_copy_image_textures(Scene *scene);
 
   friend class ImageHandle;
 };

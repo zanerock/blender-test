@@ -693,6 +693,24 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
   return true;
 }
 
+void ImageManager::device_resize_image_textures(Scene *scene)
+{
+  const thread_scoped_lock device_lock(device_mutex);
+  DeviceScene &dscene = scene->dscene;
+
+  if (dscene.image_textures.size() < images.size()) {
+    dscene.image_textures.resize(images.size());
+  }
+}
+
+void ImageManager::device_copy_image_textures(Scene *scene)
+{
+  const thread_scoped_lock device_lock(device_mutex);
+  DeviceScene &dscene = scene->dscene;
+
+  dscene.image_textures.copy_to_device_if_modified();
+}
+
 void ImageManager::device_load_image(Device *device,
                                      Scene *scene,
                                      const size_t slot,
@@ -722,8 +740,6 @@ void ImageManager::device_load_image(Device *device,
 
   img->mem = make_unique<device_image>(
       device, img->mem_name.c_str(), slot, type, img->params.interpolation, img->params.extension);
-  img->mem->info.use_transform_3d = img->metadata.use_transform_3d;
-  img->mem->info.transform_3d = img->metadata.transform_3d;
 
   /* Create new texture. */
   if (type == IMAGE_DATA_TYPE_FLOAT4) {
@@ -828,6 +844,20 @@ void ImageManager::device_load_image(Device *device,
     img->mem->copy_to_device();
   }
 
+  /* Update image texture device data. */
+  KernelImageTexture tex;
+  tex.slot = slot;
+  tex.data_type = img->mem->info.data_type;
+  tex.interpolation = img->params.interpolation;
+  tex.extension = img->params.extension;
+  tex.width = img->mem->info.width;
+  tex.height = img->mem->info.height;
+  tex.depth = img->mem->info.depth;
+  tex.use_transform_3d = img->metadata.use_transform_3d;
+  tex.transform_3d = img->metadata.transform_3d;
+  scene->dscene.image_textures[slot] = tex;
+  scene->dscene.image_textures.tag_modified();
+
   /* Cleanup memory in image loader. */
   img->loader->cleanup();
   img->need_load = false;
@@ -869,6 +899,8 @@ void ImageManager::device_update(Device *device, Scene *scene, Progress &progres
     }
   });
 
+  device_resize_image_textures(scene);
+
   TaskPool pool;
   for (size_t slot = 0; slot < images.size(); slot++) {
     Image *img = images[slot].get();
@@ -884,23 +916,35 @@ void ImageManager::device_update(Device *device, Scene *scene, Progress &progres
 
   pool.wait_work();
 
+  device_copy_image_textures(scene);
+
   need_update_ = false;
 }
 
-void ImageManager::device_update_slot(Device *device,
-                                      Scene *scene,
-                                      const size_t slot,
-                                      Progress &progress)
+void ImageManager::device_load_slots(Device *device,
+                                     Scene *scene,
+                                     Progress &progress,
+                                     const set<int> &slots)
 {
-  Image *img = images[slot].get();
-  assert(img != nullptr);
+  device_resize_image_textures(scene);
 
-  if (img->users == 0) {
-    device_free_image(device, slot);
+  TaskPool pool;
+  for (const int slot : slots) {
+    pool.push([this, device, scene, slot, &progress] {
+      Image *img = images[slot].get();
+      assert(img != nullptr);
+
+      if (img->users == 0) {
+        device_free_image(device, slot);
+      }
+      else if (img->need_load) {
+        device_load_image(device, scene, slot, progress);
+      }
+    });
   }
-  else if (img->need_load) {
-    device_load_image(device, scene, slot, progress);
-  }
+  pool.wait_work();
+
+  device_copy_image_textures(scene);
 }
 
 void ImageManager::device_load_builtin(Device *device, Scene *scene, Progress &progress)
@@ -910,6 +954,8 @@ void ImageManager::device_load_builtin(Device *device, Scene *scene, Progress &p
   if (!need_update()) {
     return;
   }
+
+  device_resize_image_textures(scene);
 
   TaskPool pool;
   for (size_t slot = 0; slot < images.size(); slot++) {
@@ -922,6 +968,8 @@ void ImageManager::device_load_builtin(Device *device, Scene *scene, Progress &p
   }
 
   pool.wait_work();
+
+  device_copy_image_textures(scene);
 }
 
 void ImageManager::device_free_builtin(Device *device)
