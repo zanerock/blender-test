@@ -25,6 +25,7 @@ set(SRC
   geometry_mesh.cpp
   hair.cpp
   image.cpp
+  image_cache.cpp
   image_oiio.cpp
   image_sky.cpp
   image_vdb.cpp
@@ -67,6 +68,7 @@ set(SRC_HEADERS
   geometry.h
   hair.h
   image.h
+  image_cache.h
   image_oiio.h
   image_sky.h
   image_vdb.h

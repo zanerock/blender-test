@@ -7,6 +7,8 @@
 #include "util/image.h"
 #include "util/log.h"
 #include "util/path.h"
+#include "util/texture.h"
+#include "util/types_base.h"
 #include "util/unique_ptr.h"
 
 CCL_NAMESPACE_BEGIN
@@ -15,27 +17,69 @@ OIIOImageLoader::OIIOImageLoader(const string &filepath) : filepath(filepath) {}
 
 OIIOImageLoader::~OIIOImageLoader() = default;
 
+static bool load_metadata_color(const ImageSpec &spec, const char *name, float4 &r_color)
+{
+  string_view metadata_color = spec.get_string_attribute(name);
+  if (metadata_color.size() == 0) {
+    return false;
+  }
+
+  vector<float> color;
+  while (metadata_color.size()) {
+    float val;
+    if (!OIIO::Strutil::parse_float(metadata_color, val)) {
+      break;
+    }
+    color.push_back(val);
+    if (!OIIO::Strutil::parse_char(metadata_color, ',')) {
+      break;
+    }
+  }
+
+  if (color.size() != size_t(spec.nchannels)) {
+    return false;
+  }
+
+  switch (spec.nchannels) {
+    case 1:
+      r_color = make_float4(color[0], color[0], color[0], 1.0f);
+      return true;
+    case 2:
+      r_color = make_float4(color[0], color[0], color[0], color[1]);
+      return true;
+    case 3:
+      r_color = make_float4(color[0], color[1], color[2], 1.0f);
+      return true;
+    case 4:
+      r_color = make_float4(color[0], color[1], color[2], color[3]);
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
                                     ImageMetaData &metadata)
 {
   /* Perform preliminary checks, with meaningful logging. */
   if (!path_exists(filepath.string())) {
-    VLOG_WARNING << "File '" << filepath.string() << "' does not exist.";
+    VLOG_WARNING << "File " << filepath.string() << " does not exist.";
     return false;
   }
   if (path_is_directory(filepath.string())) {
-    VLOG_WARNING << "File '" << filepath.string() << "' is a directory, can't use as image.";
+    VLOG_WARNING << "File " << filepath.string() << " is a directory, can't use as image.";
     return false;
   }
 
   unique_ptr<ImageInput> in(ImageInput::create(filepath.string()));
-
   if (!in) {
+    VLOG_WARNING << "File " << filepath.string() << " failed to open.";
     return false;
   }
 
   ImageSpec spec;
   if (!in->open(filepath.string(), spec)) {
+    VLOG_WARNING << "File " << filepath.string() << " failed to open.";
     return false;
   }
 
@@ -104,7 +148,50 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
     }
   }
 
-  in->close();
+  /* Load constant or average color. */
+  if (load_metadata_color(spec, "oiio:ConstantColor", metadata.average_color)) {
+    // TODO: avoid loading tiles entirely
+  }
+  else {
+    load_metadata_color(spec, "oiio:AverageColor", metadata.average_color);
+  }
+
+  if (spec.tile_width) {
+    // TODO: only do for particular file formats?
+    // TODO: check CMYK and channels > 4 cases
+    // TODO: handle associate alpha on load
+    if (metadata.associate_alpha) {
+      VLOG_DEBUG << "Image " << name() << "has tiles, but expected associated alpha";
+    }
+    else if (!is_power_of_two(spec.tile_width)) {
+      VLOG_DEBUG << "Image " << name() << "has tiles, but tile size not power of two ("
+                 << spec.tile_width << ")";
+    }
+    else if (spec.tile_width != spec.tile_height) {
+      VLOG_DEBUG << "Image " << name() << "has tiles, but tile size is not square ("
+                 << spec.tile_width << "x" << spec.tile_height << ")";
+    }
+    else if (spec.tile_depth != 1) {
+      VLOG_DEBUG << "Image " << name() << "has tiles, but depth is not 1 (image " << metadata.depth
+                 << ", tile " << spec.tile_depth << ")";
+    }
+    else if (spec.tile_width < KERNEL_IMAGE_TEX_PADDING * 4) {
+      VLOG_DEBUG << "Image " << name() << "has tiles, but tile size too small (found "
+                 << spec.tile_width << ", minimum " << KERNEL_IMAGE_TEX_PADDING * 4 << ")";
+    }
+    else if (metadata.width < spec.tile_width && metadata.height < spec.tile_width) {
+      // TODO: there are artifacts loading images smaller than tile size, because
+      // the repeat mode is not respected for padding. Fix and and remove this exception.
+      VLOG_DEBUG << "Image " << name()
+                 << "has tiles, but image resolution is smaller than tile size";
+    }
+    else {
+      metadata.tile_size = spec.tile_width;
+    }
+  }
+
+  VLOG_DEBUG << "Image " << name() << ", " << metadata.width << "x" << metadata.height << ", "
+             << (metadata.tile_size ? "tiled" : "untiled");
 
   return true;
 }
@@ -232,6 +319,222 @@ bool OIIOImageLoader::load_pixels_full(const ImageMetaData &metadata, uint8_t *p
   }
 
   return false;
+}
+
+static bool oiio_load_pixels_tile(const unique_ptr<ImageInput> &in,
+                                  const ImageMetaData &metadata,
+                                  const int miplevel,
+                                  const int64_t x,
+                                  const int64_t y,
+                                  const int64_t w,
+                                  const int64_t h,
+                                  const int64_t x_stride,
+                                  const int64_t y_stride,
+                                  uint8_t *pixels)
+{
+  /* Flip vertical pixel order from OIIO to Cycles convention. */
+  // TODO: this fails if image is not multiple of tile size
+  const int64_t height = divide_up(metadata.height, 1 << miplevel);
+  const int64_t flip_y = height - h - y;
+  const int64_t flip_y_stride = -y_stride;
+  uint8_t *flip_pixels = pixels + (h - 1) * y_stride;
+
+  switch (metadata.type) {
+    case IMAGE_DATA_TYPE_BYTE:
+    case IMAGE_DATA_TYPE_BYTE4:
+      return in->read_tiles(0,
+                            miplevel,
+                            x,
+                            x + w,
+                            flip_y,
+                            flip_y + h,
+                            0,
+                            1,
+                            0,
+                            metadata.channels,
+                            TypeDesc::UINT8,
+                            flip_pixels,
+                            x_stride,
+                            flip_y_stride);
+    case IMAGE_DATA_TYPE_USHORT:
+    case IMAGE_DATA_TYPE_USHORT4:
+      return in->read_tiles(0,
+                            miplevel,
+                            x,
+                            x + w,
+                            flip_y,
+                            flip_y + h,
+                            0,
+                            1,
+                            0,
+                            metadata.channels,
+                            TypeDesc::USHORT,
+                            flip_pixels,
+                            x_stride,
+                            flip_y_stride);
+    case IMAGE_DATA_TYPE_HALF:
+    case IMAGE_DATA_TYPE_HALF4:
+      return in->read_tiles(0,
+                            miplevel,
+                            x,
+                            x + w,
+                            flip_y,
+                            flip_y + h,
+                            0,
+                            1,
+                            0,
+                            metadata.channels,
+                            TypeDesc::HALF,
+                            flip_pixels,
+                            x_stride,
+                            flip_y_stride);
+    case IMAGE_DATA_TYPE_FLOAT:
+    case IMAGE_DATA_TYPE_FLOAT4:
+      return in->read_tiles(0,
+                            miplevel,
+                            x,
+                            x + w,
+                            flip_y,
+                            flip_y + h,
+                            0,
+                            1,
+                            0,
+                            metadata.channels,
+                            TypeDesc::FLOAT,
+                            flip_pixels,
+                            x_stride,
+                            flip_y_stride);
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
+    case IMAGE_DATA_TYPE_NANOVDB_FPN:
+    case IMAGE_DATA_TYPE_NANOVDB_FP16:
+    case IMAGE_DATA_NUM_TYPES:
+      return false;
+  }
+
+  return false;
+}
+
+static bool oiio_load_pixels_tile_adjacent(const unique_ptr<ImageInput> &in,
+                                           const ImageMetaData &metadata,
+                                           const int miplevel,
+                                           const int64_t x,
+                                           const int64_t y,
+                                           const int64_t w,
+                                           const int64_t h,
+                                           const int64_t x_stride,
+                                           const int64_t y_stride,
+                                           const int x_adjacent,
+                                           const int y_adjacent,
+                                           const int64_t padding,
+                                           uint8_t *pixels)
+{
+  const int64_t tile_size = metadata.tile_size;
+  vector<uint8_t> tile_pixels(tile_size * tile_size * x_stride, 0);
+
+  const int64_t width = divide_up(metadata.width, 1 << miplevel);
+  const int64_t height = divide_up(metadata.height, 1 << miplevel);
+  const int64_t x_new = x + x_adjacent * tile_size;
+  const int64_t y_new = y + y_adjacent * tile_size;
+
+  // TODO: fill according to repeat mode when out of bounds
+  if (x_new >= 0 && x_new < width && y_new >= 0 && y_new < height) {
+    if (!oiio_load_pixels_tile(in,
+                               metadata,
+                               miplevel,
+                               x_new,
+                               y_new,
+                               tile_size,
+                               tile_size,
+                               x_stride,
+                               tile_size * x_stride,
+                               tile_pixels.data()))
+    {
+      return false;
+    }
+  }
+
+  // TODO: verify this works for very small and non-pow2 images
+
+  const int64_t tile_x = (x_adjacent < 0) ? std::min(width, tile_size) - padding : 0;
+  const int64_t tile_y = (y_adjacent < 0) ? std::min(height, tile_size) - padding : 0;
+
+  const int64_t pad_x = (x_adjacent < 0) ? 0 : (x_adjacent == 0) ? padding : padding + w;
+  const int64_t pad_y = (y_adjacent < 0) ? 0 : (y_adjacent == 0) ? padding : padding + h;
+  const int64_t pad_w = (x_adjacent == 0) ? w : padding;
+  const int64_t pad_h = (y_adjacent == 0) ? h : padding;
+
+  for (int64_t j = 0; j < pad_h; j++) {
+    std::copy_n(tile_pixels.data() + tile_x * x_stride + (tile_y + j) * (tile_size * x_stride),
+                x_stride * pad_w,
+                pixels + pad_x * x_stride + (pad_y + j) * y_stride);
+  }
+
+  return true;
+}
+
+bool OIIOImageLoader::load_pixels_tile(const ImageMetaData &metadata,
+                                       const int miplevel,
+                                       const int64_t x,
+                                       const int64_t y,
+                                       const int64_t w,
+                                       const int64_t h,
+                                       const int64_t x_stride,
+                                       const int64_t y_stride,
+                                       const int64_t padding,
+                                       uint8_t *pixels)
+{
+  assert(metadata.tile_size != 0);
+
+  // TODO: handle colorspace and channel reordering.
+  // TODO: cache ImageInput.
+  // TODO: take into account wrapping.
+
+  if (!filehandle) {
+    filehandle = unique_ptr<ImageInput>(ImageInput::create(filepath.string()));
+    if (!filehandle) {
+      return false;
+    }
+
+    // TODO: don't keep retrying on failure?
+    ImageSpec spec = ImageSpec();
+    if (!filehandle->open(filepath.string(), spec)) {
+      filehandle.reset();
+      return false;
+    }
+  }
+
+  /* Load center pixels. */
+  bool ok = oiio_load_pixels_tile(filehandle,
+                                  metadata,
+                                  miplevel,
+                                  x,
+                                  y,
+                                  w,
+                                  h,
+                                  x_stride,
+                                  y_stride,
+                                  pixels + padding * x_stride + padding * y_stride);
+
+  /* Pad tile borders from adjacent tiles. */
+  if (padding > 0) {
+    for (int j = -1; j <= 1; j++) {
+      for (int i = -1; i <= 1; i++) {
+        if (i == 0 && j == 0) {
+          continue;
+        }
+        ok &= oiio_load_pixels_tile_adjacent(
+            filehandle, metadata, miplevel, x, y, w, h, x_stride, y_stride, i, j, padding, pixels);
+      }
+    }
+  }
+
+  return ok;
+}
+
+void OIIOImageLoader::drop_file_handle()
+{
+  filehandle.reset();
 }
 
 string OIIOImageLoader::name() const

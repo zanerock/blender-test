@@ -1967,9 +1967,7 @@ void PointDensityTextureNode::compile(SVMCompiler &compiler)
     }
     if (use_color) {
       compiler.add_node(NODE_VALUE_V, compiler.stack_assign(color_out));
-      compiler.add_node(
-          NODE_VALUE_V,
-          make_float3(IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B));
+      compiler.add_node(NODE_VALUE_V, make_float3(IMAGE_TEXTURE_MISSING_RGBA));
     }
   }
 }

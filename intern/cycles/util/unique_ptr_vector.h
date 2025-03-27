@@ -34,6 +34,11 @@ template<typename T> class unique_ptr_vector {
     return local;
   }
 
+  T *back() const
+  {
+    return data.back().get();
+  }
+
   void push_back(unique_ptr<T> &&value)
   {
     data.push_back(std::move(value));

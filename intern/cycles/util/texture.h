@@ -9,7 +9,7 @@
 CCL_NAMESPACE_BEGIN
 
 /* Color to use when images are not found. */
-enum { IMAGE_MISSING_R = 1, IMAGE_MISSING_G = 0, IMAGE_MISSING_B = 1, IMAGE_MISSING_A = 1 };
+#define IMAGE_TEXTURE_MISSING_RGBA make_float4(1, 0, 1, 1)
 
 /* Interpolation types for images. */
 enum InterpolationType {
@@ -84,18 +84,51 @@ struct KernelImageInfo {
 struct KernelImageTexture {
   /* Index into image object map. */
   uint64_t slot = 0;
-  /* Data Type */
-  uint data_type = IMAGE_DATA_NUM_TYPES;
+  /* TODO */
+  uint tile_descriptor_offset = UINT_MAX;
+  int tile_size_shift = 0;
+  int tile_levels = 0;
+  /* Image dimensions */
+  int width = 0;
+  int height = 0;
   /* Interpolation and extension type. */
   uint interpolation = INTERPOLATION_NONE;
   uint extension = EXTENSION_REPEAT;
-  /* Dimensions. */
-  uint width = 0;
-  uint height = 0;
-  uint depth = 0;
   /* Transform for 3D textures. */
   uint use_transform_3d = false;
   Transform transform_3d = transform_zero();
+  /* Fallback or fixed color. */
+  float4 average_color = zero_float4();
 };
+
+#define KERNEL_IMAGE_TEX_PADDING 2
+#define KERNEL_IMAGE_TEX_NONE UINT_MAX
+
+using KernelTileDescriptor = uint;
+
+#define KERNEL_TILE_LOAD_NONE UINT_MAX
+#define KERNEL_TILE_LOAD_REQUEST UINT_MAX - 1
+#define KERNEL_TILE_LOAD_FAILED UINT_MAX - 2
+
+ccl_device_inline KernelTileDescriptor kernel_tile_descriptor_encode(const uint slot,
+                                                                     const uint offset)
+{
+  return slot | (offset << 24);
+}
+
+ccl_device_inline uint kernel_tile_descriptor_slot(const KernelTileDescriptor tile)
+{
+  return tile & 0xffffff;
+}
+
+ccl_device_inline uint kernel_tile_descriptor_offset(const KernelTileDescriptor tile)
+{
+  return tile >> 24;
+}
+
+ccl_device_inline bool kernel_tile_descriptor_loaded(const KernelTileDescriptor tile)
+{
+  return tile < KERNEL_TILE_LOAD_FAILED;
+}
 
 CCL_NAMESPACE_END

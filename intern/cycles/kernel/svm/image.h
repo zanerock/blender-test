@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "kernel/geom/primitive.h"
 #include "kernel/globals.h"
 #include "kernel/image.h"
 
@@ -14,18 +15,22 @@
 #include "kernel/svm/util.h"
 
 #include "util/color.h"
+#include "util/texture.h"
 
 CCL_NAMESPACE_BEGIN
 
-ccl_device float4
-svm_image_texture(KernelGlobals kg, const int id, const float x, float y, const uint flags)
+ccl_device float4 svm_image_texture(KernelGlobals kg,
+                                    ccl_private ShaderData *sd,
+                                    const int id,
+                                    const float x,
+                                    float y,
+                                    const uint flags)
 {
   if (id == -1) {
-    return make_float4(
-        IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
+    return IMAGE_TEXTURE_MISSING_RGBA;
   }
 
-  float4 r = kernel_image_interp(kg, id, x, y);
+  float4 r = kernel_image_interp(kg, id, x, y, primitive_uv_differential(kg, sd));
   const float alpha = r.w;
 
   if ((flags & NODE_IMAGE_ALPHA_UNASSOCIATE) && alpha != 1.0f && alpha != 0.0f) {
@@ -47,7 +52,7 @@ ccl_device_inline float3 texco_remap_square(const float3 co)
 }
 
 ccl_device_noinline int svm_node_tex_image(KernelGlobals kg,
-                                           ccl_private ShaderData * /*sd*/,
+                                           ccl_private ShaderData *sd,
                                            ccl_private float *stack,
                                            const uint4 node,
                                            int offset)
@@ -116,7 +121,7 @@ ccl_device_noinline int svm_node_tex_image(KernelGlobals kg,
     id = -num_nodes;
   }
 
-  const float4 f = svm_image_texture(kg, id, tex_co.x, tex_co.y, flags);
+  const float4 f = svm_image_texture(kg, sd, id, tex_co.x, tex_co.y, flags);
 
   if (stack_valid(out_offset)) {
     stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));
@@ -215,15 +220,15 @@ ccl_device_noinline void svm_node_tex_image_box(KernelGlobals kg,
   /* Map so that no textures are flipped, rotation is somewhat arbitrary. */
   if (weight.x > 0.0f) {
     const float2 uv = make_float2((signed_N.x < 0.0f) ? 1.0f - co.y : co.y, co.z);
-    f += weight.x * svm_image_texture(kg, id, uv.x, uv.y, flags);
+    f += weight.x * svm_image_texture(kg, sd, id, uv.x, uv.y, flags);
   }
   if (weight.y > 0.0f) {
     const float2 uv = make_float2((signed_N.y > 0.0f) ? 1.0f - co.x : co.x, co.z);
-    f += weight.y * svm_image_texture(kg, id, uv.x, uv.y, flags);
+    f += weight.y * svm_image_texture(kg, sd, id, uv.x, uv.y, flags);
   }
   if (weight.z > 0.0f) {
     const float2 uv = make_float2((signed_N.z > 0.0f) ? 1.0f - co.y : co.y, co.x);
-    f += weight.z * svm_image_texture(kg, id, uv.x, uv.y, flags);
+    f += weight.z * svm_image_texture(kg, sd, id, uv.x, uv.y, flags);
   }
 
   if (stack_valid(out_offset)) {
@@ -235,7 +240,7 @@ ccl_device_noinline void svm_node_tex_image_box(KernelGlobals kg,
 }
 
 ccl_device_noinline void svm_node_tex_environment(KernelGlobals kg,
-                                                  ccl_private ShaderData * /*sd*/,
+                                                  ccl_private ShaderData *sd,
                                                   ccl_private float *stack,
                                                   const uint4 node)
 {
@@ -260,7 +265,7 @@ ccl_device_noinline void svm_node_tex_environment(KernelGlobals kg,
     uv = direction_to_mirrorball(co);
   }
 
-  const float4 f = svm_image_texture(kg, id, uv.x, uv.y, flags);
+  const float4 f = svm_image_texture(kg, sd, id, uv.x, uv.y, flags);
 
   if (stack_valid(out_offset)) {
     stack_store_float3(stack, out_offset, make_float3(f.x, f.y, f.z));

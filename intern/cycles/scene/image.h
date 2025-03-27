@@ -7,9 +7,11 @@
 #include "device/memory.h"
 
 #include "scene/colorspace.h"
+#include "scene/image_cache.h"
 
 #include "util/set.h"
 #include "util/string.h"
+#include "util/texture.h"
 #include "util/thread.h"
 #include "util/transform.h"
 #include "util/unique_ptr.h"
@@ -73,6 +75,10 @@ class ImageMetaData {
   bool compress_as_srgb;
   bool associate_alpha;
 
+  /* Tiling */
+  uint32_t tile_size;
+  float4 average_color;
+
   ImageMetaData();
   bool operator==(const ImageMetaData &other) const;
   bool is_float() const;
@@ -97,6 +103,24 @@ class ImageLoader {
 
   /* Load full image pixels. */
   virtual bool load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels) = 0;
+
+  /* Load pixels for a single tile, if ImageMetaData.tile_size is set. */
+  virtual bool load_pixels_tile(const ImageMetaData & /*metadata*/,
+                                const int /*miplevel*/,
+                                const int64_t /*x*/,
+                                const int64_t /*y*/,
+                                const int64_t /*w*/,
+                                const int64_t /*h*/,
+                                const int64_t /*x_stride*/,
+                                const int64_t /*y_stride*/,
+                                const int64_t /*padding*/,
+                                uint8_t * /*pixels*/)
+  {
+    return false;
+  }
+
+  /* TODO: Drop file handle to avoid running out. */
+  virtual void drop_file_handle() {}
 
   /* Name for logs and stats. */
   virtual string name() const = 0;
@@ -174,12 +198,14 @@ class ImageManager {
   ImageHandle add_image(vector<unique_ptr<ImageLoader>> &&loaders, const ImageParams &params);
 
   void device_update(Device *device, Scene *scene, Progress &progress);
-  void device_free(Device *device);
+  void device_free(Scene *scene);
 
   void device_load_builtin(Device *device, Scene *scene, Progress &progress);
-  void device_free_builtin(Device *device);
+  void device_free_builtin(Scene *scene);
 
   void device_load_slots(Device *device, Scene *scene, Progress &progress, const set<int> &slots);
+
+  void device_update_requested(Device *device, Scene *scene);
 
   void set_osl_texture_system(void *texture_system);
   bool set_animation_frame_update(const int frame);
@@ -200,11 +226,15 @@ class ImageManager {
     bool need_load;
     bool builtin;
 
-    string mem_name;
-    unique_ptr<device_image> mem;
-
     int users;
     thread_mutex mutex;
+
+    // TODO: avoid storing these?
+    uint texture_slot;
+    uint tile_descriptor_offset;
+    uint tile_descriptor_levels;
+    uint tile_descriptor_num;
+    device_image *vdb_memory;
   };
 
  private:
@@ -217,6 +247,7 @@ class ImageManager {
   int animation_frame;
 
   vector<unique_ptr<Image>> images;
+  ImageCache image_cache;
   void *osl_texture_system;
 
   size_t add_image_slot(unique_ptr<ImageLoader> &&loader,
@@ -229,10 +260,14 @@ class ImageManager {
   void load_image_metadata(Image *img);
 
   template<TypeDesc::BASETYPE FileFormat, typename StorageType>
-  bool file_load_image(Image *img, const int texture_limit);
+  bool file_load_image(Device *device, Image *img, const int texture_limit);
 
+  void device_load_image_tiled(Scene *scene, const size_t slot);
+  void device_update_image_requested(Device *device, Scene *scene, Image *img);
+
+  void device_load_image_full(Device *device, Scene *scene, const size_t slot);
   void device_load_image(Device *device, Scene *scene, const size_t slot, Progress &progress);
-  void device_free_image(Device *device, const size_t slot);
+  void device_free_image(Scene *scene, const size_t slot);
 
   void device_resize_image_textures(Scene *scene);
   void device_copy_image_textures(Scene *scene);

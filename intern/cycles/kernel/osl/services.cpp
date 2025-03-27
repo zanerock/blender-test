@@ -1224,10 +1224,11 @@ bool OSLRenderServices::texture(OSLUStringHash filename,
 
       float4 rgba;
       if (id == -1) {
-        rgba = make_float4(IMAGE_MISSING_R, IMAGE_MISSING_G, IMAGE_MISSING_B, IMAGE_MISSING_A);
+        rgba = IMAGE_TEXTURE_MISSING_RGBA;
       }
       else {
-        rgba = kernel_image_interp(kernel_globals, id, s, 1.0f - t);
+        rgba = kernel_image_interp(
+            kernel_globals, id, s, 1.0f - t, primitive_uv_differential(kernel_globals, sd));
       }
 
       result[0] = rgba[0];

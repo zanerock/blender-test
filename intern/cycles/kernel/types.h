@@ -704,6 +704,11 @@ struct differential3 {
   float3 dy;
 };
 
+struct differential2 {
+  float2 dx;
+  float2 dy;
+};
+
 struct differential {
   float dx;
   float dy;

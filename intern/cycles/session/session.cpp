@@ -9,6 +9,7 @@
 #include "integrator/path_trace.h"
 #include "scene/background.h"
 #include "scene/camera.h"
+#include "scene/image.h"
 #include "scene/integrator.h"
 #include "scene/light.h"
 #include "scene/mesh.h"
@@ -219,6 +220,9 @@ void Session::run_main_render_loop()
         break;
       }
     }
+
+    // TODO: better place for this
+    scene->image_manager->device_update_requested(device.get(), scene.get());
 
     progress.set_update();
 

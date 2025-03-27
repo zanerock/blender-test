@@ -3,7 +3,6 @@
  * SPDX-License-Identifier: Apache-2.0 */
 
 #include "scene/image.h"
-#include "device/device.h"
 #include "scene/colorspace.h"
 #include "scene/image_oiio.h"
 #include "scene/image_vdb.h"
@@ -16,51 +15,14 @@
 #include "util/progress.h"
 #include "util/task.h"
 #include "util/texture.h"
+#include "util/types_base.h"
+#include <type_traits>
 
 #ifdef WITH_OSL
 #  include <OSL/oslexec.h>
 #endif
 
 CCL_NAMESPACE_BEGIN
-
-namespace {
-
-const char *name_from_type(ImageDataType type)
-{
-  switch (type) {
-    case IMAGE_DATA_TYPE_FLOAT4:
-      return "float4";
-    case IMAGE_DATA_TYPE_BYTE4:
-      return "byte4";
-    case IMAGE_DATA_TYPE_HALF4:
-      return "half4";
-    case IMAGE_DATA_TYPE_FLOAT:
-      return "float";
-    case IMAGE_DATA_TYPE_BYTE:
-      return "byte";
-    case IMAGE_DATA_TYPE_HALF:
-      return "half";
-    case IMAGE_DATA_TYPE_USHORT4:
-      return "ushort4";
-    case IMAGE_DATA_TYPE_USHORT:
-      return "ushort";
-    case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
-      return "nanovdb_float";
-    case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
-      return "nanovdb_float3";
-    case IMAGE_DATA_TYPE_NANOVDB_FPN:
-      return "nanovdb_fpn";
-    case IMAGE_DATA_TYPE_NANOVDB_FP16:
-      return "nanovdb_fp16";
-    case IMAGE_DATA_NUM_TYPES:
-      assert(!"System enumerator type, should never be used");
-      return "";
-  }
-  assert(!"Unhandled image data type");
-  return "";
-}
-
-}  // namespace
 
 /* Image Handle */
 
@@ -182,7 +144,7 @@ device_image *ImageHandle::vdb_image_memory() const
   }
 
   ImageManager::Image *img = manager->get_image_slot(slots[0]);
-  return img ? img->mem.get() : nullptr;
+  return img ? img->vdb_memory : nullptr;
 }
 
 VDBImageLoader *ImageHandle::vdb_loader() const
@@ -233,7 +195,9 @@ ImageMetaData::ImageMetaData()
       colorspace_file_format(""),
       use_transform_3d(false),
       compress_as_srgb(false),
-      associate_alpha(false)
+      associate_alpha(false),
+      tile_size(0),
+      average_color(zero_float4())
 {
 }
 
@@ -454,6 +418,8 @@ ImageHandle ImageManager::add_image(vector<unique_ptr<ImageLoader>> &&loaders,
   return handle;
 }
 
+/* ImageManager */
+
 size_t ImageManager::add_image_slot(unique_ptr<ImageLoader> &&loader,
                                     const ImageParams &params,
                                     const bool builtin)
@@ -490,7 +456,10 @@ size_t ImageManager::add_image_slot(unique_ptr<ImageLoader> &&loader,
   img->need_load = !(osl_texture_system && !img->loader->osl_filepath().empty());
   img->builtin = builtin;
   img->users = 1;
-  img->mem = nullptr;
+  img->texture_slot = KERNEL_IMAGE_TEX_NONE;
+  img->tile_descriptor_offset = KERNEL_IMAGE_TEX_NONE;
+  img->tile_descriptor_levels = 0;
+  img->tile_descriptor_num = 0;
 
   images[slot] = std::move(img);
 
@@ -532,60 +501,24 @@ ImageManager::Image *ImageManager::get_image_slot(const size_t slot)
   return images[slot].get();
 }
 
-template<TypeDesc::BASETYPE FileFormat, typename StorageType>
-bool ImageManager::file_load_image(Image *img, const int texture_limit)
+template<typename StorageType>
+static bool conform_pixels_to_metadata_type(const ImageManager::Image *img,
+                                            StorageType *pixels,
+                                            const int64_t num_pixels)
 {
-  /* Ignore empty images. */
-  if (!(img->metadata.channels > 0)) {
-    return false;
-  }
-
-  /* Get metadata. */
-  const int width = img->metadata.width;
-  const int height = img->metadata.height;
-  const int depth = img->metadata.depth;
-  const int components = img->metadata.channels;
-
-  /* Read pixels. */
-  vector<StorageType> pixels_storage;
-  StorageType *pixels;
-  const size_t max_size = max(max(width, height), depth);
-  if (max_size == 0) {
-    /* Don't bother with empty images. */
-    return false;
-  }
-
-  /* Allocate memory as needed, may be smaller to resize down. */
-  if (texture_limit > 0 && max_size > texture_limit) {
-    pixels_storage.resize(((size_t)width) * height * depth * 4);
-    pixels = &pixels_storage[0];
-  }
-  else {
-    const thread_scoped_lock device_lock(device_mutex);
-    pixels = (StorageType *)img->mem->alloc(width, height, depth);
-  }
-
-  if (pixels == nullptr) {
-    /* Could be that we've run out of memory. */
-    return false;
-  }
-
-  const int64_t num_pixels = ((int64_t)width) * height * depth;
-  if (!img->loader->load_pixels_full(img->metadata, (uint8_t *)pixels)) {
-    return false;
-  }
-
   /* The kernel can handle 1 and 4 channel images. Anything that is not a single
    * channel image is converted to RGBA format. */
-  const bool is_rgba = (img->metadata.type == IMAGE_DATA_TYPE_FLOAT4 ||
-                        img->metadata.type == IMAGE_DATA_TYPE_HALF4 ||
-                        img->metadata.type == IMAGE_DATA_TYPE_BYTE4 ||
-                        img->metadata.type == IMAGE_DATA_TYPE_USHORT4);
+  const ImageMetaData &metadata = img->metadata;
+  const int channels = metadata.channels;
+  const bool is_rgba = (metadata.type == IMAGE_DATA_TYPE_FLOAT4 ||
+                        metadata.type == IMAGE_DATA_TYPE_HALF4 ||
+                        metadata.type == IMAGE_DATA_TYPE_BYTE4 ||
+                        metadata.type == IMAGE_DATA_TYPE_USHORT4);
 
   if (is_rgba) {
     const StorageType one = util_image_cast_from_float<StorageType>(1.0f);
 
-    if (components == 2) {
+    if (channels == 2) {
       /* Grayscale + alpha to RGBA. */
       for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = pixels[i * 2 + 1];
@@ -594,7 +527,7 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
         pixels[i * 4 + 0] = pixels[i * 2 + 0];
       }
     }
-    else if (components == 3) {
+    else if (channels == 3) {
       /* RGB to RGBA. */
       for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = one;
@@ -603,7 +536,7 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
         pixels[i * 4 + 0] = pixels[i * 3 + 0];
       }
     }
-    else if (components == 1) {
+    else if (channels == 1) {
       /* Grayscale to RGBA. */
       for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = one;
@@ -621,16 +554,14 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
     }
   }
 
-  if (img->metadata.colorspace != u_colorspace_raw &&
-      img->metadata.colorspace != u_colorspace_srgb)
-  {
+  if (metadata.colorspace != u_colorspace_raw && metadata.colorspace != u_colorspace_srgb) {
     /* Convert to scene linear. */
     ColorSpaceManager::to_scene_linear(
-        img->metadata.colorspace, pixels, num_pixels, is_rgba, img->metadata.compress_as_srgb);
+        metadata.colorspace, pixels, num_pixels, is_rgba, metadata.compress_as_srgb);
   }
 
   /* Make sure we don't have buggy values. */
-  if constexpr (FileFormat == TypeDesc::FLOAT) {
+  if constexpr (std::is_same_v<float, StorageType>) {
     /* For RGBA buffers we put all channels to 0 if either of them is not
      * finite. This way we avoid possible artifacts caused by fully changed
      * hue. */
@@ -657,6 +588,89 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
     }
   }
 
+  return is_rgba;
+}
+
+static bool conform_pixels_to_metadata(const ImageManager::Image *img,
+                                       void *pixels,
+                                       const int64_t num_pixels)
+{
+  switch (img->metadata.type) {
+    case IMAGE_DATA_TYPE_FLOAT4:
+    case IMAGE_DATA_TYPE_FLOAT:
+      return conform_pixels_to_metadata_type<float>(img, static_cast<float *>(pixels), num_pixels);
+    case IMAGE_DATA_TYPE_BYTE4:
+    case IMAGE_DATA_TYPE_BYTE:
+      return conform_pixels_to_metadata_type<uchar>(img, static_cast<uchar *>(pixels), num_pixels);
+    case IMAGE_DATA_TYPE_HALF4:
+    case IMAGE_DATA_TYPE_HALF:
+      return conform_pixels_to_metadata_type<half>(img, static_cast<half *>(pixels), num_pixels);
+    case IMAGE_DATA_TYPE_USHORT:
+    case IMAGE_DATA_TYPE_USHORT4:
+      return conform_pixels_to_metadata_type<uint16_t>(
+          img, static_cast<uint16_t *>(pixels), num_pixels);
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
+    case IMAGE_DATA_TYPE_NANOVDB_FPN:
+    case IMAGE_DATA_TYPE_NANOVDB_FP16:
+    case IMAGE_DATA_NUM_TYPES:
+      break;
+  }
+
+  return false;
+}
+
+template<TypeDesc::BASETYPE FileFormat, typename StorageType>
+bool ImageManager::file_load_image(Device *device, Image *img, const int texture_limit)
+{
+  /* Ignore empty images. */
+  if (!(img->metadata.channels > 0)) {
+    return false;
+  }
+
+  /* Get metadata. */
+  const int width = img->metadata.width;
+  const int height = img->metadata.height;
+  const int depth = img->metadata.depth;
+
+  /* Read pixels. */
+  vector<StorageType> pixels_storage;
+  StorageType *pixels;
+  const int64_t max_size = max(max(width, height), depth);
+  if (max_size == 0) {
+    /* Don't bother with empty images. */
+    return false;
+  }
+
+  /* Allocate memory as needed, may be smaller to resize down. */
+  if (texture_limit > 0 && max_size > texture_limit) {
+    pixels_storage.resize(((int64_t)width) * height * depth * 4);
+    pixels = &pixels_storage[0];
+  }
+  else {
+    pixels = image_cache
+                 .alloc_full(device,
+                             img->metadata.type,
+                             img->params.interpolation,
+                             img->params.extension,
+                             width,
+                             height,
+                             img->texture_slot)
+                 .data<StorageType>();
+  }
+
+  if (pixels == nullptr) {
+    /* Could be that we've run out of memory. */
+    return false;
+  }
+
+  const int64_t num_pixels = ((int64_t)width) * height * depth;
+  if (!img->loader->load_pixels_full(img->metadata, (uint8_t *)pixels)) {
+    return false;
+  }
+
+  const bool is_rgba = conform_pixels_to_metadata(img, pixels, num_pixels);
+
   /* Scale image down if needed. */
   if (!pixels_storage.empty()) {
     float scale_factor = 1.0f;
@@ -682,11 +696,15 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
 
     StorageType *texture_pixels;
 
-    {
-      const thread_scoped_lock device_lock(device_mutex);
-      texture_pixels = (StorageType *)img->mem->alloc(scaled_width, scaled_height, scaled_depth);
-    }
-
+    texture_pixels = image_cache
+                         .alloc_full(device,
+                                     img->metadata.type,
+                                     img->params.interpolation,
+                                     img->params.extension,
+                                     width,
+                                     height,
+                                     img->texture_slot)
+                         .data<StorageType>();
     memcpy(texture_pixels, &scaled_pixels[0], scaled_pixels.size() * sizeof(StorageType));
   }
 
@@ -705,10 +723,188 @@ void ImageManager::device_resize_image_textures(Scene *scene)
 
 void ImageManager::device_copy_image_textures(Scene *scene)
 {
+  image_cache.copy_to_device_if_modified();
+
   const thread_scoped_lock device_lock(device_mutex);
   DeviceScene &dscene = scene->dscene;
 
   dscene.image_textures.copy_to_device_if_modified();
+  dscene.image_texture_tile_descriptors.copy_to_device_if_modified();
+}
+
+void ImageManager::device_load_image_full(Device *device, Scene *scene, const size_t slot)
+{
+  Image *img = images[slot].get();
+
+  const ImageDataType type = img->metadata.type;
+  const int texture_limit = scene->params.texture_limit;
+
+  /* Create new texture. */
+  switch (type) {
+    case IMAGE_DATA_TYPE_FLOAT4:
+      file_load_image<TypeDesc::FLOAT, float>(device, img, texture_limit);
+      break;
+    case IMAGE_DATA_TYPE_FLOAT:
+      file_load_image<TypeDesc::FLOAT, float>(device, img, texture_limit);
+      break;
+    case IMAGE_DATA_TYPE_BYTE4:
+      file_load_image<TypeDesc::UINT8, uchar>(device, img, texture_limit);
+      break;
+    case IMAGE_DATA_TYPE_BYTE:
+      file_load_image<TypeDesc::UINT8, uchar>(device, img, texture_limit);
+      break;
+    case IMAGE_DATA_TYPE_HALF4:
+      file_load_image<TypeDesc::HALF, half>(device, img, texture_limit);
+      break;
+    case IMAGE_DATA_TYPE_HALF:
+      file_load_image<TypeDesc::HALF, half>(device, img, texture_limit);
+      break;
+    case IMAGE_DATA_TYPE_USHORT:
+      file_load_image<TypeDesc::USHORT, uint16_t>(device, img, texture_limit);
+      break;
+    case IMAGE_DATA_TYPE_USHORT4:
+      file_load_image<TypeDesc::USHORT, uint16_t>(device, img, texture_limit);
+      break;
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
+    case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
+    case IMAGE_DATA_TYPE_NANOVDB_FPN:
+    case IMAGE_DATA_TYPE_NANOVDB_FP16: {
+#ifdef WITH_NANOVDB
+      img->vdb_memory = &image_cache.alloc_full(device,
+                                                type,
+                                                img->params.interpolation,
+                                                img->params.extension,
+                                                img->metadata.byte_size,
+                                                0,
+                                                img->texture_slot);
+
+      uint8_t *pixels = img->vdb_memory->data<uint8_t>();
+      if (pixels) {
+        img->loader->load_pixels_full(img->metadata, pixels);
+      }
+#endif
+      break;
+    }
+    case IMAGE_DATA_NUM_TYPES:
+      break;
+  }
+}
+
+void ImageManager::device_load_image_tiled(Scene *scene, const size_t slot)
+{
+  Image *img = images[slot].get();
+
+  vector<KernelTileDescriptor> levels;
+  const int max_miplevels = img->params.interpolation != INTERPOLATION_CLOSEST ? 1 : INT_MAX;
+  const int tile_size = img->metadata.tile_size;
+
+  int num_tiles = 0;
+
+  for (int miplevel = 0; max_miplevels; miplevel++) {
+    const int width = divide_up(img->metadata.width, 1 << miplevel);
+    const int height = divide_up(img->metadata.height, 1 << miplevel);
+
+    levels.push_back(num_tiles);
+
+    num_tiles += divide_up(width, tile_size) * divide_up(height, tile_size);
+
+    if (width <= tile_size && height <= tile_size) {
+      break;
+    }
+  }
+
+  {
+    // TODO: make this more efficient
+    const thread_scoped_lock device_lock(device_mutex);
+    const int tile_descriptor_offset = scene->dscene.image_texture_tile_descriptors.size();
+    scene->dscene.image_texture_tile_descriptors.resize(tile_descriptor_offset + levels.size() +
+                                                        num_tiles);
+
+    KernelTileDescriptor *descr_data = scene->dscene.image_texture_tile_descriptors.data() +
+                                       tile_descriptor_offset;
+
+    for (int i = 0; i < levels.size(); i++) {
+      descr_data[i] = levels.size() + levels[i];
+    }
+    std::fill_n(descr_data + levels.size(), num_tiles, KERNEL_TILE_LOAD_NONE);
+
+    img->tile_descriptor_offset = tile_descriptor_offset;
+    img->tile_descriptor_levels = levels.size();
+    img->tile_descriptor_num = num_tiles;
+  }
+}
+
+void ImageManager::device_update_image_requested(Device *device, Scene *scene, Image *img)
+{
+  const size_t tile_size = img->metadata.tile_size;
+
+  KernelTileDescriptor *tile_descriptors = scene->dscene.image_texture_tile_descriptors.data() +
+                                           img->tile_descriptor_offset +
+                                           img->tile_descriptor_levels;
+
+  size_t i = 0;
+  for (int miplevel = 0; miplevel < img->tile_descriptor_levels; miplevel++) {
+    const int width = divide_up(img->metadata.width, 1 << miplevel);
+    const int height = divide_up(img->metadata.height, 1 << miplevel);
+
+    for (size_t y = 0; y < height; y += tile_size) {
+      for (size_t x = 0; x < width; x += tile_size, i++) {
+        assert(i < img->tile_descriptor_num);
+
+        if (tile_descriptors[i] != KERNEL_TILE_LOAD_REQUEST) {
+          continue;
+        }
+
+        const size_t w = min(width - x, tile_size);
+        const size_t h = min(height - y, tile_size);
+        const size_t tile_size_padded = tile_size + KERNEL_IMAGE_TEX_PADDING * 2;
+
+        KernelTileDescriptor tile_descriptor;
+
+        device_image &mem = image_cache.alloc_tile(device,
+                                                   img->metadata.type,
+                                                   img->params.interpolation,
+                                                   img->params.extension,
+                                                   tile_size_padded,
+                                                   tile_descriptor);
+
+        const size_t pixel_bytes = mem.data_elements * datatype_size(mem.data_type);
+        const size_t x_stride = pixel_bytes;
+        const size_t y_stride = mem.data_width * pixel_bytes;
+        const size_t x_offset = kernel_tile_descriptor_offset(tile_descriptor) * tile_size_padded *
+                                pixel_bytes;
+
+        uint8_t *pixels = mem.data<uint8_t>() + x_offset;
+
+        const bool ok = img->loader->load_pixels_tile(img->metadata,
+                                                      miplevel,
+                                                      x,
+                                                      y,
+                                                      w,
+                                                      h,
+                                                      x_stride,
+                                                      y_stride,
+                                                      KERNEL_IMAGE_TEX_PADDING,
+                                                      pixels);
+
+        conform_pixels_to_metadata(img, pixels, w * h);
+
+        tile_descriptors[i] = (ok) ? tile_descriptor : KERNEL_TILE_LOAD_FAILED;
+        scene->dscene.image_texture_tile_descriptors.tag_modified();
+
+        if (ok) {
+          VLOG_DEBUG << "Load image tile: " << img->loader->name() << ", mip level " << miplevel
+                     << " (" << x << " " << y << ")";
+        }
+        else {
+          VLOG_WARNING << "Failed to load image tile: " << img->loader->name() << ", mip level "
+                       << miplevel << " (" << x << " " << y << ")";
+        }
+      }
+    }
+  }
+
+  img->loader->drop_file_handle();
 }
 
 void ImageManager::device_load_image(Device *device,
@@ -724,137 +920,32 @@ void ImageManager::device_load_image(Device *device,
 
   progress.set_status("Updating Images", "Loading " + img->loader->name());
 
-  const int texture_limit = scene->params.texture_limit;
-
   load_image_metadata(img);
-  const ImageDataType type = img->metadata.type;
 
-  /* Name for debugging. */
-  img->mem_name = string_printf("tex_image_%s_%03d", name_from_type(type), (int)slot);
+  KernelImageTexture tex;
+  tex.width = img->metadata.width;
+  tex.height = img->metadata.height;
+  tex.interpolation = img->params.interpolation;
+  tex.extension = img->params.extension;
+  tex.use_transform_3d = img->metadata.use_transform_3d;
+  tex.transform_3d = img->metadata.transform_3d;
+  tex.average_color = img->metadata.average_color;
 
-  /* Free previous texture in slot. */
-  if (img->mem) {
-    const thread_scoped_lock device_lock(device_mutex);
-    img->mem.reset();
+  if (img->metadata.tile_size) {
+    assert(is_power_of_two(img->metadata.tile_size));
+
+    device_load_image_tiled(scene, slot);
+
+    tex.tile_descriptor_offset = img->tile_descriptor_offset;
+    tex.tile_size_shift = __bsr(img->metadata.tile_size);
+    tex.tile_levels = img->tile_descriptor_levels;
   }
-
-  img->mem = make_unique<device_image>(
-      device, img->mem_name.c_str(), slot, type, img->params.interpolation, img->params.extension);
-
-  /* Create new texture. */
-  if (type == IMAGE_DATA_TYPE_FLOAT4) {
-    if (!file_load_image<TypeDesc::FLOAT, float>(img, texture_limit)) {
-      /* on failure to load, we set a 1x1 pixels pink image */
-      const thread_scoped_lock device_lock(device_mutex);
-      float *pixels = (float *)img->mem->alloc(1, 1);
-
-      pixels[0] = IMAGE_MISSING_R;
-      pixels[1] = IMAGE_MISSING_G;
-      pixels[2] = IMAGE_MISSING_B;
-      pixels[3] = IMAGE_MISSING_A;
-    }
-  }
-  else if (type == IMAGE_DATA_TYPE_FLOAT) {
-    if (!file_load_image<TypeDesc::FLOAT, float>(img, texture_limit)) {
-      /* on failure to load, we set a 1x1 pixels pink image */
-      const thread_scoped_lock device_lock(device_mutex);
-      float *pixels = (float *)img->mem->alloc(1, 1);
-
-      pixels[0] = IMAGE_MISSING_R;
-    }
-  }
-  else if (type == IMAGE_DATA_TYPE_BYTE4) {
-    if (!file_load_image<TypeDesc::UINT8, uchar>(img, texture_limit)) {
-      /* on failure to load, we set a 1x1 pixels pink image */
-      const thread_scoped_lock device_lock(device_mutex);
-      uchar *pixels = (uchar *)img->mem->alloc(1, 1);
-
-      pixels[0] = (IMAGE_MISSING_R * 255);
-      pixels[1] = (IMAGE_MISSING_G * 255);
-      pixels[2] = (IMAGE_MISSING_B * 255);
-      pixels[3] = (IMAGE_MISSING_A * 255);
-    }
-  }
-  else if (type == IMAGE_DATA_TYPE_BYTE) {
-    if (!file_load_image<TypeDesc::UINT8, uchar>(img, texture_limit)) {
-      /* on failure to load, we set a 1x1 pixels pink image */
-      const thread_scoped_lock device_lock(device_mutex);
-      uchar *pixels = (uchar *)img->mem->alloc(1, 1);
-
-      pixels[0] = (IMAGE_MISSING_R * 255);
-    }
-  }
-  else if (type == IMAGE_DATA_TYPE_HALF4) {
-    if (!file_load_image<TypeDesc::HALF, half>(img, texture_limit)) {
-      /* on failure to load, we set a 1x1 pixels pink image */
-      const thread_scoped_lock device_lock(device_mutex);
-      half *pixels = (half *)img->mem->alloc(1, 1);
-
-      pixels[0] = IMAGE_MISSING_R;
-      pixels[1] = IMAGE_MISSING_G;
-      pixels[2] = IMAGE_MISSING_B;
-      pixels[3] = IMAGE_MISSING_A;
-    }
-  }
-  else if (type == IMAGE_DATA_TYPE_USHORT) {
-    if (!file_load_image<TypeDesc::USHORT, uint16_t>(img, texture_limit)) {
-      /* on failure to load, we set a 1x1 pixels pink image */
-      const thread_scoped_lock device_lock(device_mutex);
-      uint16_t *pixels = (uint16_t *)img->mem->alloc(1, 1);
-
-      pixels[0] = (IMAGE_MISSING_R * 65535);
-    }
-  }
-  else if (type == IMAGE_DATA_TYPE_USHORT4) {
-    if (!file_load_image<TypeDesc::USHORT, uint16_t>(img, texture_limit)) {
-      /* on failure to load, we set a 1x1 pixels pink image */
-      const thread_scoped_lock device_lock(device_mutex);
-      uint16_t *pixels = (uint16_t *)img->mem->alloc(1, 1);
-
-      pixels[0] = (IMAGE_MISSING_R * 65535);
-      pixels[1] = (IMAGE_MISSING_G * 65535);
-      pixels[2] = (IMAGE_MISSING_B * 65535);
-      pixels[3] = (IMAGE_MISSING_A * 65535);
-    }
-  }
-  else if (type == IMAGE_DATA_TYPE_HALF) {
-    if (!file_load_image<TypeDesc::HALF, half>(img, texture_limit)) {
-      /* on failure to load, we set a 1x1 pixels pink image */
-      const thread_scoped_lock device_lock(device_mutex);
-      half *pixels = (half *)img->mem->alloc(1, 1);
-
-      pixels[0] = IMAGE_MISSING_R;
-    }
-  }
-#ifdef WITH_NANOVDB
-  else if (type == IMAGE_DATA_TYPE_NANOVDB_FLOAT || type == IMAGE_DATA_TYPE_NANOVDB_FLOAT3 ||
-           type == IMAGE_DATA_TYPE_NANOVDB_FPN || type == IMAGE_DATA_TYPE_NANOVDB_FP16)
-  {
-    const thread_scoped_lock device_lock(device_mutex);
-    uint8_t *pixels = (uint8_t *)img->mem->alloc(img->metadata.byte_size, 0);
-
-    if (pixels != nullptr) {
-      img->loader->load_pixels_full(img->metadata, pixels);
-    }
-  }
-#endif
-
-  {
-    const thread_scoped_lock device_lock(device_mutex);
-    img->mem->copy_to_device();
+  else {
+    device_load_image_full(device, scene, slot);
+    tex.slot = img->texture_slot;
   }
 
   /* Update image texture device data. */
-  KernelImageTexture tex;
-  tex.slot = slot;
-  tex.data_type = img->mem->info.data_type;
-  tex.interpolation = img->params.interpolation;
-  tex.extension = img->params.extension;
-  tex.width = img->mem->info.width;
-  tex.height = img->mem->info.height;
-  tex.depth = img->mem->info.depth;
-  tex.use_transform_3d = img->metadata.use_transform_3d;
-  tex.transform_3d = img->metadata.transform_3d;
   scene->dscene.image_textures[slot] = tex;
   scene->dscene.image_textures.tag_modified();
 
@@ -863,7 +954,7 @@ void ImageManager::device_load_image(Device *device,
   img->need_load = false;
 }
 
-void ImageManager::device_free_image(Device * /*unused*/, size_t slot)
+void ImageManager::device_free_image(Scene *scene, size_t slot)
 {
   Image *img = images[slot].get();
   if (img == nullptr) {
@@ -879,12 +970,41 @@ void ImageManager::device_free_image(Device * /*unused*/, size_t slot)
 #endif
   }
 
-  if (img->mem) {
-    const thread_scoped_lock device_lock(device_mutex);
-    img->mem.reset();
+  if (img->texture_slot != KERNEL_IMAGE_TEX_NONE) {
+    image_cache.free_full(img->texture_slot);
+  }
+  if (img->tile_descriptor_offset != KERNEL_IMAGE_TEX_NONE) {
+    // TODO: shrink image_texture_tile_descriptors
+    KernelTileDescriptor *tile_descriptors = scene->dscene.image_texture_tile_descriptors.data() +
+                                             img->tile_descriptor_offset +
+                                             img->tile_descriptor_levels;
+
+    for (int i = 0; i < img->tile_descriptor_num; i++) {
+      if (kernel_tile_descriptor_loaded(tile_descriptors[i])) {
+        image_cache.free_tile(tile_descriptors[i]);
+      }
+    }
   }
 
   images[slot].reset();
+}
+
+void ImageManager::device_update_requested(Device *device, Scene *scene)
+{
+  // TODO: not supported for MEM_GLOBAL
+  // TODO: only do if modified
+  // scene->dscene.image_texture_tile_descriptors.copy_from_device();
+
+  parallel_for(blocked_range<size_t>(0, images.size(), 1), [&](const blocked_range<size_t> &r) {
+    for (size_t i = r.begin(); i != r.end(); i++) {
+      unique_ptr<Image> &img = images[i];
+      if (img && img->tile_descriptor_offset != KERNEL_IMAGE_TEX_NONE) {
+        device_update_image_requested(device, scene, img.get());
+      }
+    }
+  });
+
+  device_copy_image_textures(scene);
 }
 
 void ImageManager::device_update(Device *device, Scene *scene, Progress &progress)
@@ -905,7 +1025,7 @@ void ImageManager::device_update(Device *device, Scene *scene, Progress &progres
   for (size_t slot = 0; slot < images.size(); slot++) {
     Image *img = images[slot].get();
     if (img && img->users == 0) {
-      device_free_image(device, slot);
+      device_free_image(scene, slot);
     }
     else if (img && img->need_load) {
       pool.push([this, device, scene, slot, &progress] {
@@ -935,7 +1055,7 @@ void ImageManager::device_load_slots(Device *device,
       assert(img != nullptr);
 
       if (img->users == 0) {
-        device_free_image(device, slot);
+        device_free_image(scene, slot);
       }
       else if (img->need_load) {
         device_load_image(device, scene, slot, progress);
@@ -972,22 +1092,25 @@ void ImageManager::device_load_builtin(Device *device, Scene *scene, Progress &p
   device_copy_image_textures(scene);
 }
 
-void ImageManager::device_free_builtin(Device *device)
+void ImageManager::device_free_builtin(Scene *scene)
 {
   for (size_t slot = 0; slot < images.size(); slot++) {
     Image *img = images[slot].get();
     if (img && img->builtin) {
-      device_free_image(device, slot);
+      device_free_image(scene, slot);
     }
   }
 }
 
-void ImageManager::device_free(Device *device)
+void ImageManager::device_free(Scene *scene)
 {
   for (size_t slot = 0; slot < images.size(); slot++) {
-    device_free_image(device, slot);
+    device_free_image(scene, slot);
   }
   images.clear();
+  image_cache.device_free();
+  scene->dscene.image_textures.free();
+  scene->dscene.image_texture_tile_descriptors.free();
 }
 
 void ImageManager::collect_statistics(RenderStats *stats)
@@ -997,8 +1120,9 @@ void ImageManager::collect_statistics(RenderStats *stats)
       /* Image may have been freed due to lack of users. */
       continue;
     }
-    stats->image.textures.add_entry(
-        NamedSizeEntry(image->loader->name(), image->mem->memory_size()));
+
+    // TODO: collection from image cache
+    stats->image.textures.add_entry(NamedSizeEntry(image->loader->name(), 0));
   }
 }
 

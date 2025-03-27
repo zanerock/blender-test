@@ -6,6 +6,8 @@
 
 #include "scene/image.h"
 
+#include "util/image.h"
+
 CCL_NAMESPACE_BEGIN
 
 class OIIOImageLoader : public ImageLoader {
@@ -17,6 +19,19 @@ class OIIOImageLoader : public ImageLoader {
 
   bool load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels) override;
 
+  bool load_pixels_tile(const ImageMetaData &metadata,
+                        const int miplevel,
+                        const int64_t x,
+                        const int64_t y,
+                        const int64_t w,
+                        const int64_t h,
+                        const int64_t x_stride,
+                        const int64_t y_stride,
+                        const int64_t padding,
+                        uint8_t *pixels) override;
+
+  void drop_file_handle() override;
+
   string name() const override;
 
   ustring osl_filepath() const override;
@@ -25,6 +40,7 @@ class OIIOImageLoader : public ImageLoader {
 
  protected:
   ustring filepath;
+  unique_ptr<ImageInput> filehandle;
 };
 
 CCL_NAMESPACE_END

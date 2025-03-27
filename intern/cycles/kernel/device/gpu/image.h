@@ -6,9 +6,14 @@
 
 CCL_NAMESPACE_BEGIN
 
+#include "util/defines.h"
+#include "util/math.h"
+
+#include "kernel/util/image.h"
+
 #if !defined __KERNEL_METAL__
 #  ifdef WITH_NANOVDB
-#    include "kernel/util/nanovdb.h"
+// #    include "kernel/util/nanovdb.h"
 #  endif
 #endif
 
@@ -76,6 +81,7 @@ ccl_device_noinline T kernel_image_interp_bicubic(const ccl_global KernelImageIn
   float g0x = cubic_g0(fx);
   float g1x = cubic_g1(fx);
   /* Note +0.5 offset to compensate for CUDA linear filtering convention. */
+  // TODO: turn division into multiplication?
   float x0 = (px + cubic_h0(fx) + 0.5f) / info.width;
   float x1 = (px + cubic_h1(fx) + 0.5f) / info.width;
   float y0 = (py + cubic_h0(fy) + 0.5f) / info.height;
@@ -258,20 +264,84 @@ ccl_device_noinline OutT kernel_image_interp_nanovdb(const ccl_global KernelImag
 }
 #endif
 
-ccl_device float4 kernel_image_interp(KernelGlobals kg, const int id, const float x, float y)
+ccl_device float4
+kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differential2 dxy)
 {
-  const ccl_global KernelImageInfo &info = kernel_data_fetch(image_info, id);
+  const ccl_global KernelImageTexture &tex = kernel_data_fetch(image_textures, id);
+  const ccl_global KernelImageInfo *info;
+
+  /* Wrapping. */
+  // TODO: redundant with wrapping in image sampling, but that one is currently
+  // need for full image sampling. Would be simpler if everything was tiled.
+  switch (tex.extension) {
+    case EXTENSION_REPEAT:
+      x = x - floorf(x);
+      y = y - floorf(y);
+      break;
+    case EXTENSION_CLIP:
+      // TODO: implement this somehow with interpolation
+      if (x < 0.0f || x > 1.0f || y < 0.0f || y > 1.0f) {
+        return zero_float4();
+      }
+      break;
+    case EXTENSION_EXTEND:
+      x = clamp(x, 0.0f, 1.0f);
+      y = clamp(y, 0.0f, 1.0f);
+      break;
+    case EXTENSION_MIRROR:
+      // TODO: replace fmod with x - floor(x)?
+      x = fmodf(fabsf(x + (x < 0)), 2.0f);
+      if (x >= 1.0f) {
+        x = 2.0f - x - 1.0f;
+      }
+      y = fmodf(fabsf(y + (y < 0)), 2.0f);
+      if (y >= 1.0f) {
+        y = 2.0f - y - 1.0f;
+      }
+      break;
+    default:
+      kernel_assert(0);
+      return zero_float4();
+  }
+
+  if (tex.tile_descriptor_offset != UINT_MAX) {
+    /* Tile mapping */
+    const KernelTileDescriptor tile_descriptor = kernel_image_tile_map(kg, tex, x, y, dxy);
+
+    if (!kernel_tile_descriptor_loaded(tile_descriptor)) {
+      if (tile_descriptor == KERNEL_TILE_LOAD_FAILED) {
+        return IMAGE_TEXTURE_MISSING_RGBA;
+      }
+      // TODO: cancel shader execution
+      return tex.average_color;
+    }
+
+    info = &kernel_data_fetch(image_info, kernel_tile_descriptor_slot(tile_descriptor));
+
+    /* Convert to normalized space again. */
+    // TODO: avoid this, or at least turn division into multiplication
+    x /= info->width;
+    y /= info->height;
+  }
+  else {
+    /* Full image sampling. */
+    if (tex.slot == KERNEL_IMAGE_TEX_NONE) {
+      return IMAGE_TEXTURE_MISSING_RGBA;
+    }
+
+    info = &kernel_data_fetch(image_info, tex.slot);
+  }
 
   /* float4, byte4, ushort4 and half4 */
-  const int texture_type = info.data_type;
+  const int texture_type = info->data_type;
   if (texture_type == IMAGE_DATA_TYPE_FLOAT4 || texture_type == IMAGE_DATA_TYPE_BYTE4 ||
       texture_type == IMAGE_DATA_TYPE_HALF4 || texture_type == IMAGE_DATA_TYPE_USHORT4)
   {
-    if (info.interpolation == INTERPOLATION_CUBIC || info.interpolation == INTERPOLATION_SMART) {
-      return kernel_image_interp_bicubic<float4>(info, x, y);
+    if (info->interpolation == INTERPOLATION_CUBIC || info->interpolation == INTERPOLATION_SMART) {
+      return kernel_image_interp_bicubic<float4>(*info, x, y);
     }
     else {
-      ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info.data;
+      ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info->data;
       return ccl_gpu_image_object_read_2D<float4>(tex, x, y);
     }
   }
@@ -279,11 +349,11 @@ ccl_device float4 kernel_image_interp(KernelGlobals kg, const int id, const floa
   else {
     float f;
 
-    if (info.interpolation == INTERPOLATION_CUBIC || info.interpolation == INTERPOLATION_SMART) {
-      f = kernel_image_interp_bicubic<float>(info, x, y);
+    if (info->interpolation == INTERPOLATION_CUBIC || info->interpolation == INTERPOLATION_SMART) {
+      f = kernel_image_interp_bicubic<float>(*info, x, y);
     }
     else {
-      ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info.data;
+      ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info->data;
       f = ccl_gpu_image_object_read_2D<float>(tex, x, y);
     }
 

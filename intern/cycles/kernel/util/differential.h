@@ -89,20 +89,17 @@ ccl_device void differential_dudv(ccl_private differential *du,
 
 ccl_device differential differential_zero()
 {
-  differential d;
-  d.dx = 0.0f;
-  d.dy = 0.0f;
+  return differential{0.0f, 0.0f};
+}
 
-  return d;
+ccl_device differential2 differential2_zero()
+{
+  return differential2{zero_float2(), zero_float2()};
 }
 
 ccl_device differential3 differential3_zero()
 {
-  differential3 d;
-  d.dx = zero_float3();
-  d.dy = zero_float3();
-
-  return d;
+  return differential3{zero_float3(), zero_float3()};
 }
 
 /* Compact ray differentials that are just a radius to reduce memory usage and access cost

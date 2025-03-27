@@ -19,6 +19,9 @@
 #include "kernel/geom/point.h"
 #include "kernel/geom/triangle.h"
 #include "kernel/geom/volume.h"
+#include "kernel/types.h"
+#include "kernel/util/differential.h"
+#include "util/defines.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -107,6 +110,20 @@ ccl_device_forceinline float3 primitive_uv(KernelGlobals kg, const ccl_private S
 
   const float2 uv = primitive_surface_attribute<float2>(kg, sd, desc, nullptr, nullptr);
   return make_float3(uv.x, uv.y, 1.0f);
+}
+
+ccl_device_forceinline differential2 primitive_uv_differential(KernelGlobals kg,
+                                                               const ccl_private ShaderData *sd)
+{
+  const AttributeDescriptor desc = find_attribute(kg, sd, ATTR_STD_UV);
+
+  if (desc.offset == ATTR_STD_NOT_FOUND) {
+    return differential2_zero();
+  }
+
+  float2 duvdx, duvdy;
+  primitive_surface_attribute<float2>(kg, sd, desc, &duvdx, &duvdy);
+  return differential2{duvdx, duvdy};
 }
 
 /* PTEX coordinates. */

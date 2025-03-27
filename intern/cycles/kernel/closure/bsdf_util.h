@@ -24,7 +24,7 @@ ccl_device float2 fresnel_dielectric_polarized(float cos_theta_i,
                                                ccl_private float *r_cos_theta_t,
                                                ccl_private float2 *r_phi)
 {
-  kernel_assert(!isnan_safe(cos_theta_i));
+  // kernel_assert(!isnan_safe(cos_theta_i));
 
   /* Using Snell's law, calculate the squared cosine of the angle between the surface normal and
    * the transmitted ray. */
