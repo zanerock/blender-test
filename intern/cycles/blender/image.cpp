@@ -126,10 +126,7 @@ static void load_float_pixels(const ImBuf *ibuf, const ImageMetaData &metadata, 
   }
 }
 
-static void load_half_pixels(const ImBuf *ibuf,
-                             const ImageMetaData &metadata,
-                             half *out_pixels,
-                             const bool associate_alpha)
+static void load_half_pixels(const ImBuf *ibuf, const ImageMetaData &metadata, half *out_pixels)
 {
   /* Half float. Blender does not have a half type, but in some cases
    * we up-sample byte to half to avoid precision loss for colorspace
@@ -143,7 +140,7 @@ static void load_half_pixels(const ImBuf *ibuf,
     /* Convert uchar to half. */
     const uchar *in_pixel = in_pixels;
     half *out_pixel = out_pixels;
-    if (associate_alpha && out_channels == in_channels) {
+    if (metadata.associate_alpha && out_channels == in_channels) {
       for (size_t i = 0; i < num_pixels; i++, in_pixel += in_channels, out_pixel += out_channels) {
         const float alpha = util_image_cast_to_float(in_pixel[3]);
         out_pixel[0] = float_to_half_image(util_image_cast_to_float(in_pixel[0]) * alpha);
@@ -173,10 +170,7 @@ static void load_half_pixels(const ImBuf *ibuf,
   }
 }
 
-static void load_byte_pixels(const ImBuf *ibuf,
-                             const ImageMetaData &metadata,
-                             uchar *out_pixels,
-                             const bool associate_alpha)
+static void load_byte_pixels(const ImBuf *ibuf, const ImageMetaData &metadata, uchar *out_pixels)
 {
   const size_t num_pixels = ((size_t)metadata.width) * metadata.height;
   const int out_channels = metadata.channels;
@@ -187,7 +181,7 @@ static void load_byte_pixels(const ImBuf *ibuf,
     /* Straight copy pixel data. */
     memcpy(out_pixels, in_pixels, num_pixels * in_channels * sizeof(unsigned char));
 
-    if (associate_alpha && out_channels == in_channels) {
+    if (metadata.associate_alpha && out_channels == in_channels) {
       /* Premultiply, byte images are always straight for Blender. */
       unsigned char *out_pixel = (unsigned char *)out_pixels;
       for (size_t i = 0; i < num_pixels; i++, out_pixel += 4) {
@@ -209,10 +203,7 @@ static void load_byte_pixels(const ImBuf *ibuf,
   }
 }
 
-bool BlenderImageLoader::load_pixels(const ImageMetaData &metadata,
-                                     void *out_pixels,
-                                     const size_t /*out_pixels_size*/,
-                                     const bool associate_alpha)
+bool BlenderImageLoader::load_pixels_full(const ImageMetaData &metadata, uint8_t *out_pixels)
 {
   void *lock;
   ImBuf *ibuf = BKE_image_acquire_ibuf(b_image, &b_iuser, &lock);
@@ -226,10 +217,10 @@ bool BlenderImageLoader::load_pixels(const ImageMetaData &metadata,
       load_float_pixels(ibuf, metadata, (float *)out_pixels);
     }
     else if (metadata.type == IMAGE_DATA_TYPE_HALF || metadata.type == IMAGE_DATA_TYPE_HALF4) {
-      load_half_pixels(ibuf, metadata, (half *)out_pixels, associate_alpha);
+      load_half_pixels(ibuf, metadata, (half *)out_pixels);
     }
     else {
-      load_byte_pixels(ibuf, metadata, (uchar *)out_pixels, associate_alpha);
+      load_byte_pixels(ibuf, metadata, (uchar *)out_pixels);
     }
   }
 
@@ -279,10 +270,8 @@ bool BlenderPointDensityLoader::load_metadata(const ImageDeviceFeatures & /*feat
   return true;
 }
 
-bool BlenderPointDensityLoader::load_pixels(const ImageMetaData & /*metadata*/,
-                                            void *pixels,
-                                            const size_t /*pixels_size*/,
-                                            const bool /*associate_alpha*/)
+bool BlenderPointDensityLoader::load_pixels_full(const ImageMetaData & /*metadata*/,
+                                                 uint8_t *pixels)
 {
   int length;
   b_node.calc_point_density(b_depsgraph, &length, (float **)&pixels);

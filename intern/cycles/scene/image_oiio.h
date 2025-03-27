@@ -15,10 +15,7 @@ class OIIOImageLoader : public ImageLoader {
 
   bool load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata) override;
 
-  bool load_pixels(const ImageMetaData &metadata,
-                   void *pixels,
-                   const size_t pixels_size,
-                   const bool associate_alpha) override;
+  bool load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels) override;
 
   string name() const override;
 

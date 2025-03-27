@@ -56,8 +56,8 @@ class ImageMetaData {
  public:
   /* Set by ImageLoader.load_metadata(). */
   int channels;
-  size_t width, height, depth;
-  size_t byte_size;
+  int64_t width, height, depth;
+  int64_t byte_size;
   ImageDataType type;
 
   /* Optional color space, defaults to raw. */
@@ -71,6 +71,7 @@ class ImageMetaData {
 
   /* Automatically set. */
   bool compress_as_srgb;
+  bool associate_alpha;
 
   ImageMetaData();
   bool operator==(const ImageMetaData &other) const;
@@ -94,11 +95,8 @@ class ImageLoader {
   /* Load metadata without actual image yet, should be fast. */
   virtual bool load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata) = 0;
 
-  /* Load actual image contents. */
-  virtual bool load_pixels(const ImageMetaData &metadata,
-                           void *pixels,
-                           const size_t pixels_size,
-                           const bool associate_alpha) = 0;
+  /* Load full image pixels. */
+  virtual bool load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels) = 0;
 
   /* Name for logs and stats. */
   virtual string name() const = 0;
@@ -143,8 +141,8 @@ class ImageHandle {
   ImageMetaData metadata();
   int svm_slot(const int slot_index = 0) const;
   vector<int4> get_svm_slots() const;
-  device_image *image_memory() const;
 
+  device_image *vdb_image_memory() const;
   VDBImageLoader *vdb_loader() const;
 
   ImageManager *get_manager() const;

@@ -59,6 +59,12 @@ template<typename T> class unique_ptr_vector {
     data.free_memory();
   }
 
+  void erase_by_swap(const size_t index)
+  {
+    swap(data[index], data[data.size() - 1]);
+    data.resize(data.size() - 1);
+  }
+
   void erase(const T *value)
   {
     const size_t size = data.size();
@@ -79,11 +85,12 @@ template<typename T> class unique_ptr_vector {
     const size_t size = data.size();
     for (size_t i = 0; i < size; i++) {
       if (data[i].get() == value) {
-        swap(data[i], data[data.size() - 1]);
-        break;
+        erase_by_swap(i);
+        return;
       }
     }
-    data.resize(data.size() - 1);
+
+    assert(0);
   }
 
   void erase_in_set(const set<T *> &values)

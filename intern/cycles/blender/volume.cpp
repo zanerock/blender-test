@@ -69,10 +69,7 @@ class BlenderSmokeLoader : public ImageLoader {
     return true;
   }
 
-  bool load_pixels(const ImageMetaData & /*metadata*/,
-                   void *pixels,
-                   const size_t /*pixels_size*/,
-                   const bool /*associate_alpha*/) override
+  bool load_pixels_full(const ImageMetaData & /*metadata*/, uint8_t *pixels) override
   {
     if (!b_domain) {
       return false;

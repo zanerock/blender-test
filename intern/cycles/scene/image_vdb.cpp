@@ -247,10 +247,7 @@ bool VDBImageLoader::load_metadata(const ImageDeviceFeatures &features, ImageMet
 #endif
 }
 
-bool VDBImageLoader::load_pixels(const ImageMetaData & /*metadata*/,
-                                 void *pixels,
-                                 const size_t /*pixels_size*/,
-                                 const bool /*associate_alpha*/)
+bool VDBImageLoader::load_pixels_full(const ImageMetaData & /*metadata*/, uint8_t *pixels)
 {
 #ifdef WITH_OPENVDB
 #  ifdef WITH_NANOVDB

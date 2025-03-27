@@ -175,7 +175,7 @@ vector<int4> ImageHandle::get_svm_slots() const
   return svm_slots;
 }
 
-device_image *ImageHandle::image_memory() const
+device_image *ImageHandle::vdb_image_memory() const
 {
   if (slots.empty()) {
     return nullptr;
@@ -232,7 +232,8 @@ ImageMetaData::ImageMetaData()
       colorspace(u_colorspace_raw),
       colorspace_file_format(""),
       use_transform_3d(false),
-      compress_as_srgb(false)
+      compress_as_srgb(false),
+      associate_alpha(false)
 {
 }
 
@@ -366,6 +367,13 @@ void ImageManager::load_image_metadata(Image *img)
   }
 
   metadata.detect_colorspace();
+
+  /* For typical RGBA images we let OIIO convert to associated alpha,
+   * but some types we want to leave the RGB channels untouched. */
+  metadata.associate_alpha = metadata.associate_alpha &&
+                             !(ColorSpaceManager::colorspace_is_data(img->params.colorspace) ||
+                               img->params.alpha_type == IMAGE_ALPHA_IGNORE ||
+                               img->params.alpha_type == IMAGE_ALPHA_CHANNEL_PACKED);
 
   assert(features.has_nanovdb || (metadata.type != IMAGE_DATA_TYPE_NANOVDB_FLOAT ||
                                   metadata.type != IMAGE_DATA_TYPE_NANOVDB_FLOAT3 ||
@@ -524,15 +532,6 @@ ImageManager::Image *ImageManager::get_image_slot(const size_t slot)
   return images[slot].get();
 }
 
-static bool image_associate_alpha(ImageManager::Image *img)
-{
-  /* For typical RGBA images we let OIIO convert to associated alpha,
-   * but some types we want to leave the RGB channels untouched. */
-  return !(ColorSpaceManager::colorspace_is_data(img->params.colorspace) ||
-           img->params.alpha_type == IMAGE_ALPHA_IGNORE ||
-           img->params.alpha_type == IMAGE_ALPHA_CHANNEL_PACKED);
-}
-
 template<TypeDesc::BASETYPE FileFormat, typename StorageType>
 bool ImageManager::file_load_image(Image *img, const int texture_limit)
 {
@@ -571,9 +570,10 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
     return false;
   }
 
-  const size_t num_pixels = ((size_t)width) * height * depth;
-  img->loader->load_pixels(
-      img->metadata, pixels, num_pixels * components, image_associate_alpha(img));
+  const int64_t num_pixels = ((int64_t)width) * height * depth;
+  if (!img->loader->load_pixels_full(img->metadata, (uint8_t *)pixels)) {
+    return false;
+  }
 
   /* The kernel can handle 1 and 4 channel images. Anything that is not a single
    * channel image is converted to RGBA format. */
@@ -587,7 +587,7 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
 
     if (components == 2) {
       /* Grayscale + alpha to RGBA. */
-      for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
+      for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = pixels[i * 2 + 1];
         pixels[i * 4 + 2] = pixels[i * 2 + 0];
         pixels[i * 4 + 1] = pixels[i * 2 + 0];
@@ -596,7 +596,7 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
     }
     else if (components == 3) {
       /* RGB to RGBA. */
-      for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
+      for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = one;
         pixels[i * 4 + 2] = pixels[i * 3 + 2];
         pixels[i * 4 + 1] = pixels[i * 3 + 1];
@@ -605,7 +605,7 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
     }
     else if (components == 1) {
       /* Grayscale to RGBA. */
-      for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
+      for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = one;
         pixels[i * 4 + 2] = pixels[i];
         pixels[i * 4 + 1] = pixels[i];
@@ -615,7 +615,7 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
 
     /* Disable alpha if requested by the user. */
     if (img->params.alpha_type == IMAGE_ALPHA_IGNORE) {
-      for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
+      for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
         pixels[i * 4 + 3] = one;
       }
     }
@@ -635,7 +635,7 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
      * finite. This way we avoid possible artifacts caused by fully changed
      * hue. */
     if (is_rgba) {
-      for (size_t i = 0; i < num_pixels; i += 4) {
+      for (int64_t i = 0; i < num_pixels; i += 4) {
         StorageType *pixel = &pixels[i * 4];
         if (!isfinite(pixel[0]) || !isfinite(pixel[1]) || !isfinite(pixel[2]) ||
             !isfinite(pixel[3]))
@@ -648,7 +648,7 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
       }
     }
     else {
-      for (size_t i = 0; i < num_pixels; ++i) {
+      for (int64_t i = 0; i < num_pixels; ++i) {
         StorageType *pixel = &pixels[i];
         if (!isfinite(pixel[0])) {
           pixel[0] = 0;
@@ -666,9 +666,9 @@ bool ImageManager::file_load_image(Image *img, const int texture_limit)
     VLOG_WORK << "Scaling image " << img->loader->name() << " by a factor of " << scale_factor
               << ".";
     vector<StorageType> scaled_pixels;
-    size_t scaled_width;
-    size_t scaled_height;
-    size_t scaled_depth;
+    int64_t scaled_width;
+    int64_t scaled_height;
+    int64_t scaled_depth;
     util_image_resize_pixels(pixels_storage,
                              width,
                              height,
@@ -831,10 +831,10 @@ void ImageManager::device_load_image(Device *device,
            type == IMAGE_DATA_TYPE_NANOVDB_FPN || type == IMAGE_DATA_TYPE_NANOVDB_FP16)
   {
     const thread_scoped_lock device_lock(device_mutex);
-    void *pixels = img->mem->alloc(img->metadata.byte_size, 0);
+    uint8_t *pixels = (uint8_t *)img->mem->alloc(img->metadata.byte_size, 0);
 
     if (pixels != nullptr) {
-      img->loader->load_pixels(img->metadata, pixels, img->metadata.byte_size, false);
+      img->loader->load_pixels_full(img->metadata, pixels);
     }
   }
 #endif

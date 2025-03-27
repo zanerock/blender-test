@@ -603,6 +603,12 @@ class device_image : public device_memory {
   ~device_image() override;
 
   void *alloc(const size_t width, const size_t height, const size_t depth = 0);
+
+  template<typename T = void> T *data()
+  {
+    return reinterpret_cast<T *>(host_pointer);
+  }
+
   void copy_to_device();
 
   uint slot = 0;

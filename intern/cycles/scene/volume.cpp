@@ -428,8 +428,8 @@ bool VolumeMeshBuilder::empty_grid() const
 #ifdef WITH_OPENVDB
 template<typename GridType>
 static openvdb::GridBase::ConstPtr openvdb_grid_from_device_image(device_image *image_memory,
-                                                                    const float volume_clipping,
-                                                                    Transform transform_3d)
+                                                                  const float volume_clipping,
+                                                                  Transform transform_3d)
 {
   using ValueType = typename GridType::ValueType;
 
@@ -689,7 +689,7 @@ void GeometryManager::create_volume_mesh(const Scene *scene, Volume *volume, Pro
 
     /* Else fall back to creating an OpenVDB grid from the dense volume data. */
     if (!grid) {
-      device_image *image_memory = handle.image_memory();
+      device_image *image_memory = handle.vdb_image_memory();
 
       if (image_memory->data_elements == 1) {
         grid = openvdb_grid_from_device_image<openvdb::FloatGrid>(

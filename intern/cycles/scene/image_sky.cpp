@@ -36,10 +36,7 @@ bool SkyLoader::load_metadata(const ImageDeviceFeatures & /*features*/, ImageMet
   return true;
 }
 
-bool SkyLoader::load_pixels(const ImageMetaData &metadata,
-                            void *pixels,
-                            const size_t /*pixels_size*/,
-                            const bool /*associate_alpha*/)
+bool SkyLoader::load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels)
 {
   /* definitions */
   int width = metadata.width;

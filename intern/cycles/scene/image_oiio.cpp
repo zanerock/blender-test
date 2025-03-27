@@ -85,64 +85,87 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
   metadata.colorspace_file_format = in->format_name();
   metadata.colorspace_file_hint = spec.get_string_attribute("oiio:ColorSpace");
 
+  metadata.associate_alpha = spec.get_int_attribute("oiio:UnassociatedAlpha", 0);
+
+  if (!metadata.associate_alpha && spec.alpha_channel != -1) {
+    /* Workaround OIIO not detecting TGA file alpha the same as Blender (since #3019).
+     * We want anything not marked as premultiplied alpha to get associated. */
+    if (strcmp(in->format_name(), "targa") == 0) {
+      metadata.associate_alpha = spec.get_int_attribute("targa:alpha_type", -1) != 4;
+    }
+    /* OIIO DDS reader never sets UnassociatedAlpha attribute. */
+    if (strcmp(in->format_name(), "dds") == 0) {
+      metadata.associate_alpha = true;
+    }
+    /* Workaround OIIO bug that sets oiio:UnassociatedAlpha on the last layer
+     * but not composite image that we read. */
+    if (strcmp(in->format_name(), "psd") == 0) {
+      metadata.associate_alpha = true;
+    }
+  }
+
   in->close();
 
   return true;
 }
 
 template<TypeDesc::BASETYPE FileFormat, typename StorageType>
-static void oiio_load_pixels(const ImageMetaData &metadata,
-                             const unique_ptr<ImageInput> &in,
-                             const bool associate_alpha,
-                             StorageType *pixels)
+static bool oiio_load_pixels_full(const ImageMetaData &metadata,
+                                  const unique_ptr<ImageInput> &in,
+                                  StorageType *pixels)
 {
-  const size_t width = metadata.width;
-  const size_t height = metadata.height;
+  const int64_t width = metadata.width;
+  const int64_t height = metadata.height;
   const int depth = metadata.depth;
-  const int components = metadata.channels;
+  const int channels = metadata.channels;
 
   /* Read pixels through OpenImageIO. */
   StorageType *readpixels = pixels;
   vector<StorageType> tmppixels;
-  if (components > 4) {
-    tmppixels.resize(width * height * components);
+  if (channels > 4) {
+    tmppixels.resize(width * height * channels);
     readpixels = &tmppixels[0];
   }
 
   if (depth <= 1) {
-    const size_t scanlinesize = width * components * sizeof(StorageType);
-    in->read_image(0,
-                   0,
-                   0,
-                   components,
-                   FileFormat,
-                   (uchar *)readpixels + (height - 1) * scanlinesize,
-                   AutoStride,
-                   -scanlinesize,
-                   AutoStride);
+    const int64_t scanlinesize = width * channels * sizeof(StorageType);
+    if (!in->read_image(0,
+                        0,
+                        0,
+                        channels,
+                        FileFormat,
+                        (uchar *)readpixels + (height - 1) * scanlinesize,
+                        AutoStride,
+                        -scanlinesize,
+                        AutoStride))
+    {
+      return false;
+    }
   }
   else {
-    in->read_image(0, 0, 0, components, FileFormat, (uchar *)readpixels);
+    if (!in->read_image(0, 0, 0, channels, FileFormat, (uchar *)readpixels)) {
+      return false;
+    }
   }
 
-  if (components > 4) {
-    const size_t dimensions = width * height;
-    for (size_t i = dimensions - 1, pixel = 0; pixel < dimensions; pixel++, i--) {
-      pixels[i * 4 + 3] = tmppixels[i * components + 3];
-      pixels[i * 4 + 2] = tmppixels[i * components + 2];
-      pixels[i * 4 + 1] = tmppixels[i * components + 1];
-      pixels[i * 4 + 0] = tmppixels[i * components + 0];
+  if (channels > 4) {
+    const int64_t dimensions = width * height;
+    for (int64_t i = dimensions - 1, pixel = 0; pixel < dimensions; pixel++, i--) {
+      pixels[i * 4 + 3] = tmppixels[i * channels + 3];
+      pixels[i * 4 + 2] = tmppixels[i * channels + 2];
+      pixels[i * 4 + 1] = tmppixels[i * channels + 1];
+      pixels[i * 4 + 0] = tmppixels[i * channels + 0];
     }
     tmppixels.clear();
   }
 
   /* CMYK to RGBA. */
-  const bool cmyk = strcmp(in->format_name(), "jpeg") == 0 && components == 4;
+  const bool cmyk = strcmp(in->format_name(), "jpeg") == 0 && channels == 4;
   if (cmyk) {
     const StorageType one = util_image_cast_from_float<StorageType>(1.0f);
 
-    const size_t num_pixels = width * height * depth;
-    for (size_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
+    const int64_t num_pixels = width * height * depth;
+    for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
       const float c = util_image_cast_to_float(pixels[i * 4 + 0]);
       const float m = util_image_cast_to_float(pixels[i * 4 + 1]);
       const float y = util_image_cast_to_float(pixels[i * 4 + 2]);
@@ -154,31 +177,23 @@ static void oiio_load_pixels(const ImageMetaData &metadata,
     }
   }
 
-  if (components == 4 && associate_alpha) {
-    const size_t dimensions = width * height;
-    for (size_t i = dimensions - 1, pixel = 0; pixel < dimensions; pixel++, i--) {
+  if (channels == 4 && metadata.associate_alpha) {
+    const int64_t dimensions = width * height;
+    for (int64_t i = dimensions - 1, pixel = 0; pixel < dimensions; pixel++, i--) {
       const StorageType alpha = pixels[i * 4 + 3];
       pixels[i * 4 + 0] = util_image_multiply_native(pixels[i * 4 + 0], alpha);
       pixels[i * 4 + 1] = util_image_multiply_native(pixels[i * 4 + 1], alpha);
       pixels[i * 4 + 2] = util_image_multiply_native(pixels[i * 4 + 2], alpha);
     }
   }
+
+  return true;
 }
 
-bool OIIOImageLoader::load_pixels(const ImageMetaData &metadata,
-                                  void *pixels,
-                                  const size_t /*pixels_size*/,
-                                  const bool associate_alpha)
+bool OIIOImageLoader::load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels)
 {
-  unique_ptr<ImageInput> in = nullptr;
-
-  /* NOTE: Error logging is done in meta data acquisition. */
-  if (!path_exists(filepath.string()) || path_is_directory(filepath.string())) {
-    return false;
-  }
-
   /* load image from file through OIIO */
-  in = unique_ptr<ImageInput>(ImageInput::create(filepath.string()));
+  unique_ptr<ImageInput> in = unique_ptr<ImageInput>(ImageInput::create(filepath.string()));
   if (!in) {
     return false;
   }
@@ -195,46 +210,19 @@ bool OIIOImageLoader::load_pixels(const ImageMetaData &metadata,
     return false;
   }
 
-  bool do_associate_alpha = false;
-  if (associate_alpha) {
-    do_associate_alpha = spec.get_int_attribute("oiio:UnassociatedAlpha", 0);
-
-    if (!do_associate_alpha && spec.alpha_channel != -1) {
-      /* Workaround OIIO not detecting TGA file alpha the same as Blender (since #3019).
-       * We want anything not marked as premultiplied alpha to get associated. */
-      if (strcmp(in->format_name(), "targa") == 0) {
-        do_associate_alpha = spec.get_int_attribute("targa:alpha_type", -1) != 4;
-      }
-      /* OIIO DDS reader never sets UnassociatedAlpha attribute. */
-      if (strcmp(in->format_name(), "dds") == 0) {
-        do_associate_alpha = true;
-      }
-      /* Workaround OIIO bug that sets oiio:UnassociatedAlpha on the last layer
-       * but not composite image that we read. */
-      if (strcmp(in->format_name(), "psd") == 0) {
-        do_associate_alpha = true;
-      }
-    }
-  }
-
   switch (metadata.type) {
     case IMAGE_DATA_TYPE_BYTE:
     case IMAGE_DATA_TYPE_BYTE4:
-      oiio_load_pixels<TypeDesc::UINT8, uchar>(metadata, in, do_associate_alpha, (uchar *)pixels);
-      break;
+      return oiio_load_pixels_full<TypeDesc::UINT8, uchar>(metadata, in, (uchar *)pixels);
     case IMAGE_DATA_TYPE_USHORT:
     case IMAGE_DATA_TYPE_USHORT4:
-      oiio_load_pixels<TypeDesc::USHORT, uint16_t>(
-          metadata, in, do_associate_alpha, (uint16_t *)pixels);
-      break;
+      return oiio_load_pixels_full<TypeDesc::USHORT, uint16_t>(metadata, in, (uint16_t *)pixels);
     case IMAGE_DATA_TYPE_HALF:
     case IMAGE_DATA_TYPE_HALF4:
-      oiio_load_pixels<TypeDesc::HALF, half>(metadata, in, do_associate_alpha, (half *)pixels);
-      break;
+      return oiio_load_pixels_full<TypeDesc::HALF, half>(metadata, in, (half *)pixels);
     case IMAGE_DATA_TYPE_FLOAT:
     case IMAGE_DATA_TYPE_FLOAT4:
-      oiio_load_pixels<TypeDesc::FLOAT, float>(metadata, in, do_associate_alpha, (float *)pixels);
-      break;
+      return oiio_load_pixels_full<TypeDesc::FLOAT, float>(metadata, in, (float *)pixels);
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
     case IMAGE_DATA_TYPE_NANOVDB_FPN:
@@ -243,8 +231,7 @@ bool OIIOImageLoader::load_pixels(const ImageMetaData &metadata,
       break;
   }
 
-  in->close();
-  return true;
+  return false;
 }
 
 string OIIOImageLoader::name() const
