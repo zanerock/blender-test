@@ -389,19 +389,9 @@ BLI_INLINE bool bchunk_data_compare_unchecked(const BChunk *chunk,
                                               const size_t data_base_len,
                                               const size_t offset)
 {
-  BLI_assert(offset + chunk->data_len <= data_base_len);
+  BLI_assert(offset + size_t(chunk->data_len) <= data_base_len);
   UNUSED_VARS_NDEBUG(data_base_len);
-  data_base += offset;
-  const size_t data_len = chunk->data_len;
-
-  if ((data_base[0] != chunk->data[0]) ||                       /* Head. */
-      (data_base[data_len / 2] != chunk->data[data_len / 2]) || /* Middle. */
-      (data_base[data_len - 1] != chunk->data[data_len - 1]))   /* Tail. */
-  {
-    return false;
-  }
-
-  return (memcmp(data_base, chunk->data, data_len) == 0);
+  return (memcmp(&data_base[offset], chunk->data, chunk->data_len) == 0);
 }
 
 static bool bchunk_data_compare(const BChunk *chunk,
@@ -409,7 +399,7 @@ static bool bchunk_data_compare(const BChunk *chunk,
                                 const size_t data_base_len,
                                 const size_t offset)
 {
-  if (offset + chunk->data_len <= data_base_len) {
+  if (offset + size_t(chunk->data_len) <= data_base_len) {
     return bchunk_data_compare_unchecked(chunk, data_base, data_base_len, offset);
   }
   return false;
@@ -804,52 +794,13 @@ static void bchunk_list_fill_from_array(const BArrayInfo *info,
 
 #define HASH_INIT (5381)
 
-BLI_INLINE hash_key hash_data_1(const uchar p)
+BLI_INLINE hash_key hash_data_single(const uchar p)
 {
-  return ((HASH_INIT << 5) + HASH_INIT) + hash_key(*((signed char *)&p));
-}
-
-BLI_INLINE hash_key hash_data_2(const uchar *key)
-{
-  hash_key h = HASH_INIT;
-
-  h = (hash_key)((h << 5) + h) + (hash_key)key[0];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[1];
-
-  return h;
-}
-
-BLI_INLINE hash_key hash_data_4(const uchar *key)
-{
-  hash_key h = HASH_INIT;
-
-  h = (hash_key)((h << 5) + h) + (hash_key)key[0];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[1];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[2];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[3];
-
-  return h;
-}
-
-BLI_INLINE hash_key hash_data_8(const uchar *key)
-{
-  hash_key h = HASH_INIT;
-
-  h = (hash_key)((h << 5) + h) + (hash_key)key[0];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[1];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[2];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[3];
-
-  h = (hash_key)((h << 5) + h) + (hash_key)key[4];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[5];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[6];
-  h = (hash_key)((h << 5) + h) + (hash_key)key[7];
-
-  return h;
+  return ((HASH_INIT << 5) + HASH_INIT) + (hash_key) * ((signed char *)&p);
 }
 
 /* Hash bytes, from #BLI_ghashutil_strhash_n. */
-static hash_key hash_data_n(const uchar *key, size_t n)
+static hash_key hash_data(const uchar *key, size_t n)
 {
   const signed char *p;
   hash_key h = HASH_INIT;
@@ -869,36 +820,15 @@ static void hash_array_from_data(const BArrayInfo *info,
                                  const size_t data_slice_len,
                                  hash_key *hash_array)
 {
-  switch (info->chunk_stride) {
-    case 1: {
-      for (size_t i = 0; i < data_slice_len; i++) {
-        hash_array[i] = hash_data_1(data_slice[i]);
-      }
-      break;
+  if (info->chunk_stride != 1) {
+    for (size_t i = 0, i_step = 0; i_step < data_slice_len; i++, i_step += info->chunk_stride) {
+      hash_array[i] = hash_data(&data_slice[i_step], info->chunk_stride);
     }
-    case 2: {
-      for (size_t i = 0, i_step = 0; i < data_slice_len; i++, i_step += 2) {
-        hash_array[i] = hash_data_2(&data_slice[i_step]);
-      }
-      break;
-    }
-    case 4: {
-      for (size_t i = 0, i_step = 0; i < data_slice_len; i++, i_step += 4) {
-        hash_array[i] = hash_data_4(&data_slice[i_step]);
-      }
-      break;
-    }
-    case 8: {
-      for (size_t i = 0, i_step = 0; i < data_slice_len; i++, i_step += 8) {
-        hash_array[i] = hash_data_8(&data_slice[i_step]);
-      }
-      break;
-    }
-    default: {
-      for (size_t i = 0, i_step = 0; i_step < data_slice_len; i++, i_step += info->chunk_stride) {
-        hash_array[i] = hash_data_n(&data_slice[i_step], info->chunk_stride);
-      }
-      break;
+  }
+  else {
+    /* Fast-path for bytes. */
+    for (size_t i = 0; i < data_slice_len; i++) {
+      hash_array[i] = hash_data_single(data_slice[i]);
     }
   }
 }
@@ -1682,7 +1612,7 @@ size_t BLI_array_store_calc_size_compacted_get(const BArrayStore *bs)
   BLI_mempool_iternew(bs->memory.chunk, &iter);
   while ((chunk = static_cast<BChunk *>(BLI_mempool_iterstep(&iter)))) {
     BLI_assert(chunk->users > 0);
-    size_total += chunk->data_len;
+    size_total += size_t(chunk->data_len);
   }
   return size_total;
 }
