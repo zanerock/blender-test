@@ -163,10 +163,15 @@ struct BChunkList;
  * because the resulting values are not unique enough to result in evenly distributed values.
  * Use more accumulation when the size of the structs is small, see: #105046.
  *
- * With 6 -> 22, one byte each - means an array of booleans can be combined into 22 bits
- * representing 4,194,303 different combinations.
+ * With 13 -> 92, one byte each - means an array of booleans can be combined into 92 bits
+ * representing many different combinations.
+ *
+ * \note The reason this is so much higher than other values is it's prone to collisions with
+ * larger blocks with hidden or selection state, where the first 10-20 values may be
+ * enabled/disabled. This may also be the case for the first 90+ but it's less likely.
+ *
  */
-#  define BCHUNK_HASH_TABLE_ACCUMULATE_STEPS_8BITS 6
+#  define BCHUNK_HASH_TABLE_ACCUMULATE_STEPS_8BITS 13
 #else
 /**
  * How many items to hash (multiplied by stride).
