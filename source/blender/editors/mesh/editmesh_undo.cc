@@ -135,8 +135,7 @@ struct UndoMesh {
 #ifdef USE_ARRAY_STORE
   /* Null arrays are considered empty. */
   struct { /* most data is stored as 'custom' data */
-    BArrayCustomData *vdata[CD_NUMTYPES], *edata[CD_NUMTYPES], *ldata[CD_NUMTYPES],
-        *pdata[CD_NUMTYPES];
+    BArrayCustomData *vdata, *edata, *ldata, *pdata;
     BArrayState *face_offset_indices;
     BArrayState **keyblocks;
     BArrayState *mselect;
@@ -158,12 +157,12 @@ struct UndoMesh {
  */
 enum {
   ARRAY_STORE_INDEX_VERT = 0,
-  ARRAY_STORE_INDEX_EDGE = CD_NUMTYPES * 1,
-  ARRAY_STORE_INDEX_LOOP = CD_NUMTYPES * 2,
-  ARRAY_STORE_INDEX_POLY = CD_NUMTYPES * 3,
-  ARRAY_STORE_INDEX_POLY_OFFSETS = (CD_NUMTYPES * 4) + 1,
-  ARRAY_STORE_INDEX_SHAPE = (CD_NUMTYPES * 4) + 2,
-  ARRAY_STORE_INDEX_MSEL = (CD_NUMTYPES * 4) + 3,
+  ARRAY_STORE_INDEX_EDGE,
+  ARRAY_STORE_INDEX_LOOP,
+  ARRAY_STORE_INDEX_POLY,
+  ARRAY_STORE_INDEX_POLY_OFFSETS,
+  ARRAY_STORE_INDEX_SHAPE,
+  ARRAY_STORE_INDEX_MSEL,
 };
 #  define ARRAY_STORE_INDEX_NUM (ARRAY_STORE_INDEX_MSEL + 1)
 
@@ -184,7 +183,6 @@ static struct {
 } um_arraystore = {{{nullptr}}};
 
 static void um_arraystore_cd_compact(CustomData *cdata,
-                                     const eCustomDataType type_only_use_this_type,
                                      const size_t data_len,
                                      const bool create,
                                      const int bs_index,
@@ -203,22 +201,6 @@ static void um_arraystore_cd_compact(CustomData *cdata,
   for (int layer_start = 0, layer_end; layer_start < cdata->totlayer; layer_start = layer_end) {
     const eCustomDataType type = eCustomDataType(cdata->layers[layer_start].type);
 
-    layer_end = layer_start + 1;
-    while ((layer_end < cdata->totlayer) && (type == cdata->layers[layer_end].type)) {
-      layer_end++;
-    }
-
-    if (type != type_only_use_this_type) {
-      continue;
-    }
-
-    const int stride = CustomData_sizeof(type);
-    BArrayStore *bs = create ? BLI_array_store_at_size_ensure(&um_arraystore.bs_stride[bs_index],
-                                                              stride,
-                                                              array_chunk_size_calc(stride)) :
-                               nullptr;
-    const int layer_len = layer_end - layer_start;
-
     /* Perform a full copy on dynamic layers.
      *
      * Unfortunately we can't compare dynamic layer types as they contain allocated pointers,
@@ -233,6 +215,18 @@ static void um_arraystore_cd_compact(CustomData *cdata,
      * sharing, to avoid the copy from the undo mesh.
      */
     const bool layer_type_is_dynamic = CustomData_layertype_is_dynamic(type);
+
+    layer_end = layer_start + 1;
+    while ((layer_end < cdata->totlayer) && (type == cdata->layers[layer_end].type)) {
+      layer_end++;
+    }
+
+    const int stride = CustomData_sizeof(type);
+    BArrayStore *bs = create ? BLI_array_store_at_size_ensure(&um_arraystore.bs_stride[bs_index],
+                                                              stride,
+                                                              array_chunk_size_calc(stride)) :
+                               nullptr;
+    const int layer_len = layer_end - layer_start;
 
     if (create) {
       if (bcd_reference_current && (bcd_reference_current->type == type)) {
@@ -334,25 +328,9 @@ static void um_arraystore_cd_expand(const BArrayCustomData *bcd,
                                     CustomData *cdata,
                                     const size_t data_len)
 {
-  if (bcd == nullptr) {
-    return;
-  }
-
   using namespace blender;
   CustomDataLayer *layer = cdata->layers;
-  CustomDataLayer *layer_end = &layer[cdata->totlayer];
-
-  while (layer != layer_end) {
-    if (layer->type == bcd->type) {
-      break;
-    }
-    layer++;
-  }
-
   while (bcd) {
-    if (layer->type != bcd->type) {
-      break;
-    }
     const int stride = CustomData_sizeof(bcd->type);
     for (int i = 0; i < bcd->states.size(); i++) {
       BLI_assert(bcd->type == layer->type);
@@ -413,10 +391,6 @@ static void um_arraystore_compact_ex(UndoMesh *um, const UndoMesh *um_ref, bool 
 {
   Mesh *mesh = um->mesh;
 
-  SCOPED_TIMER_AVERAGED(__func__);
-
-  blender::Vector<std::thread> thread_all;
-
   /* Compacting can be time consuming, run in parallel.
    *
    * NOTE(@ideasman42): this could be further parallelized with every custom-data layer
@@ -424,145 +398,109 @@ static void um_arraystore_compact_ex(UndoMesh *um, const UndoMesh *um_ref, bool 
    * At the moment it seems fast enough to split by domain.
    * Since this is itself a background thread, using too many threads here could
    * interfere with foreground tasks. */
-
-  for (int i = 0; i < CD_NUMTYPES; i++) {
-    eCustomDataType type = eCustomDataType(i);
-    if (!CustomData_has_layer(&mesh->vert_data, type)) {
-      continue;
-    }
-    thread_all.append(std::thread([&, i]() {
-      um_arraystore_cd_compact(&mesh->vert_data,
-                               eCustomDataType(i),
-                               mesh->verts_num,
-                               create,
-                               ARRAY_STORE_INDEX_VERT + i,
-                               um_ref ? um_ref->store.vdata[i] : nullptr,
-                               &um->store.vdata[i]);
-    }));
-  }
-
-  for (int i = 0; i < CD_NUMTYPES; i++) {
-    eCustomDataType type = eCustomDataType(i);
-    if (!CustomData_has_layer(&mesh->edge_data, type)) {
-      continue;
-    }
-    thread_all.append(std::thread([&, i]() {
-      um_arraystore_cd_compact(&mesh->edge_data,
-                               eCustomDataType(i),
-                               mesh->edges_num,
-                               create,
-                               ARRAY_STORE_INDEX_EDGE + i,
-                               um_ref ? um_ref->store.edata[i] : nullptr,
-                               &um->store.edata[i]);
-    }));
-  }
-
-  for (int i = 0; i < CD_NUMTYPES; i++) {
-    eCustomDataType type = eCustomDataType(i);
-    if (!CustomData_has_layer(&mesh->corner_data, type)) {
-      continue;
-    }
-
-    thread_all.append(std::thread([&, i]() {
-      um_arraystore_cd_compact(&mesh->corner_data,
-                               eCustomDataType(i),
-                               mesh->corners_num,
-                               create,
-                               ARRAY_STORE_INDEX_LOOP + i,
-                               um_ref ? um_ref->store.ldata[i] : nullptr,
-                               &um->store.ldata[i]);
-    }));
-  }
-
-  for (int i = 0; i < CD_NUMTYPES; i++) {
-    eCustomDataType type = eCustomDataType(i);
-    if (!CustomData_has_layer(&mesh->face_data, type)) {
-      continue;
-    }
-
-    thread_all.append(std::thread([&, i]() {
-      um_arraystore_cd_compact(&mesh->face_data,
-                               eCustomDataType(i),
-                               mesh->faces_num,
-                               create,
-                               ARRAY_STORE_INDEX_POLY + i,
-                               um_ref ? um_ref->store.pdata[i] : nullptr,
-                               &um->store.pdata[i]);
-    }));
-  }
-
-  if (mesh->face_offset_indices) {
-    thread_all.append(std::thread([&]() {
-      BLI_assert(create == (um->store.face_offset_indices == nullptr));
-      if (create) {
-        BArrayState *state_reference = um_ref ? um_ref->store.face_offset_indices : nullptr;
-        const size_t stride = sizeof(*mesh->face_offset_indices);
-        BArrayStore *bs = BLI_array_store_at_size_ensure(
-            &um_arraystore.bs_stride[ARRAY_STORE_INDEX_POLY_OFFSETS],
-            stride,
-            array_chunk_size_calc(stride));
-        um->store.face_offset_indices = BLI_array_store_state_add(
-            bs, mesh->face_offset_indices, size_t(mesh->faces_num + 1) * stride, state_reference);
-      }
-      blender::implicit_sharing::free_shared_data(&mesh->face_offset_indices,
-                                                  &mesh->runtime->face_offsets_sharing_info);
-    }));
-  }
-
-  if (mesh->key && mesh->key->totkey) {
-    thread_all.append(std::thread([&]() {
-      const size_t stride = mesh->key->elemsize;
-      BArrayStore *bs = create ? BLI_array_store_at_size_ensure(
-                                     &um_arraystore.bs_stride[ARRAY_STORE_INDEX_SHAPE],
-                                     stride,
-                                     array_chunk_size_calc(stride)) :
-                                 nullptr;
-      if (create) {
-        um->store.keyblocks = static_cast<BArrayState **>(
-            MEM_mallocN(mesh->key->totkey * sizeof(*um->store.keyblocks), __func__));
-      }
-      KeyBlock *keyblock = static_cast<KeyBlock *>(mesh->key->block.first);
-      for (int i = 0; i < mesh->key->totkey; i++, keyblock = keyblock->next) {
-        if (create) {
-          BArrayState *state_reference = (um_ref && um_ref->mesh->key &&
-                                          (i < um_ref->mesh->key->totkey)) ?
-                                             um_ref->store.keyblocks[i] :
-                                             nullptr;
-          um->store.keyblocks[i] = BLI_array_store_state_add(
-              bs, keyblock->data, size_t(keyblock->totelem) * stride, state_reference);
+  blender::threading::parallel_invoke(
+      4096 < (mesh->verts_num + mesh->edges_num + mesh->corners_num + mesh->faces_num),
+      [&]() {
+        um_arraystore_cd_compact(&mesh->vert_data,
+                                 mesh->verts_num,
+                                 create,
+                                 ARRAY_STORE_INDEX_VERT,
+                                 um_ref ? um_ref->store.vdata : nullptr,
+                                 &um->store.vdata);
+      },
+      [&]() {
+        um_arraystore_cd_compact(&mesh->edge_data,
+                                 mesh->edges_num,
+                                 create,
+                                 ARRAY_STORE_INDEX_EDGE,
+                                 um_ref ? um_ref->store.edata : nullptr,
+                                 &um->store.edata);
+      },
+      [&]() {
+        um_arraystore_cd_compact(&mesh->corner_data,
+                                 mesh->corners_num,
+                                 create,
+                                 ARRAY_STORE_INDEX_LOOP,
+                                 um_ref ? um_ref->store.ldata : nullptr,
+                                 &um->store.ldata);
+      },
+      [&]() {
+        um_arraystore_cd_compact(&mesh->face_data,
+                                 mesh->faces_num,
+                                 create,
+                                 ARRAY_STORE_INDEX_POLY,
+                                 um_ref ? um_ref->store.pdata : nullptr,
+                                 &um->store.pdata);
+      },
+      [&]() {
+        if (mesh->face_offset_indices) {
+          BLI_assert(create == (um->store.face_offset_indices == nullptr));
+          if (create) {
+            BArrayState *state_reference = um_ref ? um_ref->store.face_offset_indices : nullptr;
+            const size_t stride = sizeof(*mesh->face_offset_indices);
+            BArrayStore *bs = BLI_array_store_at_size_ensure(
+                &um_arraystore.bs_stride[ARRAY_STORE_INDEX_POLY_OFFSETS],
+                stride,
+                array_chunk_size_calc(stride));
+            um->store.face_offset_indices = BLI_array_store_state_add(bs,
+                                                                      mesh->face_offset_indices,
+                                                                      size_t(mesh->faces_num + 1) *
+                                                                          stride,
+                                                                      state_reference);
+          }
+          blender::implicit_sharing::free_shared_data(&mesh->face_offset_indices,
+                                                      &mesh->runtime->face_offsets_sharing_info);
         }
+      },
+      [&]() {
+        if (mesh->key && mesh->key->totkey) {
+          const size_t stride = mesh->key->elemsize;
+          BArrayStore *bs = create ? BLI_array_store_at_size_ensure(
+                                         &um_arraystore.bs_stride[ARRAY_STORE_INDEX_SHAPE],
+                                         stride,
+                                         array_chunk_size_calc(stride)) :
+                                     nullptr;
+          if (create) {
+            um->store.keyblocks = static_cast<BArrayState **>(
+                MEM_mallocN(mesh->key->totkey * sizeof(*um->store.keyblocks), __func__));
+          }
+          KeyBlock *keyblock = static_cast<KeyBlock *>(mesh->key->block.first);
+          for (int i = 0; i < mesh->key->totkey; i++, keyblock = keyblock->next) {
+            if (create) {
+              BArrayState *state_reference = (um_ref && um_ref->mesh->key &&
+                                              (i < um_ref->mesh->key->totkey)) ?
+                                                 um_ref->store.keyblocks[i] :
+                                                 nullptr;
+              um->store.keyblocks[i] = BLI_array_store_state_add(
+                  bs, keyblock->data, size_t(keyblock->totelem) * stride, state_reference);
+            }
 
-        if (keyblock->data) {
-          MEM_freeN(keyblock->data);
-          keyblock->data = nullptr;
+            if (keyblock->data) {
+              MEM_freeN(keyblock->data);
+              keyblock->data = nullptr;
+            }
+          }
         }
-      }
-    }));
-  }
+      },
+      [&]() {
+        if (mesh->mselect && mesh->totselect) {
+          BLI_assert(create == (um->store.mselect == nullptr));
+          if (create) {
+            BArrayState *state_reference = um_ref ? um_ref->store.mselect : nullptr;
+            const size_t stride = sizeof(*mesh->mselect);
+            BArrayStore *bs = BLI_array_store_at_size_ensure(
+                &um_arraystore.bs_stride[ARRAY_STORE_INDEX_MSEL],
+                stride,
+                array_chunk_size_calc(stride));
+            um->store.mselect = BLI_array_store_state_add(
+                bs, mesh->mselect, size_t(mesh->totselect) * stride, state_reference);
+          }
 
-  if (mesh->mselect && mesh->totselect) {
-    thread_all.append(std::thread([&]() {
-      BLI_assert(create == (um->store.mselect == nullptr));
-      if (create) {
-        BArrayState *state_reference = um_ref ? um_ref->store.mselect : nullptr;
-        const size_t stride = sizeof(*mesh->mselect);
-        BArrayStore *bs = BLI_array_store_at_size_ensure(
-            &um_arraystore.bs_stride[ARRAY_STORE_INDEX_MSEL],
-            stride,
-            array_chunk_size_calc(stride));
-        um->store.mselect = BLI_array_store_state_add(
-            bs, mesh->mselect, size_t(mesh->totselect) * stride, state_reference);
-      }
-
-      /* keep mesh->totselect for validation */
-      MEM_freeN(mesh->mselect);
-      mesh->mselect = nullptr;
-    }));
-  }
-
-  for (std::thread &t : thread_all) {
-    t.join();
-  }
+          /* keep mesh->totselect for validation */
+          MEM_freeN(mesh->mselect);
+          mesh->mselect = nullptr;
+        }
+      });
 
   if (create) {
     um_arraystore.users += 1;
@@ -656,12 +594,10 @@ static void um_arraystore_expand(UndoMesh *um)
 {
   Mesh *mesh = um->mesh;
 
-  for (int i = 0; i < CD_NUMTYPES; i++) {
-    um_arraystore_cd_expand(um->store.vdata[i], &mesh->vert_data, mesh->verts_num);
-    um_arraystore_cd_expand(um->store.edata[i], &mesh->edge_data, mesh->edges_num);
-    um_arraystore_cd_expand(um->store.ldata[i], &mesh->corner_data, mesh->corners_num);
-    um_arraystore_cd_expand(um->store.pdata[i], &mesh->face_data, mesh->faces_num);
-  }
+  um_arraystore_cd_expand(um->store.vdata, &mesh->vert_data, mesh->verts_num);
+  um_arraystore_cd_expand(um->store.edata, &mesh->edge_data, mesh->edges_num);
+  um_arraystore_cd_expand(um->store.ldata, &mesh->corner_data, mesh->corners_num);
+  um_arraystore_cd_expand(um->store.pdata, &mesh->face_data, mesh->faces_num);
 
   if (um->store.keyblocks) {
     const size_t stride = mesh->key->elemsize;
@@ -701,12 +637,10 @@ static void um_arraystore_free(UndoMesh *um)
 {
   Mesh *mesh = um->mesh;
 
-  for (int i = 0; i < CD_NUMTYPES; i++) {
-    um_arraystore_cd_free(um->store.vdata[i], ARRAY_STORE_INDEX_VERT + i);
-    um_arraystore_cd_free(um->store.edata[i], ARRAY_STORE_INDEX_EDGE + i);
-    um_arraystore_cd_free(um->store.ldata[i], ARRAY_STORE_INDEX_LOOP + i);
-    um_arraystore_cd_free(um->store.pdata[i], ARRAY_STORE_INDEX_POLY + i);
-  }
+  um_arraystore_cd_free(um->store.vdata, ARRAY_STORE_INDEX_VERT);
+  um_arraystore_cd_free(um->store.edata, ARRAY_STORE_INDEX_EDGE);
+  um_arraystore_cd_free(um->store.ldata, ARRAY_STORE_INDEX_LOOP);
+  um_arraystore_cd_free(um->store.pdata, ARRAY_STORE_INDEX_POLY);
 
   if (um->store.keyblocks) {
     const size_t stride = mesh->key->elemsize;
@@ -866,6 +800,8 @@ static void *undomesh_from_editmesh(UndoMesh *um,
 
 #ifdef USE_ARRAY_STORE
   {
+    SCOPED_TIMER_AVERAGED(__func__);
+
     /* Add ourselves. */
     BLI_addtail(&um_arraystore.local_links, um);
 
