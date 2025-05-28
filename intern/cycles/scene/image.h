@@ -114,6 +114,7 @@ class ImageLoader {
                                 const int64_t /*x_stride*/,
                                 const int64_t /*y_stride*/,
                                 const int64_t /*padding*/,
+                                const ExtensionType /*extension*/,
                                 uint8_t * /*pixels*/)
   {
     return false;

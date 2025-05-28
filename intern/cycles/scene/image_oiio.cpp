@@ -427,42 +427,103 @@ static bool oiio_load_pixels_tile_adjacent(const unique_ptr<ImageInput> &in,
                                            const int x_adjacent,
                                            const int y_adjacent,
                                            const int64_t padding,
+                                           const ExtensionType extension,
                                            uint8_t *pixels)
 {
   const int64_t tile_size = metadata.tile_size;
-  vector<uint8_t> tile_pixels(tile_size * tile_size * x_stride, 0);
 
   const int64_t width = divide_up(metadata.width, 1 << miplevel);
   const int64_t height = divide_up(metadata.height, 1 << miplevel);
-  const int64_t x_new = x + x_adjacent * tile_size;
-  const int64_t y_new = y + y_adjacent * tile_size;
+  int64_t x_new = x + x_adjacent * tile_size;
+  int64_t y_new = y + y_adjacent * tile_size;
 
-  // TODO: fill according to repeat mode when out of bounds
-  if (x_new >= 0 && x_new < width && y_new >= 0 && y_new < height) {
-    if (!oiio_load_pixels_tile(in,
-                               metadata,
-                               miplevel,
-                               x_new,
-                               y_new,
-                               tile_size,
-                               tile_size,
-                               x_stride,
-                               tile_size * x_stride,
-                               tile_pixels.data()))
-    {
-      return false;
-    }
-  }
-
-  // TODO: verify this works for very small and non-pow2 images
-
-  const int64_t tile_x = (x_adjacent < 0) ? std::min(width, tile_size) - padding : 0;
-  const int64_t tile_y = (y_adjacent < 0) ? std::min(height, tile_size) - padding : 0;
+  const bool in_range = x_new >= 0 && x_new < width && y_new >= 0 && y_new < height;
 
   const int64_t pad_x = (x_adjacent < 0) ? 0 : (x_adjacent == 0) ? padding : padding + w;
   const int64_t pad_y = (y_adjacent < 0) ? 0 : (y_adjacent == 0) ? padding : padding + h;
   const int64_t pad_w = (x_adjacent == 0) ? w : padding;
   const int64_t pad_h = (y_adjacent == 0) ? h : padding;
+
+  if (!in_range) {
+    /* Adjacent tile does not exist, fill in padding depending on extension mode. */
+    if (extension == EXTENSION_EXTEND) {
+      /* Duplicate pixels from border of tile. */
+      for (int64_t j = 0; j < pad_h; j++) {
+        for (int64_t i = 0; i < pad_w; i++) {
+          const int64_t source_x = (x_adjacent < 0) ? 0 : (x_adjacent == 0) ? i : w - 1;
+          const int64_t source_y = (y_adjacent < 0) ? 0 : (y_adjacent == 0) ? j : h - 1;
+
+          std::copy_n(pixels + (padding + source_x) * x_stride + (padding + source_y) * y_stride,
+                      x_stride,
+                      pixels + (pad_x + i) * x_stride + (pad_y + j) * y_stride);
+        }
+      }
+      return true;
+    }
+    if (extension == EXTENSION_MIRROR) {
+      /* Mirror pixels from border of tile. */
+      for (int64_t j = 0; j < pad_h; j++) {
+        for (int64_t i = 0; i < pad_w; i++) {
+          const int64_t source_x = (x_adjacent < 0)  ? padding - 1 - i :
+                                   (x_adjacent == 0) ? i :
+                                                       w - 1 - i;
+          const int64_t source_y = (y_adjacent < 0)  ? padding - 1 - j :
+                                   (y_adjacent == 0) ? j :
+                                                       h - 1 - j;
+
+          std::copy_n(pixels + (padding + source_x) * x_stride + (padding + source_y) * y_stride,
+                      x_stride,
+                      pixels + (pad_x + i) * x_stride + (pad_y + j) * y_stride);
+        }
+      }
+      return true;
+    }
+    if (extension == EXTENSION_CLIP) {
+      /* Fill with zeros. */
+      for (int64_t j = 0; j < pad_h; j++) {
+        std::fill_n(pixels + pad_x * x_stride + (pad_y + j) * y_stride, x_stride * pad_w, 0);
+      }
+      return true;
+    }
+    if (extension == EXTENSION_REPEAT) {
+      /* Wrap around for repeat mode. */
+      // TODO: fails if not multiple of tile size
+      if (x_new < 0) {
+        x_new = (divide_up(width, tile_size) - 1) * tile_size;
+      }
+      else if (x_new >= width) {
+        x_new = 0;
+      }
+
+      if (y_new < 0) {
+        y_new = (divide_up(height, tile_size) - 1) * tile_size;
+      }
+      else if (y_new >= height) {
+        y_new = 0;
+      }
+    }
+  }
+
+  /* Load adjacent tiles. */
+  vector<uint8_t> tile_pixels(tile_size * tile_size * x_stride, 0);
+  if (!oiio_load_pixels_tile(in,
+                             metadata,
+                             miplevel,
+                             x_new,
+                             y_new,
+                             tile_size,
+                             tile_size,
+                             x_stride,
+                             tile_size * x_stride,
+                             tile_pixels.data()))
+  {
+    return false;
+  }
+
+  /* Copy pixels from adjacent tiles. */
+  // TODO: verify this works for very small and non-pow2 images
+  const int64_t tile_x = (x_adjacent < 0) ? std::min(width, tile_size) - padding : 0;
+  const int64_t tile_y = (y_adjacent < 0) ? std::min(height, tile_size) - padding : 0;
 
   for (int64_t j = 0; j < pad_h; j++) {
     std::copy_n(tile_pixels.data() + tile_x * x_stride + (tile_y + j) * (tile_size * x_stride),
@@ -482,13 +543,10 @@ bool OIIOImageLoader::load_pixels_tile(const ImageMetaData &metadata,
                                        const int64_t x_stride,
                                        const int64_t y_stride,
                                        const int64_t padding,
+                                       const ExtensionType extension,
                                        uint8_t *pixels)
 {
   assert(metadata.tile_size != 0);
-
-  // TODO: handle colorspace and channel reordering.
-  // TODO: cache ImageInput.
-  // TODO: take into account wrapping.
 
   if (!filehandle) {
     filehandle = unique_ptr<ImageInput>(ImageInput::create(filepath.string()));
@@ -523,8 +581,20 @@ bool OIIOImageLoader::load_pixels_tile(const ImageMetaData &metadata,
         if (i == 0 && j == 0) {
           continue;
         }
-        ok &= oiio_load_pixels_tile_adjacent(
-            filehandle, metadata, miplevel, x, y, w, h, x_stride, y_stride, i, j, padding, pixels);
+        ok &= oiio_load_pixels_tile_adjacent(filehandle,
+                                             metadata,
+                                             miplevel,
+                                             x,
+                                             y,
+                                             w,
+                                             h,
+                                             x_stride,
+                                             y_stride,
+                                             i,
+                                             j,
+                                             padding,
+                                             extension,
+                                             pixels);
       }
     }
   }

@@ -885,6 +885,7 @@ void ImageManager::device_update_image_requested(Device *device, Scene *scene, I
                                                       x_stride,
                                                       y_stride,
                                                       KERNEL_IMAGE_TEX_PADDING,
+                                                      img->params.extension,
                                                       pixels);
 
         conform_pixels_to_metadata(img, pixels, w * h);
