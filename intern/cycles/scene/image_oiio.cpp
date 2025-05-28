@@ -158,8 +158,6 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
 
   if (spec.tile_width) {
     // TODO: only do for particular file formats?
-    // TODO: check CMYK and channels > 4 cases
-    // TODO: handle associate alpha on load
     if (metadata.associate_alpha) {
       VLOG_DEBUG << "Image " << name() << "has tiles, but expected associated alpha";
     }
@@ -196,6 +194,39 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
   return true;
 }
 
+template<typename StorageType>
+static void oiio_conform_alpha_cmyk(const ImageMetaData &metadata,
+                                    const unique_ptr<ImageInput> &in,
+                                    StorageType *pixels,
+                                    const size_t num_pixels)
+{
+  /* CMYK to RGBA. */
+  const bool cmyk = strcmp(in->format_name(), "jpeg") == 0 && metadata.channels == 4;
+  if (cmyk) {
+    const StorageType one = util_image_cast_from_float<StorageType>(1.0f);
+
+    for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
+      const float c = util_image_cast_to_float(pixels[i * 4 + 0]);
+      const float m = util_image_cast_to_float(pixels[i * 4 + 1]);
+      const float y = util_image_cast_to_float(pixels[i * 4 + 2]);
+      const float k = util_image_cast_to_float(pixels[i * 4 + 3]);
+      pixels[i * 4 + 0] = util_image_cast_from_float<StorageType>((1.0f - c) * (1.0f - k));
+      pixels[i * 4 + 1] = util_image_cast_from_float<StorageType>((1.0f - m) * (1.0f - k));
+      pixels[i * 4 + 2] = util_image_cast_from_float<StorageType>((1.0f - y) * (1.0f - k));
+      pixels[i * 4 + 3] = one;
+    }
+  }
+
+  if (metadata.channels == 4 && metadata.associate_alpha) {
+    for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
+      const StorageType alpha = pixels[i * 4 + 3];
+      pixels[i * 4 + 0] = util_image_multiply_native(pixels[i * 4 + 0], alpha);
+      pixels[i * 4 + 1] = util_image_multiply_native(pixels[i * 4 + 1], alpha);
+      pixels[i * 4 + 2] = util_image_multiply_native(pixels[i * 4 + 2], alpha);
+    }
+  }
+}
+
 template<TypeDesc::BASETYPE FileFormat, typename StorageType>
 static bool oiio_load_pixels_full(const ImageMetaData &metadata,
                                   const unique_ptr<ImageInput> &in,
@@ -203,18 +234,19 @@ static bool oiio_load_pixels_full(const ImageMetaData &metadata,
 {
   const int64_t width = metadata.width;
   const int64_t height = metadata.height;
-  const int depth = metadata.depth;
+  const int depth = (metadata.depth == 0) ? 1 : metadata.depth;
   const int channels = metadata.channels;
+  const int64_t num_pixels = width * height * depth;
 
   /* Read pixels through OpenImageIO. */
   StorageType *readpixels = pixels;
   vector<StorageType> tmppixels;
   if (channels > 4) {
-    tmppixels.resize(width * height * channels);
+    tmppixels.resize(num_pixels * channels);
     readpixels = &tmppixels[0];
   }
 
-  if (depth <= 1) {
+  if (metadata.depth <= 1) {
     const int64_t scanlinesize = width * channels * sizeof(StorageType);
     if (!in->read_image(0,
                         0,
@@ -236,8 +268,7 @@ static bool oiio_load_pixels_full(const ImageMetaData &metadata,
   }
 
   if (channels > 4) {
-    const int64_t dimensions = width * height;
-    for (int64_t i = dimensions - 1, pixel = 0; pixel < dimensions; pixel++, i--) {
+    for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
       pixels[i * 4 + 3] = tmppixels[i * channels + 3];
       pixels[i * 4 + 2] = tmppixels[i * channels + 2];
       pixels[i * 4 + 1] = tmppixels[i * channels + 1];
@@ -246,33 +277,7 @@ static bool oiio_load_pixels_full(const ImageMetaData &metadata,
     tmppixels.clear();
   }
 
-  /* CMYK to RGBA. */
-  const bool cmyk = strcmp(in->format_name(), "jpeg") == 0 && channels == 4;
-  if (cmyk) {
-    const StorageType one = util_image_cast_from_float<StorageType>(1.0f);
-
-    const int64_t num_pixels = width * height * depth;
-    for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
-      const float c = util_image_cast_to_float(pixels[i * 4 + 0]);
-      const float m = util_image_cast_to_float(pixels[i * 4 + 1]);
-      const float y = util_image_cast_to_float(pixels[i * 4 + 2]);
-      const float k = util_image_cast_to_float(pixels[i * 4 + 3]);
-      pixels[i * 4 + 0] = util_image_cast_from_float<StorageType>((1.0f - c) * (1.0f - k));
-      pixels[i * 4 + 1] = util_image_cast_from_float<StorageType>((1.0f - m) * (1.0f - k));
-      pixels[i * 4 + 2] = util_image_cast_from_float<StorageType>((1.0f - y) * (1.0f - k));
-      pixels[i * 4 + 3] = one;
-    }
-  }
-
-  if (channels == 4 && metadata.associate_alpha) {
-    const int64_t dimensions = width * height;
-    for (int64_t i = dimensions - 1, pixel = 0; pixel < dimensions; pixel++, i--) {
-      const StorageType alpha = pixels[i * 4 + 3];
-      pixels[i * 4 + 0] = util_image_multiply_native(pixels[i * 4 + 0], alpha);
-      pixels[i * 4 + 1] = util_image_multiply_native(pixels[i * 4 + 1], alpha);
-      pixels[i * 4 + 2] = util_image_multiply_native(pixels[i * 4 + 2], alpha);
-    }
-  }
+  oiio_conform_alpha_cmyk(metadata, in, pixels, width * height);
 
   return true;
 }
@@ -321,8 +326,66 @@ bool OIIOImageLoader::load_pixels_full(const ImageMetaData &metadata, uint8_t *p
   return false;
 }
 
+template<typename StorageType>
 static bool oiio_load_pixels_tile(const unique_ptr<ImageInput> &in,
                                   const ImageMetaData &metadata,
+                                  const int miplevel,
+                                  const int64_t x,
+                                  const int64_t y,
+                                  const int64_t w,
+                                  const int64_t h,
+                                  const OIIO::TypeDesc typedesc,
+                                  const int64_t x_stride,
+                                  const int64_t y_stride,
+                                  StorageType *pixels)
+
+{
+  const int channels = metadata.channels;
+  const int64_t num_pixels = w * h;
+
+  /* Read pixels through OpenImageIO. */
+  StorageType *readpixels = pixels;
+  vector<StorageType> tmppixels;
+  if (channels > 4) {
+    tmppixels.resize(num_pixels * channels);
+    readpixels = &tmppixels[0];
+  }
+
+  if (!in->read_tiles(0,
+                      miplevel,
+                      x,
+                      x + w,
+                      y,
+                      y + h,
+                      0,
+                      1,
+                      0,
+                      channels,
+                      typedesc,
+                      readpixels,
+                      x_stride,
+                      y_stride))
+  {
+    return false;
+  }
+
+  if (channels > 4) {
+    for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
+      pixels[i * 4 + 3] = tmppixels[i * channels + 3];
+      pixels[i * 4 + 2] = tmppixels[i * channels + 2];
+      pixels[i * 4 + 1] = tmppixels[i * channels + 1];
+      pixels[i * 4 + 0] = tmppixels[i * channels + 0];
+    }
+    tmppixels.clear();
+  }
+
+  oiio_conform_alpha_cmyk<StorageType>(metadata, in, pixels, w * h);
+  return true;
+}
+
+static bool oiio_load_pixels_tile(const unique_ptr<ImageInput> &in,
+                                  const ImageMetaData &metadata,
+                                  const int64_t height,
                                   const int miplevel,
                                   const int64_t x,
                                   const int64_t y,
@@ -334,7 +397,6 @@ static bool oiio_load_pixels_tile(const unique_ptr<ImageInput> &in,
 {
   /* Flip vertical pixel order from OIIO to Cycles convention. */
   // TODO: this fails if image is not multiple of tile size
-  const int64_t height = divide_up(metadata.height, 1 << miplevel);
   const int64_t flip_y = height - h - y;
   const int64_t flip_y_stride = -y_stride;
   uint8_t *flip_pixels = pixels + (h - 1) * y_stride;
@@ -342,68 +404,57 @@ static bool oiio_load_pixels_tile(const unique_ptr<ImageInput> &in,
   switch (metadata.type) {
     case IMAGE_DATA_TYPE_BYTE:
     case IMAGE_DATA_TYPE_BYTE4:
-      return in->read_tiles(0,
-                            miplevel,
-                            x,
-                            x + w,
-                            flip_y,
-                            flip_y + h,
-                            0,
-                            1,
-                            0,
-                            metadata.channels,
-                            TypeDesc::UINT8,
-                            flip_pixels,
-                            x_stride,
-                            flip_y_stride);
+      return oiio_load_pixels_tile<uint8_t>(in,
+                                            metadata,
+                                            miplevel,
+                                            x,
+                                            flip_y,
+                                            w,
+                                            h,
+                                            TypeDesc::UINT8,
+                                            x_stride,
+                                            flip_y_stride,
+                                            flip_pixels);
     case IMAGE_DATA_TYPE_USHORT:
     case IMAGE_DATA_TYPE_USHORT4:
-      return in->read_tiles(0,
-                            miplevel,
-                            x,
-                            x + w,
-                            flip_y,
-                            flip_y + h,
-                            0,
-                            1,
-                            0,
-                            metadata.channels,
-                            TypeDesc::USHORT,
-                            flip_pixels,
-                            x_stride,
-                            flip_y_stride);
+      return oiio_load_pixels_tile<uint16_t>(in,
+                                             metadata,
+                                             miplevel,
+                                             x,
+                                             flip_y,
+                                             w,
+                                             h,
+                                             TypeDesc::USHORT,
+                                             x_stride,
+                                             flip_y_stride,
+                                             reinterpret_cast<uint16_t *>(flip_pixels));
+      break;
     case IMAGE_DATA_TYPE_HALF:
     case IMAGE_DATA_TYPE_HALF4:
-      return in->read_tiles(0,
-                            miplevel,
-                            x,
-                            x + w,
-                            flip_y,
-                            flip_y + h,
-                            0,
-                            1,
-                            0,
-                            metadata.channels,
-                            TypeDesc::HALF,
-                            flip_pixels,
-                            x_stride,
-                            flip_y_stride);
+      return oiio_load_pixels_tile<half>(in,
+                                         metadata,
+                                         miplevel,
+                                         x,
+                                         flip_y,
+                                         w,
+                                         h,
+                                         TypeDesc::HALF,
+                                         x_stride,
+                                         flip_y_stride,
+                                         reinterpret_cast<half *>(flip_pixels));
     case IMAGE_DATA_TYPE_FLOAT:
     case IMAGE_DATA_TYPE_FLOAT4:
-      return in->read_tiles(0,
-                            miplevel,
-                            x,
-                            x + w,
-                            flip_y,
-                            flip_y + h,
-                            0,
-                            1,
-                            0,
-                            metadata.channels,
-                            TypeDesc::FLOAT,
-                            flip_pixels,
-                            x_stride,
-                            flip_y_stride);
+      return oiio_load_pixels_tile<float>(in,
+                                          metadata,
+                                          miplevel,
+                                          x,
+                                          flip_y,
+                                          w,
+                                          h,
+                                          TypeDesc::FLOAT,
+                                          x_stride,
+                                          flip_y_stride,
+                                          reinterpret_cast<float *>(flip_pixels));
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
     case IMAGE_DATA_TYPE_NANOVDB_FPN:
@@ -417,6 +468,8 @@ static bool oiio_load_pixels_tile(const unique_ptr<ImageInput> &in,
 
 static bool oiio_load_pixels_tile_adjacent(const unique_ptr<ImageInput> &in,
                                            const ImageMetaData &metadata,
+                                           const int64_t width,
+                                           const int64_t height,
                                            const int miplevel,
                                            const int64_t x,
                                            const int64_t y,
@@ -432,8 +485,6 @@ static bool oiio_load_pixels_tile_adjacent(const unique_ptr<ImageInput> &in,
 {
   const int64_t tile_size = metadata.tile_size;
 
-  const int64_t width = divide_up(metadata.width, 1 << miplevel);
-  const int64_t height = divide_up(metadata.height, 1 << miplevel);
   int64_t x_new = x + x_adjacent * tile_size;
   int64_t y_new = y + y_adjacent * tile_size;
 
@@ -508,6 +559,7 @@ static bool oiio_load_pixels_tile_adjacent(const unique_ptr<ImageInput> &in,
   vector<uint8_t> tile_pixels(tile_size * tile_size * x_stride, 0);
   if (!oiio_load_pixels_tile(in,
                              metadata,
+                             height,
                              miplevel,
                              x_new,
                              y_new,
@@ -566,9 +618,13 @@ bool OIIOImageLoader::load_pixels_tile(const ImageMetaData &metadata,
     }
   }
 
+  const int64_t width = divide_up(metadata.width, 1 << miplevel);
+  const int64_t height = divide_up(metadata.height, 1 << miplevel);
+
   /* Load center pixels. */
   bool ok = oiio_load_pixels_tile(filehandle,
                                   metadata,
+                                  height,
                                   miplevel,
                                   x,
                                   y,
@@ -587,6 +643,8 @@ bool OIIOImageLoader::load_pixels_tile(const ImageMetaData &metadata,
         }
         ok &= oiio_load_pixels_tile_adjacent(filehandle,
                                              metadata,
+                                             width,
+                                             height,
                                              miplevel,
                                              x,
                                              y,
