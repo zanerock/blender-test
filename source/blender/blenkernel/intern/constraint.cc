@@ -2915,6 +2915,11 @@ static void actcon_evaluate(bConstraint *con, bConstraintOb *cob, ListBase *targ
 
   if (VALID_CONS_TARGET(ct) || data->flag & ACTCON_USE_EVAL_TIME) {
     switch (data->mix_mode) {
+      /* Replace the input transformation. */
+      case ACTCON_MIX_REPLACE:
+        copy_m4_m4(cob->matrix, ct->matrix);
+        break;
+
       /* Simple matrix multiplication. */
       case ACTCON_MIX_BEFORE_FULL:
         mul_m4_m4m4(cob->matrix, ct->matrix, cob->matrix);
@@ -5441,7 +5446,7 @@ static bConstraintTypeInfo CTI_TRANSFORM_CACHE = {
 };
 
 /* ************************* Constraints Type-Info *************************** */
-/* All of the constraints api functions use bConstraintTypeInfo structs to carry out
+/* All of the constraints API functions use #bConstraintTypeInfo structs to carry out
  * and operations that involve constraint specific code.
  */
 
@@ -5636,7 +5641,7 @@ bool BKE_constraint_apply_for_object(Depsgraph *depsgraph,
   /* Do this all in the evaluated domain (e.g. shrinkwrap needs to access evaluated constraint
    * target mesh). */
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
-  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  Object *ob_eval = DEG_get_evaluated(depsgraph, ob);
   bConstraint *con_eval = BKE_constraints_find_name(&ob_eval->constraints, con->name);
 
   bConstraint *new_con = BKE_constraint_duplicate_ex(con_eval, 0, ID_IS_EDITABLE(ob));
@@ -5688,7 +5693,7 @@ bool BKE_constraint_apply_for_pose(
   /* Do this all in the evaluated domain (e.g. shrinkwrap needs to access evaluated constraint
    * target mesh). */
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
-  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  Object *ob_eval = DEG_get_evaluated(depsgraph, ob);
   bPoseChannel *pchan_eval = BKE_pose_channel_find_name(ob_eval->pose, pchan->name);
   bConstraint *con_eval = BKE_constraints_find_name(&pchan_eval->constraints, con->name);
 

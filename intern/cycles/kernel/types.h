@@ -10,13 +10,8 @@
 
 #if (!defined(__KERNEL_GPU__) || (defined(__KERNEL_ONEAPI__) && defined(WITH_EMBREE_GPU))) && \
     defined(WITH_EMBREE)
-#  if EMBREE_MAJOR_VERSION == 4
-#    include <embree4/rtcore.h>
-#    include <embree4/rtcore_scene.h>
-#  else
-#    include <embree3/rtcore.h>
-#    include <embree3/rtcore_scene.h>
-#  endif
+#  include <embree4/rtcore.h>
+#  include <embree4/rtcore_scene.h>
 #  define __EMBREE__
 #endif
 
@@ -206,7 +201,7 @@ CCL_NAMESPACE_BEGIN
 #  endif
 #endif
 #ifndef __KERNEL_GPU__
-#  ifdef WITH_PATH_GUIDING
+#  if defined(WITH_PATH_GUIDING)
 #    define __PATH_GUIDING__
 #  endif
 #  define __VOLUME_RECORD_ALL__
@@ -1487,7 +1482,11 @@ struct ccl_align(16) KernelData
   void *device_bvh;
 #else
 #  ifdef __EMBREE__
+#    if RTC_VERSION >= 40400
+  RTCTraversable device_bvh;
+#    else
   RTCScene device_bvh;
+#    endif
 #    ifndef __KERNEL_64_BIT__
   int pad1;
 #    endif

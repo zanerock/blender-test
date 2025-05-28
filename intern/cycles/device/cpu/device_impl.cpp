@@ -17,11 +17,7 @@
 #endif
 
 #ifdef WITH_EMBREE
-#  if EMBREE_MAJOR_VERSION >= 4
-#    include <embree4/rtcore.h>
-#  else
-#    include <embree3/rtcore.h>
-#  endif
+#  include <embree4/rtcore.h>
 #endif
 
 #include "device/cpu/kernel.h"
@@ -193,7 +189,13 @@ void CPUDevice::const_copy_to(const char *name, void *host, const size_t size)
 
     // Update scene handle (since it is different for each device on multi devices)
     KernelData *const data = (KernelData *)host;
-    data->device_bvh = embree_scene;
+    data->device_bvh =
+#  if RTC_VERSION >= 40400
+        rtcGetSceneTraversable(embree_scene)
+#  else
+        embree_scene
+#  endif
+        ;
   }
 #endif
   kernel_const_copy(&kernel_globals, name, host, size);
@@ -282,7 +284,7 @@ void CPUDevice::build_bvh(BVH *bvh, Progress &progress, bool refit)
 
 void *CPUDevice::get_guiding_device() const
 {
-#ifdef WITH_PATH_GUIDING
+#if defined(WITH_PATH_GUIDING)
   if (!guiding_device) {
     if (guiding_device_type() == 8) {
       guiding_device = make_unique<openpgl::cpp::Device>(PGL_DEVICE_TYPE_CPU_8);

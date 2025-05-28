@@ -387,6 +387,13 @@ void do_surface_smooth_brush(const Depsgraph &depsgraph,
   bke::pbvh::Tree &pbvh = *bke::object::pbvh_get(object);
   const Brush &brush = *BKE_paint_brush_for_read(&sd.paint);
 
+  if (ss.cache->surface_smooth_laplacian_disp.is_empty()) {
+    BLI_assert_msg(SCULPT_stroke_is_first_brush_step(*ss.cache),
+                   "Should only be allocated on the first step");
+    ss.cache->surface_smooth_laplacian_disp = Array<float3>(SCULPT_vertex_count_get(object),
+                                                            float3(0));
+  }
+
   switch (pbvh.type()) {
     case bke::pbvh::Type::Mesh:
       do_surface_smooth_brush_mesh(
@@ -398,7 +405,7 @@ void do_surface_smooth_brush(const Depsgraph &depsgraph,
       break;
     }
     case bke::pbvh::Type::BMesh: {
-      BM_mesh_elem_index_ensure(ss.bm, BM_VERT);
+      vert_random_access_ensure(object);
       do_surface_smooth_brush_bmesh(
           depsgraph, sd, brush, node_mask, object, ss.cache->surface_smooth_laplacian_disp);
       break;

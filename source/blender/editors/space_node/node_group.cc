@@ -172,6 +172,7 @@ static void remap_pairing(bNodeTree &dst_tree,
 static wmOperatorStatus node_group_edit_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
+  ARegion *region = CTX_wm_region(C);
   const StringRef node_idname = node_group_idname(C);
   const bool exit = RNA_boolean_get(op->ptr, "exit");
 
@@ -183,11 +184,11 @@ static wmOperatorStatus node_group_edit_exec(bContext *C, wmOperator *op)
     bNodeTree *ngroup = (bNodeTree *)gnode->id;
 
     if (ngroup) {
-      ED_node_tree_push(snode, ngroup, gnode);
+      ED_node_tree_push(region, snode, ngroup, gnode);
     }
   }
   else {
-    ED_node_tree_pop(snode);
+    ED_node_tree_pop(region, snode);
   }
 
   WM_event_add_notifier(C, NC_SCENE | ND_NODES, nullptr);
@@ -203,7 +204,7 @@ void NODE_OT_group_edit(wmOperatorType *ot)
   ot->description = "Edit node group";
   ot->idname = "NODE_OT_group_edit";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = node_group_edit_exec;
   ot->poll = node_group_operator_active_poll;
 
@@ -491,7 +492,7 @@ void NODE_OT_group_ungroup(wmOperatorType *ot)
   ot->description = "Ungroup selected nodes";
   ot->idname = "NODE_OT_group_ungroup";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = node_group_ungroup_exec;
   ot->poll = node_group_operator_editable;
 
@@ -555,10 +556,8 @@ static bool node_group_separate_selected(
       bke::node_detach_node(ngroup, *newnode);
     }
 
-    if (!newnode->parent) {
-      newnode->location[0] += offset.x;
-      newnode->location[1] += offset.y;
-    }
+    newnode->location[0] += offset.x;
+    newnode->location[1] += offset.y;
   }
   if (!make_copy) {
     bke::node_rebuild_id_vector(ngroup);
@@ -632,6 +631,7 @@ static const EnumPropertyItem node_group_separate_types[] = {
 static wmOperatorStatus node_group_separate_exec(bContext *C, wmOperator *op)
 {
   Main *bmain = CTX_data_main(C);
+  ARegion *region = CTX_wm_region(C);
   SpaceNode *snode = CTX_wm_space_node(C);
   int type = RNA_enum_get(op->ptr, "type");
 
@@ -663,7 +663,7 @@ static wmOperatorStatus node_group_separate_exec(bContext *C, wmOperator *op)
   }
 
   /* switch to parent tree */
-  ED_node_tree_pop(snode);
+  ED_node_tree_pop(region, snode);
 
   BKE_main_ensure_invariants(*CTX_data_main(C));
 
@@ -694,7 +694,7 @@ void NODE_OT_group_separate(wmOperatorType *ot)
   ot->description = "Separate selected nodes from the node group";
   ot->idname = "NODE_OT_group_separate";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = node_group_separate_invoke;
   ot->exec = node_group_separate_exec;
   ot->poll = node_group_operator_editable;
@@ -995,7 +995,7 @@ static void node_group_make_insert_selected(const bContext &C,
   /* Add all outputs first. */
   for (bNode *node : nodes_to_move) {
     for (bNodeSocket *output_socket : node->output_sockets()) {
-      if (!output_socket->is_available() || output_socket->is_hidden()) {
+      if (!output_socket->is_visible()) {
         for (bNodeLink *link : output_socket->directly_linked_links()) {
           links_to_remove.add(link);
         }
@@ -1036,7 +1036,7 @@ static void node_group_make_insert_selected(const bContext &C,
   /* Now add all inputs. */
   for (bNode *node : nodes_to_move) {
     for (bNodeSocket *input_socket : node->input_sockets()) {
-      if (!input_socket->is_available() || input_socket->is_hidden()) {
+      if (!input_socket->is_visible()) {
         for (bNodeLink *link : input_socket->directly_linked_links()) {
           links_to_remove.add(link);
         }
@@ -1123,10 +1123,8 @@ static void node_group_make_insert_selected(const bContext &C,
 
   /* move nodes in the group to the center */
   for (bNode *node : nodes_to_move) {
-    if (!node->parent) {
-      node->location[0] -= center[0];
-      node->location[1] -= center[1];
-    }
+    node->location[0] -= center[0];
+    node->location[1] -= center[1];
   }
 
   for (bNodeLink *link : internal_links_to_move) {
@@ -1182,6 +1180,7 @@ static void node_group_make_insert_selected(const bContext &C,
 
   if (group.type == NTREE_GEOMETRY) {
     bke::node_field_inferencing::update_field_inferencing(group);
+    bke::node_structure_type_inferencing::update_structure_type_interface(group);
   }
   nodes::update_node_declaration_and_sockets(ntree, *gnode);
 
@@ -1234,6 +1233,7 @@ static bNode *node_group_make_from_nodes(const bContext &C,
 
 static wmOperatorStatus node_group_make_exec(bContext *C, wmOperator *op)
 {
+  ARegion &region = *CTX_wm_region(C);
   SpaceNode &snode = *CTX_wm_space_node(C);
   bNodeTree &ntree = *snode.edittree;
   const StringRef ntree_idname = group_ntree_idname(C);
@@ -1254,7 +1254,7 @@ static wmOperatorStatus node_group_make_exec(bContext *C, wmOperator *op)
 
     bke::node_set_active(ntree, *gnode);
     if (ngroup) {
-      ED_node_tree_push(&snode, ngroup, gnode);
+      ED_node_tree_push(&region, &snode, ngroup, gnode);
     }
   }
 
@@ -1273,7 +1273,7 @@ void NODE_OT_group_make(wmOperatorType *ot)
   ot->description = "Make group from selected nodes";
   ot->idname = "NODE_OT_group_make";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = node_group_make_exec;
   ot->poll = node_group_operator_editable;
 
@@ -1290,6 +1290,7 @@ void NODE_OT_group_make(wmOperatorType *ot)
 static wmOperatorStatus node_group_insert_exec(bContext *C, wmOperator *op)
 {
   SpaceNode *snode = CTX_wm_space_node(C);
+  ARegion *region = CTX_wm_region(C);
   bNodeTree *ntree = snode->edittree;
   const StringRef node_idname = node_group_idname(C);
 
@@ -1322,7 +1323,7 @@ static wmOperatorStatus node_group_insert_exec(bContext *C, wmOperator *op)
   node_group_make_insert_selected(*C, *ntree, gnode, nodes_to_group);
 
   bke::node_set_active(*ntree, *gnode);
-  ED_node_tree_push(snode, ngroup, gnode);
+  ED_node_tree_push(region, snode, ngroup, gnode);
 
   return OPERATOR_FINISHED;
 }
@@ -1334,7 +1335,7 @@ void NODE_OT_group_insert(wmOperatorType *ot)
   ot->description = "Insert selected nodes into a node group";
   ot->idname = "NODE_OT_group_insert";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = node_group_insert_exec;
   ot->poll = node_group_operator_editable;
 
@@ -1400,7 +1401,7 @@ void NODE_OT_default_group_width_set(wmOperatorType *ot)
   ot->description = "Set the width based on the parent group node in the current context";
   ot->idname = "NODE_OT_default_group_width_set";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = node_default_group_width_set_exec;
   ot->poll = node_default_group_width_set_poll;
 

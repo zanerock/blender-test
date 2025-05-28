@@ -1011,9 +1011,9 @@ static bool override_idtemplate_menu_poll(const bContext *C_const, MenuType * /*
 static void override_idtemplate_menu_draw(const bContext * /*C*/, Menu *menu)
 {
   uiLayout *layout = menu->layout;
-  uiItemO(layout, IFACE_("Make"), ICON_NONE, "UI_OT_override_idtemplate_make");
-  uiItemO(layout, IFACE_("Reset"), ICON_NONE, "UI_OT_override_idtemplate_reset");
-  uiItemO(layout, IFACE_("Clear"), ICON_NONE, "UI_OT_override_idtemplate_clear");
+  layout->op("UI_OT_override_idtemplate_make", IFACE_("Make"), ICON_NONE);
+  layout->op("UI_OT_override_idtemplate_reset", IFACE_("Reset"), ICON_NONE);
+  layout->op("UI_OT_override_idtemplate_clear", IFACE_("Clear"), ICON_NONE);
 }
 
 static void override_idtemplate_menu()
@@ -1034,7 +1034,6 @@ static void override_idtemplate_menu()
 /** \name Copy To Selected Operator
  * \{ */
 
-#define NOT_NULL(assignment) ((assignment) != nullptr)
 #define NOT_RNA_NULL(assignment) ((assignment).data != nullptr)
 
 static void ui_context_selected_bones_via_pose(bContext *C, blender::Vector<PointerRNA> *r_lb)
@@ -2390,8 +2389,8 @@ static wmOperatorStatus drop_color_invoke(bContext *C, wmOperator *op, const wmE
     }
   }
   else {
-    if (gamma) {
-      srgb_to_linearrgb_v3_v3(color, color);
+    if (!gamma) {
+      linearrgb_to_srgb_v3_v3(color, color);
     }
 
     ED_imapaint_bucket_fill(C, color, op, event->mval);
@@ -2689,6 +2688,11 @@ static wmOperatorStatus ui_view_scroll_invoke(bContext *C,
   }
 
   BLI_assert(view->supports_scrolling());
+  if (view->is_fully_visible()) {
+    /* The view does not need scrolling currently, so pass the event through. This allows scrolling
+     * e.g. the entire region even when hovering a tree-view that supports scrolling generally. */
+    return OPERATOR_PASS_THROUGH;
+  }
   view->scroll(*direction);
 
   ED_region_tag_redraw(region);

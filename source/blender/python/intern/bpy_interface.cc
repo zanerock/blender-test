@@ -145,7 +145,7 @@ void bpy_context_clear(bContext * /*C*/, const PyGILState_STATE *gilstate)
   }
   else if (py_call_level == 0) {
     /* NOTE: Unfortunately calling classes currently won't store the context.
-     * Can't set nullptr because of this - but this is very flaky still. */
+     * Can't set nullptr because of this - but this is very unreliable still. */
 #if 0
     BPY_context_set(nullptr);
 #endif
@@ -347,14 +347,14 @@ void BPY_python_start(bContext *C, int argc, const char **argv)
       PyPreConfig_InitIsolatedConfig(&preconfig);
     }
 
-    /* Force `utf-8` on all platforms, since this is what's used for Blender's internal strings,
+    /* Force UTF8 on all platforms, since this is what's used for Blender's internal strings,
      * providing consistent encoding behavior across all Blender installations.
      *
      * This also uses the `surrogateescape` error handler ensures any unexpected bytes are escaped
      * instead of raising an error.
      *
      * Without this `sys.getfilesystemencoding()` and `sys.stdout` for example may be set to ASCII
-     * or some other encoding - where printing some `utf-8` values will raise an error.
+     * or some other encoding - where printing some UTF8 values will raise an error.
      *
      * This can cause scripts to fail entirely on some systems.
      *

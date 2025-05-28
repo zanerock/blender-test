@@ -155,7 +155,7 @@ static const EnumPropertyItem rna_enum_key_insert_channels[] = {
 static const EnumPropertyItem rna_enum_preference_gpu_backend_items[] = {
     {GPU_BACKEND_OPENGL, "OPENGL", 0, "OpenGL", "Use OpenGL backend"},
     {GPU_BACKEND_METAL, "METAL", 0, "Metal", "Use Metal backend"},
-    {GPU_BACKEND_VULKAN, "VULKAN", 0, "Vulkan (experimental)", "Use Vulkan backend"},
+    {GPU_BACKEND_VULKAN, "VULKAN", 0, "Vulkan", "Use Vulkan backend"},
     {0, nullptr, 0, nullptr, nullptr},
 };
 static const EnumPropertyItem rna_enum_preference_gpu_preferred_device_items[] = {
@@ -3861,7 +3861,7 @@ static void rna_def_userdef_theme_space_seq(BlenderRNA *brna)
   prop = RNA_def_property(srna, "selected_text", PROP_FLOAT, PROP_COLOR_GAMMA);
   RNA_def_property_float_sdna(prop, nullptr, "selected_text");
   RNA_def_property_array(prop, 4);
-  RNA_def_property_ui_text(prop, "Selected text", "Text strip editing selection");
+  RNA_def_property_ui_text(prop, "Selected Text", "Text strip editing selection");
   RNA_def_property_update(prop, 0, "rna_userdef_theme_update");
 }
 
@@ -6125,25 +6125,6 @@ static void rna_def_userdef_system(BlenderRNA *brna)
       {0, nullptr, 0, nullptr, nullptr},
   };
 
-  static const EnumPropertyItem seq_disk_cache_compression_levels[] = {
-      {USER_SEQ_DISK_CACHE_COMPRESSION_NONE,
-       "NONE",
-       0,
-       "None",
-       "Requires fast storage, but uses minimum CPU resources"},
-      {USER_SEQ_DISK_CACHE_COMPRESSION_LOW,
-       "LOW",
-       0,
-       "Low",
-       "Doesn't require fast storage and uses less CPU resources"},
-      {USER_SEQ_DISK_CACHE_COMPRESSION_HIGH,
-       "HIGH",
-       0,
-       "High",
-       "Works on slower storage devices and uses most CPU resources"},
-      {0, nullptr, 0, nullptr, nullptr},
-  };
-
   static const EnumPropertyItem seq_proxy_setup_options[] = {
       {USER_SEQ_PROXY_SETUP_MANUAL, "MANUAL", 0, "Manual", "Set up proxies manually"},
       {USER_SEQ_PROXY_SETUP_AUTOMATIC,
@@ -6194,30 +6175,6 @@ static void rna_def_userdef_system(BlenderRNA *brna)
   RNA_def_property_range(prop, 0, max_memory_in_megabytes_int());
   RNA_def_property_ui_text(prop, "Memory Cache Limit", "Memory cache limit (in megabytes)");
   RNA_def_property_update(prop, 0, "rna_Userdef_memcache_update");
-
-  /* Sequencer disk cache */
-
-  prop = RNA_def_property(srna, "use_sequencer_disk_cache", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(
-      prop, nullptr, "sequencer_disk_cache_flag", SEQ_CACHE_DISK_CACHE_ENABLE);
-  RNA_def_property_ui_text(prop, "Use Disk Cache", "Store cached images to disk");
-
-  prop = RNA_def_property(srna, "sequencer_disk_cache_dir", PROP_STRING, PROP_DIRPATH);
-  RNA_def_property_string_sdna(prop, nullptr, "sequencer_disk_cache_dir");
-  RNA_def_property_ui_text(prop, "Disk Cache Directory", "Override default directory");
-
-  prop = RNA_def_property(srna, "sequencer_disk_cache_size_limit", PROP_INT, PROP_NONE);
-  RNA_def_property_int_sdna(prop, nullptr, "sequencer_disk_cache_size_limit");
-  RNA_def_property_range(prop, 0, INT_MAX);
-  RNA_def_property_ui_text(prop, "Disk Cache Limit", "Disk cache limit (in gigabytes)");
-
-  prop = RNA_def_property(srna, "sequencer_disk_cache_compression", PROP_ENUM, PROP_NONE);
-  RNA_def_property_enum_items(prop, seq_disk_cache_compression_levels);
-  RNA_def_property_enum_sdna(prop, nullptr, "sequencer_disk_cache_compression");
-  RNA_def_property_ui_text(
-      prop,
-      "Disk Cache Compression Level",
-      "Smaller compression will result in larger files, but less decoding overhead");
 
   /* Sequencer proxy setup */
 
@@ -7309,7 +7266,7 @@ static void rna_def_userdef_filepaths(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Online Access",
-      "The user has been shown the \"Online Access\" prompt and make a choice");
+      "The user has been shown the \"Online Access\" prompt and made a choice");
 
   /* Directories. */
 
@@ -7467,7 +7424,7 @@ static void rna_def_userdef_extensions(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Online Access",
-      "The user has been shown the \"Online Access\" prompt and make a choice");
+      "The user has been shown the \"Online Access\" prompt and made a choice");
 
   rna_def_userdef_filepaths_extension_repo(brna);
 
@@ -7556,11 +7513,6 @@ static void rna_def_userdef_experimental(BlenderRNA *brna)
   RNA_def_property_ui_text(prop, "EEVEE Debug", "Enable EEVEE debugging options for developers");
   RNA_def_property_update(prop, 0, "rna_userdef_update");
 
-  prop = RNA_def_property(srna, "use_sculpt_tools_tilt", PROP_BOOLEAN, PROP_NONE);
-  RNA_def_property_boolean_sdna(prop, nullptr, "use_sculpt_tools_tilt", 1);
-  RNA_def_property_ui_text(
-      prop, "Sculpt Mode Tilt Support", "Support for pen tablet tilt events in Sculpt Mode");
-
   prop = RNA_def_property(srna, "use_sculpt_texture_paint", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(prop, nullptr, "use_sculpt_texture_paint", 1);
   RNA_def_property_ui_text(prop, "Sculpt Texture Paint", "Use texture painting in Sculpt Mode");
@@ -7594,6 +7546,14 @@ static void rna_def_userdef_experimental(BlenderRNA *brna)
                            "pop-over");
   RNA_def_property_update(prop, 0, "rna_userdef_ui_update");
 
+  prop = RNA_def_property(srna, "write_large_blend_file_blocks", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_boolean_sdna(prop, nullptr, "write_large_blend_file_blocks", 1);
+  RNA_def_property_ui_text(
+      prop,
+      "Write Large Blend File Blocks",
+      "Enables support for writing .blend files that contain buffers larger than 2 GB. If "
+      "enabled, any saved files can not be opened by older Blender versions");
+
   prop = RNA_def_property(srna, "use_all_linked_data_direct", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_ui_text(
       prop,
@@ -7614,6 +7574,12 @@ static void rna_def_userdef_experimental(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Bundle and Closure Nodes", "Enables bundle and closure nodes in Geometry Nodes");
 
+  prop = RNA_def_property(srna, "use_socket_structure_type", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(
+      prop,
+      "Node Structure Types",
+      "Enables new visualization of socket data compatibility in Geometry Nodes");
+
   prop = RNA_def_property(srna, "use_extensions_debug", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_ui_text(
       prop,
@@ -7627,6 +7593,12 @@ static void rna_def_userdef_experimental(BlenderRNA *brna)
                            "Recompute all ID usercounts before saving to a blendfile. Allows to "
                            "work around invalid usercount handling in code that may lead to loss "
                            "of data due to wrongly detected unused data-blocks");
+
+  prop = RNA_def_property(srna, "use_attribute_storage_write", PROP_BOOLEAN, PROP_NONE);
+  RNA_def_property_ui_text(prop,
+                           "Write New Attribute Storage Format",
+                           "Instead of writing with the older \"CustomData\" format for forward "
+                           "compatibility, use the new \"AttributeStorage\" format");
 }
 
 static void rna_def_userdef_addon_collection(BlenderRNA *brna, PropertyRNA *cprop)

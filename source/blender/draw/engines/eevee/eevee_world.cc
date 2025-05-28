@@ -66,7 +66,7 @@ World::~World()
 ::World *World::default_world_get()
 {
   if (default_world_ == nullptr) {
-    default_world_ = static_cast<::World *>(BKE_id_new_nomain(ID_WO, "EEVEEE default world"));
+    default_world_ = BKE_id_new_nomain<::World>("EEVEE default world");
     default_world_->horr = default_world_->horg = default_world_->horb = 0.0f;
     default_world_->use_nodes = 0;
     default_world_->nodetree = nullptr;
@@ -148,7 +148,7 @@ void World::sync()
     inst_.sampling.reset();
   }
 
-  GPUMaterial *gpumat = inst_.shaders.world_shader_get(bl_world, ntree, MAT_PIPE_DEFERRED);
+  GPUMaterial *gpumat = inst_.shaders.world_shader_get(bl_world, ntree, MAT_PIPE_DEFERRED, false);
 
   inst_.manager->register_layer_attributes(gpumat);
 
@@ -169,7 +169,8 @@ void World::sync_volume(const WorldHandle &world_handle)
 
   /* Only the scene world nodetree can have volume shader. */
   if (world && world->nodetree && world->use_nodes) {
-    gpumat = inst_.shaders.world_shader_get(world, world->nodetree, MAT_PIPE_VOLUME_MATERIAL);
+    gpumat = inst_.shaders.world_shader_get(
+        world, world->nodetree, MAT_PIPE_VOLUME_MATERIAL, !inst_.is_image_render);
   }
 
   bool had_volume = has_volume_;

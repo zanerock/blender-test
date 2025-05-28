@@ -13,6 +13,7 @@
 #include "DNA_customdata_types.h"
 
 #include "GPU_context.hh"
+#include "GPU_debug.hh"
 #include "GPU_material.hh"
 #include "GPU_shader.hh"
 #include "GPU_texture.hh"
@@ -43,8 +44,6 @@ ShaderOperation::ShaderOperation(Context &context,
 {
   material_ = GPU_material_from_callbacks(
       GPU_MAT_COMPOSITOR, &construct_material, &generate_code, this);
-  GPU_material_status_set(material_, GPU_MAT_QUEUED);
-  GPU_material_compile(material_);
 }
 
 ShaderOperation::~ShaderOperation()
@@ -54,6 +53,7 @@ ShaderOperation::~ShaderOperation()
 
 void ShaderOperation::execute()
 {
+  GPU_debug_group_begin("ShaderOperation");
   const Domain domain = compute_domain();
   for (StringRef identifier : output_sockets_to_output_identifiers_map_.values()) {
     Result &result = get_result(identifier);
@@ -73,6 +73,7 @@ void ShaderOperation::execute()
   GPU_texture_image_unbind_all();
   GPU_uniformbuf_debug_unbind_all();
   GPU_shader_unbind();
+  GPU_debug_group_end();
 }
 
 void ShaderOperation::bind_material_resources(GPUShader *shader)

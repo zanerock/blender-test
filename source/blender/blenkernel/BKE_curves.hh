@@ -22,6 +22,7 @@
 #include "BLI_virtual_array_fwd.hh"
 
 #include "BKE_attribute_math.hh"
+#include "BKE_attribute_storage.hh"
 #include "BKE_curves.h"
 
 struct BlendDataReader;
@@ -495,16 +496,16 @@ class CurvesGeometry : public ::CurvesGeometry {
    * Helper struct for `CurvesGeometry::blend_write_*` functions.
    */
   struct BlendWriteData {
-    /* The point custom data layers to be written. */
     Vector<CustomDataLayer, 16> point_layers;
-    /* The curve custom data layers to be written. */
     Vector<CustomDataLayer, 16> curve_layers;
+    AttributeStorage::BlendWriteData attribute_data;
+    explicit BlendWriteData(ResourceScope &scope) : attribute_data{scope} {}
   };
   /**
    * This function needs to be called before `blend_write` and before the `CurvesGeometry` struct
-   * is written because it can mutate the `CustomData` struct.
+   * is written because it can mutate the `CustomData` and `AttributeStorage` structs.
    */
-  BlendWriteData blend_write_prepare();
+  void blend_write_prepare(BlendWriteData &write_data);
   void blend_write(BlendWriter &writer, ID &id, const BlendWriteData &write_data);
 };
 
@@ -882,6 +883,16 @@ void copy_custom_knots(const int8_t order,
  */
 void calculate_knots(
     int points_num, KnotsMode mode, int8_t order, bool cyclic, MutableSpan<float> knots);
+
+/**
+ * Compute the number of occurrences of each unique knot value (so knot multiplicity),
+ * forming a sequence for which: `sum(multiplicity) == knots.size()`.
+ *
+ * Example:
+ * Knots: [0, 0, 0, 0.1, 0.3, 0.4, 0.4, 0.4]
+ * Result: [3, 1, 1, 3]
+ */
+Vector<int> calculate_multiplicity_sequence(Span<float> knots);
 
 /**
  * Based on the knots, the order, and other properties of a NURBS curve, calculate a cache that can

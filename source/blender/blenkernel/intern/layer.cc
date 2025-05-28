@@ -78,7 +78,7 @@ static LayerCollection *layer_collection_add(ListBase *lb_parent, Collection *co
 {
   LayerCollection *lc = MEM_callocN<LayerCollection>("Collection Base");
   lc->collection = collection;
-  lc->local_collections_bits = ~(0);
+  lc->local_collections_bits = ~0;
   BLI_addtail(lb_parent, lc);
 
   return lc;
@@ -101,7 +101,7 @@ static Base *object_base_new(Object *ob)
 {
   Base *base = MEM_callocN<Base>("Object Base");
   base->object = ob;
-  base->local_view_bits = ~(0);
+  base->local_view_bits = ~0;
   if (ob->base_flag & BASE_SELECTED) {
     base->flag |= BASE_SELECTED;
   }
@@ -346,10 +346,10 @@ ViewLayer *BKE_view_layer_find_from_collection(const Scene *scene, LayerCollecti
 
 static void view_layer_bases_hash_create(ViewLayer *view_layer, const bool do_base_duplicates_fix)
 {
-  static ThreadMutex hash_lock = BLI_MUTEX_INITIALIZER;
+  static blender::Mutex hash_lock;
 
   if (view_layer->object_bases_hash == nullptr) {
-    BLI_mutex_lock(&hash_lock);
+    std::scoped_lock lock(hash_lock);
 
     if (view_layer->object_bases_hash == nullptr) {
       GHash *hash = BLI_ghash_new(BLI_ghashutil_ptrhash, BLI_ghashutil_ptrcmp, __func__);
@@ -383,8 +383,6 @@ static void view_layer_bases_hash_create(ViewLayer *view_layer, const bool do_ba
       /* Assign pointer only after hash is complete. */
       view_layer->object_bases_hash = hash;
     }
-
-    BLI_mutex_unlock(&hash_lock);
   }
 }
 
@@ -1380,7 +1378,7 @@ void BKE_layer_collection_sync(const Scene *scene, ViewLayer *view_layer)
                         parent_exclude,
                         parent_restrict,
                         parent_layer_restrict,
-                        ~(0));
+                        ~0);
 
   layer_collection_resync_unused_layers_free(view_layer, master_layer_resync);
   BLI_mempool_destroy(layer_resync_mempool);

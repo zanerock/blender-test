@@ -9,7 +9,7 @@ import pprint
 import sys
 import tempfile
 import unittest
-from pxr import Gf, Sdf, Usd, UsdGeom, UsdShade, UsdSkel, UsdUtils, UsdVol
+from pxr import Gf, Sdf, Usd, UsdGeom, UsdMtlx, UsdShade, UsdSkel, UsdUtils, UsdVol
 
 import bpy
 
@@ -460,6 +460,32 @@ class USDExportTest(AbstractUSDTest):
         shader_surface = UsdShade.Shader(stage.GetPrimAtPath(f"/root/_materials/bad_non_const/Principled_BSDF"))
         input_displacement = shader_surface.GetInput('displacement')
         self.assertTrue(input_displacement.Get() is None)
+
+    def test_export_material_attributes(self):
+        """Validate correct export of Attribute information to UsdPrimvarReaders"""
+
+        # Use the common materials .blend file
+        bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_materials_attributes.blend"))
+        export_path = self.tempdir / "usd_materials_attributes.usda"
+        self.export_and_validate(filepath=str(export_path), export_materials=True)
+
+        stage = Usd.Stage.Open(str(export_path))
+
+        shader_attr = UsdShade.Shader(stage.GetPrimAtPath("/root/_materials/Material/Attribute"))
+        shader_attr1 = UsdShade.Shader(stage.GetPrimAtPath("/root/_materials/Material/Attribute_001"))
+        shader_attr2 = UsdShade.Shader(stage.GetPrimAtPath("/root/_materials/Material/Attribute_002"))
+
+        self.assertEqual(shader_attr.GetIdAttr().Get(), "UsdPrimvarReader_float3")
+        self.assertEqual(shader_attr1.GetIdAttr().Get(), "UsdPrimvarReader_float")
+        self.assertEqual(shader_attr2.GetIdAttr().Get(), "UsdPrimvarReader_vector")
+
+        self.assertEqual(shader_attr.GetInput("varname").Get(), "displayColor")
+        self.assertEqual(shader_attr1.GetInput("varname").Get(), "f_float")
+        self.assertEqual(shader_attr2.GetInput("varname").Get(), "f_vec")
+
+        self.assertEqual(shader_attr.GetOutput("result").GetTypeName().type.typeName, "GfVec3f")
+        self.assertEqual(shader_attr1.GetOutput("result").GetTypeName().type.typeName, "float")
+        self.assertEqual(shader_attr2.GetOutput("result").GetTypeName().type.typeName, "GfVec3f")
 
     def test_export_metaballs(self):
         """Validate correct export of Metaball objects. These are written out as Meshes."""
@@ -975,6 +1001,66 @@ class USDExportTest(AbstractUSDTest):
         weight_samples = anim.GetBlendShapeWeightsAttr().GetTimeSamples()
         self.assertEqual(weight_samples, [1.0, 2.0, 3.0, 4.0, 5.0])
 
+    def test_export_text(self):
+        """Test various forms of Text/Font export."""
+
+        bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_text_test.blend"))
+
+        export_path = str(self.tempdir / "usd_text_test.usda")
+        self.export_and_validate(filepath=export_path, export_animation=True, evaluation_mode="RENDER")
+
+        stats = UsdUtils.ComputeUsdStageStats(export_path)
+        stage = Usd.Stage.Open(export_path)
+
+        # There should be 4 meshes in the output
+        self.assertEqual(stats['primary']['primCountsByType']['Mesh'], 4)
+
+        bboxcache_frame1 = UsdGeom.BBoxCache(1.0, [UsdGeom.Tokens.default_])
+        bboxcache_frame5 = UsdGeom.BBoxCache(5.0, [UsdGeom.Tokens.default_])
+
+        # Static, flat, text
+        mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/root/static/static"))
+        bounds1 = bboxcache_frame1.ComputeWorldBound(mesh.GetPrim())
+        bbox1 = bounds1.GetRange().GetMax() - bounds1.GetRange().GetMin()
+        self.assertEqual(mesh.GetPointsAttr().GetTimeSamples(), [])
+        self.assertEqual(mesh.GetExtentAttr().GetTimeSamples(), [])
+        self.assertTrue(bbox1[0] > 0.0)
+        self.assertTrue(bbox1[1] > 0.0)
+        self.assertAlmostEqual(bbox1[2], 0.0, 5)
+
+        # Dynamic, flat, text
+        mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/root/dynamic/dynamic"))
+        bounds1 = bboxcache_frame1.ComputeWorldBound(mesh.GetPrim())
+        bounds5 = bboxcache_frame5.ComputeWorldBound(mesh.GetPrim())
+        bbox1 = bounds1.GetRange().GetMax() - bounds1.GetRange().GetMin()
+        bbox5 = bounds5.GetRange().GetMax() - bounds5.GetRange().GetMin()
+        self.assertEqual(mesh.GetPointsAttr().GetTimeSamples(), [1.0, 2.0, 3.0, 4.0, 5.0])
+        self.assertEqual(mesh.GetExtentAttr().GetTimeSamples(), [1.0, 2.0, 3.0, 4.0, 5.0])
+        self.assertEqual(bbox1[2], 0.0)
+        self.assertTrue(bbox1[0] < bbox5[0])    # Text grows on x-axis
+        self.assertAlmostEqual(bbox1[1], bbox5[1], 5)
+        self.assertAlmostEqual(bbox1[2], bbox5[2], 5)
+
+        # Static, extruded on Z, text
+        mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/root/extruded/extruded"))
+        bounds1 = bboxcache_frame1.ComputeWorldBound(mesh.GetPrim())
+        bbox1 = bounds1.GetRange().GetMax() - bounds1.GetRange().GetMin()
+        self.assertEqual(mesh.GetPointsAttr().GetTimeSamples(), [])
+        self.assertEqual(mesh.GetExtentAttr().GetTimeSamples(), [])
+        self.assertTrue(bbox1[0] > 0.0)
+        self.assertTrue(bbox1[1] > 0.0)
+        self.assertAlmostEqual(bbox1[2], 0.1, 5)
+
+        # Static, uses depth, text
+        mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/root/has_depth/has_depth"))
+        bounds1 = bboxcache_frame1.ComputeWorldBound(mesh.GetPrim())
+        bbox1 = bounds1.GetRange().GetMax() - bounds1.GetRange().GetMin()
+        self.assertEqual(mesh.GetPointsAttr().GetTimeSamples(), [])
+        self.assertEqual(mesh.GetExtentAttr().GetTimeSamples(), [])
+        self.assertTrue(bbox1[0] > 0.0)
+        self.assertTrue(bbox1[1] > 0.0)
+        self.assertAlmostEqual(bbox1[2], 0.1, 5)
+
     def test_export_volumes(self):
         """Test various combinations of volume export including with all supported volume modifiers."""
 
@@ -1087,7 +1173,7 @@ class USDExportTest(AbstractUSDTest):
     def test_export_orientation(self):
         """Test exporting different orientation configurations."""
 
-        # Using the empty scene is fine for this
+        # Using the empty scene is fine for checking Stage metadata
         bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "empty.blend"))
 
         test_path1 = self.tempdir / "temp_orientation_yup.usda"
@@ -1112,25 +1198,38 @@ class USDExportTest(AbstractUSDTest):
         xf = UsdGeom.Xformable(stage.GetPrimAtPath("/root"))
         self.assertEqual(self.round_vector(xf.GetRotateXYZOp().Get()), [0, 0, 180])
 
+        # Check one final orientation using no /root xform at all (it's a different code path)
+        bpy.ops.mesh.primitive_cube_add()
+
+        test_path3 = self.tempdir / "temp_orientation_non_root.usda"
+        self.export_and_validate(filepath=str(test_path3), convert_orientation=True, root_prim_path="")
+        stage = Usd.Stage.Open(str(test_path3))
+        xf = UsdGeom.Xformable(stage.GetPrimAtPath("/Cube"))
+        self.assertEqual(self.round_vector(xf.GetRotateXYZOp().Get()), [-90, 0, 0])
+
     def test_materialx_network(self):
         """Test exporting that a MaterialX export makes it out alright"""
         bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "usd_materials_export.blend"))
         export_path = self.tempdir / "materialx.usda"
 
         # USD currently has an issue where embedded MaterialX graphs cause validation to fail.
-        # Skip validation and just run a regular export until this is fixed.
+        # Note: We use the below patch for now; keep this in mind if it causes issues in the future.
         # See: https://github.com/PixarAnimationStudios/OpenUSD/pull/3243
-        res = bpy.ops.wm.usd_export(
+        res = self.export_and_validate(
             filepath=str(export_path),
             export_materials=True,
             generate_materialx_network=True,
             evaluation_mode="RENDER",
         )
-        self.assertEqual({'FINISHED'}, res, f"Unable to export to {export_path}")
 
         stage = Usd.Stage.Open(str(export_path))
         material_prim = stage.GetPrimAtPath("/root/_materials/Material")
         self.assertTrue(material_prim, "Could not find Material prim")
+
+        self.assertTrue(material_prim.HasAPI(UsdMtlx.MaterialXConfigAPI))
+        mtlx_config_api = UsdMtlx.MaterialXConfigAPI(material_prim)
+        mtlx_version_attr = mtlx_config_api.GetConfigMtlxVersionAttr()
+        self.assertTrue(mtlx_version_attr, "Could not find mtlx config version attribute")
 
         material = UsdShade.Material(material_prim)
         mtlx_output = material.GetOutput("mtlx:surface")
@@ -1146,7 +1245,7 @@ class USDExportTest(AbstractUSDTest):
         self.assertTrue(shader, "Connected prim is not a shader")
 
         shader_id = shader.GetIdAttr().Get()
-        self.assertEqual(shader_id, "ND_standard_surface_surfaceshader", "Shader is not a Standard Surface")
+        self.assertEqual(shader_id, "ND_open_pbr_surface_surfaceshader", "Shader is not an OpenPBR Surface")
 
     def test_hooks(self):
         """Validate USD Hook integration for both import and export"""
@@ -1319,6 +1418,7 @@ class USDExportTest(AbstractUSDTest):
         """Test specifying stage meters per unit on export."""
         bpy.ops.wm.open_mainfile(filepath=str(self.testdir / "empty.blend"))
 
+        # Check all unit conversions we support
         units = (
             ("mm", 'MILLIMETERS', 0.001), ("cm", 'CENTIMETERS', 0.01), ("km", 'KILOMETERS', 1000),
             ("in", 'INCHES', 0.0254), ("ft", 'FEET', 0.3048), ("yd", 'YARDS', 0.9144),
@@ -1333,9 +1433,26 @@ class USDExportTest(AbstractUSDTest):
             else:
                 self.export_and_validate(filepath=str(export_path), convert_scene_units=unit)
 
-            # Verify that meters per unit were set correctly
+            # Verify that the Stage meters per unit metadata is set correctly
             stage = Usd.Stage.Open(str(export_path))
             self.assertEqual(UsdGeom.GetStageMetersPerUnit(stage), value)
+
+            # Verify that the /root xform has the expected scale (the default case should be empty)
+            xf = UsdGeom.Xformable(stage.GetPrimAtPath("/root"))
+            if name == "default":
+                self.assertFalse(xf.GetScaleOp().GetAttr().IsValid())
+            else:
+                scale = self.round_vector([1.0 / value] * 3)
+                self.assertEqual(self.round_vector(xf.GetScaleOp().Get()), scale)
+
+        # Check one final unit conversion using no /root xform at all (it's a different code path)
+        bpy.ops.mesh.primitive_cube_add()
+
+        export_path = self.tempdir / f"usd_export_units_test_non_root.usda"
+        self.export_and_validate(filepath=str(export_path), convert_scene_units="CENTIMETERS", root_prim_path="")
+        stage = Usd.Stage.Open(str(export_path))
+        xf = UsdGeom.Xformable(stage.GetPrimAtPath("/Cube"))
+        self.assertEqual(self.round_vector(xf.GetScaleOp().Get()), [100, 100, 100])
 
     def test_export_native_instancing_true(self):
         """Test exporting instanced objects to native (scne graph) instances."""

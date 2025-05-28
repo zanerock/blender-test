@@ -85,8 +85,7 @@ static void freeSeqData(TransInfo *t, TransDataContainer *tc, TransCustomData * 
 
   VectorSet<Strip *> dependant;
   dependant.add_multiple(transformed_strips);
-  dependant.remove_if(
-      [&](Strip *strip) { return seq::transform_sequence_can_be_translated(strip); });
+  dependant.remove_if([&](Strip *strip) { return seq::transform_strip_can_be_translated(strip); });
 
   if (seq_transform_check_overlap(transformed_strips)) {
     const bool use_sync_markers = (((SpaceSeq *)t->area->spacedata.first)->flag &
@@ -155,7 +154,7 @@ static void recalcData_sequencer_retiming(TransInfo *t)
       seq::retiming_key_timeline_frame_set(t->scene, strip, key, td2d->loc[0]);
     }
 
-    seq::relations_invalidate_cache_preprocessed(t->scene, strip);
+    seq::relations_invalidate_cache(t->scene, strip);
   }
 
   /* Test overlap, displays red outline. */

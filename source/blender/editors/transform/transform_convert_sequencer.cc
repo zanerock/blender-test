@@ -191,7 +191,7 @@ static TransData *SeqToTransData(Scene *scene,
       break;
   }
 
-  td2d->loc[1] = strip->machine; /* Channel - Y location. */
+  td2d->loc[1] = strip->channel; /* Channel - Y location. */
   td2d->loc[2] = 0.0f;
   td2d->loc2d = nullptr;
 
@@ -365,13 +365,13 @@ enum SeqInputSide {
 
 static Strip *effect_input_get(const Scene *scene, Strip *effect, SeqInputSide side)
 {
-  Strip *input = effect->seq1;
-  if (effect->seq2 && (seq::time_left_handle_frame_get(scene, effect->seq2) -
-                       seq::time_left_handle_frame_get(scene, effect->seq1)) *
-                              side >
-                          0)
+  Strip *input = effect->input1;
+  if (effect->input2 && (seq::time_left_handle_frame_get(scene, effect->input2) -
+                         seq::time_left_handle_frame_get(scene, effect->input1)) *
+                                side >
+                            0)
   {
-    input = effect->seq2;
+    input = effect->input2;
   }
   return input;
 }
@@ -413,9 +413,9 @@ static void query_time_dependent_strips_strips(TransInfo *t,
         continue; /* Strip is already in collection, skip it. */
       }
 
-      /* If both seq1 and seq2 exist, both must be selected. */
-      if (strip->seq1 && time_dependent_strips.contains(strip->seq1)) {
-        if (strip->seq2 && !time_dependent_strips.contains(strip->seq2)) {
+      /* If both input1 and input2 exist, both must be selected. */
+      if (strip->input1 && time_dependent_strips.contains(strip->input1)) {
+        if (strip->input2 && !time_dependent_strips.contains(strip->input2)) {
           continue;
         }
         strip_added = true;
@@ -432,7 +432,7 @@ static void query_time_dependent_strips_strips(TransInfo *t,
   seq::iterator_set_expand(t->scene, seqbase, selected_strips, seq::query_strip_effect_chain);
   for (Strip *strip : selected_strips) {
     /* Check only 2 input effects. */
-    if (strip->seq1 == nullptr || strip->seq2 == nullptr) {
+    if (strip->input1 == nullptr || strip->input2 == nullptr) {
       continue;
     }
 
@@ -447,7 +447,7 @@ static void query_time_dependent_strips_strips(TransInfo *t,
 
   /* Remove all non-effects. */
   time_dependent_strips.remove_if(
-      [&](Strip *strip) { return seq::transform_sequence_can_be_translated(strip); });
+      [&](Strip *strip) { return seq::transform_strip_can_be_translated(strip); });
 }
 
 static void createTransSeqData(bContext * /*C*/, TransInfo *t)
@@ -510,8 +510,8 @@ static void createTransSeqData(bContext * /*C*/, TransInfo *t)
   ts->selection_channel_range_min = seq::MAX_CHANNELS + 1;
   LISTBASE_FOREACH (Strip *, strip, seq::active_seqbase_get(ed)) {
     if ((strip->flag & SELECT) != 0) {
-      ts->selection_channel_range_min = min_ii(ts->selection_channel_range_min, strip->machine);
-      ts->selection_channel_range_max = max_ii(ts->selection_channel_range_max, strip->machine);
+      ts->selection_channel_range_min = min_ii(ts->selection_channel_range_min, strip->channel);
+      ts->selection_channel_range_max = max_ii(ts->selection_channel_range_max, strip->channel);
     }
   }
 
@@ -590,9 +590,9 @@ static void flushTransSeq(TransInfo *t)
 
     switch (tdsq->sel_flag) {
       case SELECT: {
-        if (seq::transform_sequence_can_be_translated(strip)) {
+        if (seq::transform_strip_can_be_translated(strip)) {
           offset = new_frame - tdsq->start_offset - strip->start;
-          seq::transform_translate_sequence(scene, strip, offset);
+          seq::transform_translate_strip(scene, strip, offset);
           if (abs(offset) > abs(max_offset)) {
             max_offset = offset;
           }
@@ -665,7 +665,7 @@ static void recalcData_sequencer(TransInfo *t)
     Strip *strip = tdsq->strip;
 
     if (strip != strip_prev) {
-      seq::relations_invalidate_cache_composite(t->scene, strip);
+      seq::relations_invalidate_cache(t->scene, strip);
     }
 
     strip_prev = strip;

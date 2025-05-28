@@ -55,7 +55,7 @@ namespace detail {
 template<typename T> static bool item_is_type(const bNodeTreeInterfaceItem &item)
 {
   bool match = false;
-  switch (item.item_type) {
+  switch (NodeTreeInterfaceItemType(item.item_type)) {
     case NODE_INTERFACE_SOCKET: {
       match |= std::is_same_v<T, bNodeTreeInterfaceSocket>;
       break;
@@ -146,7 +146,13 @@ static const bNodeSocketStaticTypeInfo node_socket_subtypes[] = {
     {"NodeSocketBool", "NodeTreeInterfaceSocketBool", SOCK_BOOLEAN, PROP_NONE},
     {"NodeSocketRotation", "NodeTreeInterfaceSocketRotation", SOCK_ROTATION, PROP_NONE},
     {"NodeSocketMatrix", "NodeTreeInterfaceSocketMatrix", SOCK_MATRIX, PROP_NONE},
+
     {"NodeSocketVector", "NodeTreeInterfaceSocketVector", SOCK_VECTOR, PROP_NONE},
+    {"NodeSocketVectorFactor", "NodeTreeInterfaceSocketVectorFactor", SOCK_VECTOR, PROP_FACTOR},
+    {"NodeSocketVectorPercentage",
+     "NodeTreeInterfaceSocketVectorPercentage",
+     SOCK_VECTOR,
+     PROP_PERCENTAGE},
     {"NodeSocketVectorTranslation",
      "NodeTreeInterfaceSocketVectorTranslation",
      SOCK_VECTOR,
@@ -165,6 +171,63 @@ static const bNodeSocketStaticTypeInfo node_socket_subtypes[] = {
      PROP_ACCELERATION},
     {"NodeSocketVectorEuler", "NodeTreeInterfaceSocketVectorEuler", SOCK_VECTOR, PROP_EULER},
     {"NodeSocketVectorXYZ", "NodeTreeInterfaceSocketVectorXYZ", SOCK_VECTOR, PROP_XYZ},
+
+    {"NodeSocketVector2D", "NodeTreeInterfaceSocketVector2D", SOCK_VECTOR, PROP_NONE},
+    {"NodeSocketVectorFactor2D",
+     "NodeTreeInterfaceSocketVectorFactor2D",
+     SOCK_VECTOR,
+     PROP_FACTOR},
+    {"NodeSocketVectorPercentage2D",
+     "NodeTreeInterfaceSocketVectorPercentage2D",
+     SOCK_VECTOR,
+     PROP_PERCENTAGE},
+    {"NodeSocketVectorTranslation2D",
+     "NodeTreeInterfaceSocketVectorTranslation2D",
+     SOCK_VECTOR,
+     PROP_TRANSLATION},
+    {"NodeSocketVectorDirection2D",
+     "NodeTreeInterfaceSocketVectorDirection2D",
+     SOCK_VECTOR,
+     PROP_DIRECTION},
+    {"NodeSocketVectorVelocity2D",
+     "NodeTreeInterfaceSocketVectorVelocity2D",
+     SOCK_VECTOR,
+     PROP_VELOCITY},
+    {"NodeSocketVectorAcceleration2D",
+     "NodeTreeInterfaceSocketVectorAcceleration2D",
+     SOCK_VECTOR,
+     PROP_ACCELERATION},
+    {"NodeSocketVectorEuler2D", "NodeTreeInterfaceSocketVectorEuler2D", SOCK_VECTOR, PROP_EULER},
+    {"NodeSocketVectorXYZ2D", "NodeTreeInterfaceSocketVectorXYZ2D", SOCK_VECTOR, PROP_XYZ},
+
+    {"NodeSocketVector4D", "NodeTreeInterfaceSocketVector4D", SOCK_VECTOR, PROP_NONE},
+    {"NodeSocketVectorFactor4D",
+     "NodeTreeInterfaceSocketVectorFactor4D",
+     SOCK_VECTOR,
+     PROP_FACTOR},
+    {"NodeSocketVectorPercentage4D",
+     "NodeTreeInterfaceSocketVectorPercentage4D",
+     SOCK_VECTOR,
+     PROP_PERCENTAGE},
+    {"NodeSocketVectorTranslation4D",
+     "NodeTreeInterfaceSocketVectorTranslation4D",
+     SOCK_VECTOR,
+     PROP_TRANSLATION},
+    {"NodeSocketVectorDirection4D",
+     "NodeTreeInterfaceSocketVectorDirection4D",
+     SOCK_VECTOR,
+     PROP_DIRECTION},
+    {"NodeSocketVectorVelocity4D",
+     "NodeTreeInterfaceSocketVectorVelocity4D",
+     SOCK_VECTOR,
+     PROP_VELOCITY},
+    {"NodeSocketVectorAcceleration4D",
+     "NodeTreeInterfaceSocketVectorAcceleration4D",
+     SOCK_VECTOR,
+     PROP_ACCELERATION},
+    {"NodeSocketVectorEuler4D", "NodeTreeInterfaceSocketVectorEuler4D", SOCK_VECTOR, PROP_EULER},
+    {"NodeSocketVectorXYZ4D", "NodeTreeInterfaceSocketVectorXYZ4D", SOCK_VECTOR, PROP_XYZ},
+
     {"NodeSocketColor", "NodeTreeInterfaceSocketColor", SOCK_RGBA, PROP_NONE},
     {"NodeSocketString", "NodeTreeInterfaceSocketString", SOCK_STRING, PROP_NONE},
     {"NodeSocketStringFilePath",
@@ -314,6 +377,18 @@ inline bNodeTreeInterfaceSocket *add_interface_socket_from_node(bNodeTree &ntree
   return add_interface_socket_from_node(
       ntree, from_node, from_sock, from_sock.typeinfo->idname, from_sock.name);
 }
+
+/**
+ * Reference to a node tree's interface item.
+ *
+ * Used by the node interface drag controller to reorder interface items and
+ * the node space drop-boxes to drop Group Input/Output nodes into the node
+ * editor with selected sockets.
+ */
+struct bNodeTreeInterfaceItemReference {
+  bNodeTree *tree;
+  bNodeTreeInterfaceItem *item;
+};
 
 }  // namespace node_interface
 

@@ -51,7 +51,7 @@ bool retiming_keys_can_be_displayed(const SpaceSeq *sseq)
 static float strip_y_rescale(const Strip *strip, const float y_value)
 {
   const float y_range = STRIP_OFSTOP - STRIP_OFSBOTTOM;
-  return (y_value * y_range) + strip->machine + STRIP_OFSBOTTOM;
+  return (y_value * y_range) + strip->channel + STRIP_OFSBOTTOM;
 }
 
 static float key_x_get(const Scene *scene, const Strip *strip, const SeqRetimingKey *key)
@@ -208,7 +208,7 @@ static SeqRetimingKey *mouse_over_key_get_from_strip(const bContext *C,
   return best_key;
 }
 
-SeqRetimingKey *retiming_mouseover_key_get(const bContext *C, const int mval[2], Strip **r_seq)
+SeqRetimingKey *retiming_mouseover_key_get(const bContext *C, const int mval[2], Strip **r_strip)
 {
   const Scene *scene = CTX_data_scene(C);
   const View2D *v2d = UI_view2d_fromcontext(C);
@@ -218,8 +218,8 @@ SeqRetimingKey *retiming_mouseover_key_get(const bContext *C, const int mval[2],
       continue;
     }
 
-    if (r_seq != nullptr) {
-      *r_seq = strip;
+    if (r_strip != nullptr) {
+      *r_strip = strip;
     }
 
     SeqRetimingKey *key = mouse_over_key_get_from_strip(C, strip, mval);

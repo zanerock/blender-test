@@ -19,6 +19,7 @@
 
 #include "transform.hh"
 #include "transform_convert.hh"
+#include "transform_snap.hh"
 
 /* -------------------------------------------------------------------- */
 /** \name Grease Pencil Transform Creation
@@ -181,7 +182,7 @@ static void createTransGreasePencilVerts(bContext *C, TransInfo *t)
     if (tc.data_len == 0) {
       continue;
     }
-    Object *object_eval = DEG_get_evaluated_object(depsgraph, tc.obedit);
+    Object *object_eval = DEG_get_evaluated(depsgraph, tc.obedit);
     GreasePencil &grease_pencil = *static_cast<GreasePencil *>(tc.obedit->data);
     Span<const bke::greasepencil::Layer *> layers = grease_pencil.layers();
 
@@ -232,6 +233,10 @@ static void createTransGreasePencilVerts(bContext *C, TransInfo *t)
 
 static void recalcData_grease_pencil(TransInfo *t)
 {
+  if (t->state != TRANS_CANCEL) {
+    transform_snap_project_individual_apply(t);
+  }
+
   bContext *C = t->context;
   Scene *scene = CTX_data_scene(C);
 

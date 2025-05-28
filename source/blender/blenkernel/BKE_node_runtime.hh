@@ -9,12 +9,13 @@
 #pragma once
 
 #include <memory>
-#include <mutex>
 
 #include "BLI_cache_mutex.hh"
 #include "BLI_math_vector_types.hh"
 #include "BLI_multi_value_map.hh"
+#include "BLI_mutex.hh"
 #include "BLI_set.hh"
+#include "BLI_struct_equality_utils.hh"
 #include "BLI_utility_mixins.hh"
 #include "BLI_vector.hh"
 #include "BLI_vector_set.hh"
@@ -23,6 +24,8 @@
 
 #include "BKE_node.hh"
 #include "BKE_node_tree_interface.hh"
+
+#include "NOD_socket_usage_inference_fwd.hh"
 
 struct bNode;
 struct bNodeSocket;
@@ -33,6 +36,7 @@ struct FieldInferencingInterface;
 struct GeometryNodesEvalDependencies;
 class NodeDeclaration;
 struct GeometryNodesLazyFunctionGraphInfo;
+struct StructureTypeInterface;
 namespace anonymous_attribute_lifetime {
 }
 namespace aal = anonymous_attribute_lifetime;
@@ -69,8 +73,36 @@ struct NodeLinkError {
   std::string tooltip;
 };
 
+/**
+ * Utility to weakly reference a link. Weak references are safer because they avoid dangling
+ * references which can easily happen temporarily when editing the node tree.
+ */
+struct NodeLinkKey {
+ private:
+  int to_node_id_;
+  int input_socket_index_;
+  int input_link_index_;
+
+ public:
+  /** Assumes that the topology cache is up to date. */
+  explicit NodeLinkKey(const bNodeLink &link);
+
+  bNodeLink *try_find(bNodeTree &ntree) const;
+  const bNodeLink *try_find(const bNodeTree &ntree) const;
+
+  uint64_t hash() const
+  {
+    return get_default_hash(this->to_node_id_, this->input_socket_index_, this->input_link_index_);
+  }
+
+  BLI_STRUCT_EQUALITY_OPERATORS_3(NodeLinkKey,
+                                  to_node_id_,
+                                  input_socket_index_,
+                                  input_link_index_);
+};
+
 struct LoggedZoneGraphs {
-  std::mutex mutex;
+  Mutex mutex;
   /**
    * Technically there can be more than one graph per zone because the zone can be invoked in
    * different contexts. However, for the purpose of logging here, we only need one at a time
@@ -144,13 +176,14 @@ class bNodeTreeRuntime : NonCopyable, NonMovable {
   /** Information about usage of anonymous attributes within the group. */
   std::unique_ptr<node_tree_reference_lifetimes::ReferenceLifetimesInfo> reference_lifetimes_info;
   std::unique_ptr<nodes::gizmos::TreeGizmoPropagation> gizmo_propagation;
+  std::unique_ptr<nodes::StructureTypeInterface> structure_type_interface;
 
   /**
    * A bool for each input socket (indexed by `index_in_all_inputs()`) that indicates whether this
    * socket is used by the node it belongs to. Sockets for which this is false may e.g. be grayed
    * out.
    */
-  blender::Array<bool> inferenced_input_socket_usage;
+  blender::Array<nodes::socket_usage_inference::SocketUsage> inferenced_input_socket_usage;
   CacheMutex inferenced_input_socket_usage_mutex;
 
   /**
@@ -158,16 +191,15 @@ class bNodeTreeRuntime : NonCopyable, NonMovable {
    * evaluate the node group. Caching it here allows us to reuse the preprocessed node tree in case
    * its used multiple times.
    */
-  std::mutex geometry_nodes_lazy_function_graph_info_mutex;
+  Mutex geometry_nodes_lazy_function_graph_info_mutex;
   std::unique_ptr<nodes::GeometryNodesLazyFunctionGraphInfo>
       geometry_nodes_lazy_function_graph_info;
 
   /**
-   * Stores information about invalid links. This information is then displayed to the user. The
-   * key of the map is the node identifier. The data is stored per target-node because we want to
-   * display the error information there.
+   * Stores information about invalid links. This information is then displayed to the user. This
+   * is updated in #update_link_validation and is valid during drawing code.
    */
-  MultiValueMap<int, NodeLinkError> link_errors_by_target_node;
+  MultiValueMap<NodeLinkKey, NodeLinkError> link_errors;
 
   /**
    * Protects access to all topology cache variables below. This is necessary so that the cache can
@@ -182,7 +214,14 @@ class bNodeTreeRuntime : NonCopyable, NonMovable {
   mutable std::atomic<int> allow_use_dirty_topology_cache = 0;
 
   CacheMutex tree_zones_cache_mutex;
-  std::unique_ptr<bNodeTreeZones> tree_zones;
+  std::shared_ptr<bNodeTreeZones> tree_zones;
+
+  /**
+   * Same as #tree_zones, but may not be valid anymore. This is used for drawing errors when the
+   * zone detection failed.
+   */
+  std::shared_ptr<bNodeTreeZones> last_valid_zones;
+  Set<int> invalid_zone_output_node_ids;
 
   /**
    * The stored sockets are drawn using a special link to indicate that there is a gizmo. This is
@@ -421,6 +460,11 @@ inline bool topology_cache_is_available(const bNodeSocket &socket)
 namespace node_field_inferencing {
 bool update_field_inferencing(const bNodeTree &tree);
 }
+
+namespace node_structure_type_inferencing {
+bool update_structure_type_interface(bNodeTree &tree);
+}
+
 }  // namespace blender::bke
 
 /* -------------------------------------------------------------------- */
@@ -862,16 +906,6 @@ inline bool bNode::is_dangling_reroute() const
   return this->runtime->is_dangling_reroute;
 }
 
-inline bool bNode::is_socket_drawn(const bNodeSocket &socket) const
-{
-  return socket.is_visible();
-}
-
-inline bool bNode::is_socket_icon_drawn(const bNodeSocket &socket) const
-{
-  return socket.is_visible() && (this->flag & NODE_HIDDEN || !socket.is_panel_collapsed());
-}
-
 inline blender::Span<bNode *> bNode::direct_children_in_frame() const
 {
   BLI_assert(blender::bke::node_tree_runtime::topology_cache_is_available(*this));
@@ -947,9 +981,18 @@ inline int bNodeSocket::index_in_all_outputs() const
   return this->runtime->index_in_inout_sockets;
 }
 
-inline bool bNodeSocket::is_hidden() const
+inline bool bNodeSocket::is_user_hidden() const
 {
   return (this->flag & SOCK_HIDDEN) != 0;
+}
+
+inline bool bNodeSocket::is_inactive() const
+{
+  /* Gray out inputs that do not affect the output of the node currently.
+   * Don't gray out any inputs if the node has no outputs (in which case no input can affect the
+   * output). Otherwise, viewer node inputs would be inactive. */
+  return this->is_input() && !this->affects_node_output() &&
+         !this->owner_node().output_sockets().is_empty();
 }
 
 inline bool bNodeSocket::is_available() const
@@ -964,7 +1007,14 @@ inline bool bNodeSocket::is_panel_collapsed() const
 
 inline bool bNodeSocket::is_visible() const
 {
-  return !this->is_hidden() && this->is_available();
+  return !this->is_user_hidden() && this->is_available() &&
+         (this->is_output() || this->inferred_input_socket_visibility());
+}
+
+inline bool bNodeSocket::is_icon_visible() const
+{
+  return this->is_visible() &&
+         (this->owner_node().flag & NODE_HIDDEN || !this->is_panel_collapsed());
 }
 
 inline bNode &bNodeSocket::owner_node()

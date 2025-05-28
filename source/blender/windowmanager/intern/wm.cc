@@ -172,11 +172,6 @@ static void window_manager_blend_read_data(BlendDataReader *reader, ID *id)
     win->event_last_handled = nullptr;
     win->cursor_keymap_status = nullptr;
 
-    /* Some files could be saved with ime_data still present.
-     * See https://projects.blender.org/blender/blender/issues/136829 */
-    win->ime_data = nullptr;
-    win->ime_data_is_composing = false;
-
     BLI_listbase_clear(&win->handlers);
     BLI_listbase_clear(&win->modalhandlers);
     BLI_listbase_clear(&win->gesture);
@@ -245,7 +240,7 @@ static void window_manager_blend_read_after_liblink(BlendLibReader *reader, ID *
 }
 
 IDTypeInfo IDType_ID_WM = {
-    /*id_code*/ ID_WM,
+    /*id_code*/ wmWindowManager::id_type,
     /*id_filter*/ FILTER_ID_WM,
     /*dependencies_id_types*/ FILTER_ID_SCE | FILTER_ID_WS,
     /*main_listbase_index*/ INDEX_ID_WM,

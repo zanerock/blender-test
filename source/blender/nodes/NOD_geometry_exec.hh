@@ -59,7 +59,6 @@ using fn::FieldInput;
 using fn::FieldOperation;
 using fn::GField;
 using geo_eval_log::NamedAttributeUsage;
-using geo_eval_log::NodeWarningType;
 
 class NodeAttributeFilter : public AttributeFilter {
  private:
@@ -261,14 +260,14 @@ class GeoNodeExecParams {
 
   Main *bmain() const;
 
-  GeoNodesLFUserData *user_data() const
+  GeoNodesUserData *user_data() const
   {
-    return static_cast<GeoNodesLFUserData *>(lf_context_.user_data);
+    return static_cast<GeoNodesUserData *>(lf_context_.user_data);
   }
 
-  GeoNodesLFLocalUserData *local_user_data() const
+  GeoNodesLocalUserData *local_user_data() const
   {
-    return static_cast<GeoNodesLFLocalUserData *>(lf_context_.local_user_data);
+    return static_cast<GeoNodesLocalUserData *>(lf_context_.local_user_data);
   }
 
   /**

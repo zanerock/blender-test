@@ -20,7 +20,6 @@ class VKVertexBuffer : public VertBuf {
   /** When a vertex buffer is used as a UNIFORM_TEXEL_BUFFER the buffer requires a buffer view. */
   VkBufferView vk_buffer_view_ = VK_NULL_HANDLE;
 
-  VertexFormatConverter vertex_format_converter;
   bool data_uploaded_ = false;
 
  public:
@@ -45,8 +44,6 @@ class VKVertexBuffer : public VertBuf {
     return vk_buffer_view_;
   }
 
-  void device_format_ensure();
-  const GPUVertFormat &device_format_get() const;
   void ensure_updated();
   void ensure_buffer_view();
 
@@ -55,7 +52,6 @@ class VKVertexBuffer : public VertBuf {
   void resize_data() override;
   void release_data() override;
   void upload_data() override;
-  void duplicate_data(VertBuf *dst) override;
 
  private:
   void allocate();

@@ -734,7 +734,7 @@ class ASSETBROWSER_PT_import_settings(asset_utils.AssetBrowserPanel, Panel):
 
         col = layout.column(heading="Instance Collections")
         col.prop(params, "instance_collections_on_link", text="When Linking")
-        col.prop(params, "instance_collections_on_append", text="When Appendind")
+        col.prop(params, "instance_collections_on_append", text="When Appending")
 
 
 class ASSETBROWSER_PT_metadata(asset_utils.AssetBrowserPanel, Panel):
@@ -823,6 +823,7 @@ class ASSETBROWSER_MT_metadata_preview_menu(Menu):
         layout.operator("ed.lib_id_generate_preview_from_object", text="Render Active Object")
         layout.separator()
         layout.operator("ed.lib_id_remove_preview")
+        layout.operator("asset.screenshot_preview")
 
 
 class ASSETBROWSER_PT_metadata_tags(asset_utils.AssetMetaDataPanel, Panel):

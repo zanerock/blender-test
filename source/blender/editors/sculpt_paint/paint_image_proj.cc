@@ -3759,7 +3759,7 @@ static void proj_paint_state_viewport_init(ProjPaintState *ps, const char symmet
       invert_m4_m4(viewinv, viewmat);
     }
     else if (ps->source == PROJ_SRC_IMAGE_CAM) {
-      Object *cam_ob_eval = DEG_get_evaluated_object(ps->depsgraph, ps->scene->camera);
+      Object *cam_ob_eval = DEG_get_evaluated(ps->depsgraph, ps->scene->camera);
       CameraParams params;
 
       /* viewmat & viewinv */
@@ -4043,7 +4043,7 @@ static bool proj_paint_state_mesh_eval_init(const bContext *C, ProjPaintState *p
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *ob = ps->ob;
 
-  const Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  const Object *ob_eval = DEG_get_evaluated(depsgraph, ob);
   ps->mesh_eval = BKE_object_get_evaluated_mesh(ob_eval);
   if (!ps->mesh_eval) {
     return false;
@@ -6223,7 +6223,7 @@ void PAINT_OT_project_image(wmOperatorType *ot)
   ot->idname = "PAINT_OT_project_image";
   ot->description = "Project an edited render from the active camera back onto the object";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = WM_enum_search_invoke;
   ot->exec = texture_paint_camera_project_exec;
 
@@ -6359,7 +6359,7 @@ void PAINT_OT_image_from_view(wmOperatorType *ot)
   ot->idname = "PAINT_OT_image_from_view";
   ot->description = "Make an image from biggest 3D view for reprojection";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = texture_paint_image_from_view_exec;
   ot->poll = texture_paint_image_from_view_poll;
 
@@ -6870,32 +6870,32 @@ static void texture_paint_add_texture_paint_slot_ui(bContext *C, wmOperator *op)
 
   if (ob->mode == OB_MODE_SCULPT) {
     slot_type = (ePaintCanvasSource)RNA_enum_get(op->ptr, "slot_type");
-    uiItemR(layout, op->ptr, "slot_type", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
+    layout->prop(op->ptr, "slot_type", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
   }
 
-  uiItemR(layout, op->ptr, "name", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(op->ptr, "name", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 
   switch (slot_type) {
     case PAINT_CANVAS_SOURCE_IMAGE: {
       uiLayout *col = &layout->column(true);
-      uiItemR(col, op->ptr, "width", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-      uiItemR(col, op->ptr, "height", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+      col->prop(op->ptr, "width", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+      col->prop(op->ptr, "height", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 
-      uiItemR(layout, op->ptr, "alpha", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-      uiItemR(layout, op->ptr, "generated_type", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-      uiItemR(layout, op->ptr, "float", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+      layout->prop(op->ptr, "alpha", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+      layout->prop(op->ptr, "generated_type", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+      layout->prop(op->ptr, "float", UI_ITEM_NONE, std::nullopt, ICON_NONE);
       break;
     }
     case PAINT_CANVAS_SOURCE_COLOR_ATTRIBUTE:
-      uiItemR(layout, op->ptr, "domain", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
-      uiItemR(layout, op->ptr, "data_type", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
+      layout->prop(op->ptr, "domain", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
+      layout->prop(op->ptr, "data_type", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
       break;
     case PAINT_CANVAS_SOURCE_MATERIAL:
       BLI_assert_unreachable();
       break;
   }
 
-  uiItemR(layout, op->ptr, "color", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(op->ptr, "color", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 }
 
 #define IMA_DEF_NAME N_("Untitled")
@@ -6917,7 +6917,7 @@ void PAINT_OT_add_texture_paint_slot(wmOperatorType *ot)
   ot->description = "Add a paint slot";
   ot->idname = "PAINT_OT_add_texture_paint_slot";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = texture_paint_add_texture_paint_slot_invoke;
   ot->exec = texture_paint_add_texture_paint_slot_exec;
   ot->poll = ED_operator_object_active_editable_mesh;
@@ -7019,7 +7019,7 @@ void PAINT_OT_add_simple_uvs(wmOperatorType *ot)
   ot->description = "Add cube map UVs on mesh";
   ot->idname = "PAINT_OT_add_simple_uvs";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = add_simple_uvs_exec;
   ot->poll = add_simple_uvs_poll;
 

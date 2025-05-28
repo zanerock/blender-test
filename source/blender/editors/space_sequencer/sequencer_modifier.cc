@@ -44,7 +44,7 @@ static wmOperatorStatus strip_modifier_add_exec(bContext *C, wmOperator *op)
 
   seq::modifier_new(strip, nullptr, type);
 
-  seq::relations_invalidate_cache_preprocessed(scene, strip);
+  seq::relations_invalidate_cache(scene, strip);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -78,7 +78,7 @@ void SEQUENCER_OT_strip_modifier_add(wmOperatorType *ot)
   ot->idname = "SEQUENCER_OT_strip_modifier_add";
   ot->description = "Add a modifier to the strip";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = strip_modifier_add_exec;
   ot->poll = sequencer_strip_editable_poll;
 
@@ -102,7 +102,7 @@ static wmOperatorStatus strip_modifier_remove_exec(bContext *C, wmOperator *op)
   Scene *scene = CTX_data_scene(C);
   Strip *strip = seq::select_active_get(scene);
   char name[MAX_NAME];
-  SequenceModifierData *smd;
+  StripModifierData *smd;
 
   RNA_string_get(op->ptr, "name", name);
 
@@ -118,7 +118,7 @@ static wmOperatorStatus strip_modifier_remove_exec(bContext *C, wmOperator *op)
     DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS | ID_RECALC_AUDIO);
   }
   else {
-    seq::relations_invalidate_cache_preprocessed(scene, strip);
+    seq::relations_invalidate_cache(scene, strip);
   }
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
@@ -134,7 +134,7 @@ void SEQUENCER_OT_strip_modifier_remove(wmOperatorType *ot)
   ot->idname = "SEQUENCER_OT_strip_modifier_remove";
   ot->description = "Remove a modifier from the strip";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = strip_modifier_remove_exec;
   ot->poll = sequencer_strip_editable_poll;
 
@@ -163,7 +163,7 @@ static wmOperatorStatus strip_modifier_move_exec(bContext *C, wmOperator *op)
   Strip *strip = seq::select_active_get(scene);
   char name[MAX_NAME];
   int direction;
-  SequenceModifierData *smd;
+  StripModifierData *smd;
 
   RNA_string_get(op->ptr, "name", name);
   direction = RNA_enum_get(op->ptr, "direction");
@@ -190,7 +190,7 @@ static wmOperatorStatus strip_modifier_move_exec(bContext *C, wmOperator *op)
     DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS | ID_RECALC_AUDIO);
   }
   else {
-    seq::relations_invalidate_cache_preprocessed(scene, strip);
+    seq::relations_invalidate_cache(scene, strip);
   }
 
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
@@ -213,7 +213,7 @@ void SEQUENCER_OT_strip_modifier_move(wmOperatorType *ot)
   ot->idname = "SEQUENCER_OT_strip_modifier_move";
   ot->description = "Move modifier up and down in the stack";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = strip_modifier_move_exec;
   ot->poll = sequencer_strip_editable_poll;
 
@@ -266,8 +266,8 @@ static wmOperatorStatus strip_modifier_copy_exec(bContext *C, wmOperator *op)
 
       if (type == SEQ_MODIFIER_COPY_REPLACE) {
         if (strip_iter->modifiers.first) {
-          SequenceModifierData *smd_tmp,
-              *smd = static_cast<SequenceModifierData *>(strip_iter->modifiers.first);
+          StripModifierData *smd_tmp,
+              *smd = static_cast<StripModifierData *>(strip_iter->modifiers.first);
           while (smd) {
             smd_tmp = smd->next;
             BLI_remlink(&strip_iter->modifiers, smd);
@@ -286,7 +286,7 @@ static wmOperatorStatus strip_modifier_copy_exec(bContext *C, wmOperator *op)
     DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS | ID_RECALC_AUDIO);
   }
   else {
-    seq::relations_invalidate_cache_preprocessed(scene, strip);
+    seq::relations_invalidate_cache(scene, strip);
   }
 
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
@@ -311,7 +311,7 @@ void SEQUENCER_OT_strip_modifier_copy(wmOperatorType *ot)
   ot->idname = "SEQUENCER_OT_strip_modifier_copy";
   ot->description = "Copy modifiers of the active strip to all selected strips";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = WM_menu_invoke;
   ot->exec = strip_modifier_copy_exec;
   ot->poll = sequencer_strip_editable_poll;
@@ -333,7 +333,7 @@ static wmOperatorStatus strip_modifier_equalizer_redefine_exec(bContext *C, wmOp
 {
   Scene *scene = CTX_data_scene(C);
   Strip *strip = seq::select_active_get(scene);
-  SequenceModifierData *smd;
+  StripModifierData *smd;
   char name[MAX_NAME];
   RNA_string_get(op->ptr, "name", name);
   int number = RNA_enum_get(op->ptr, "graphs");
@@ -345,7 +345,7 @@ static wmOperatorStatus strip_modifier_equalizer_redefine_exec(bContext *C, wmOp
 
   seq::sound_equalizermodifier_set_graphs((SoundEqualizerModifierData *)smd, number);
 
-  seq::relations_invalidate_cache_preprocessed(scene, strip);
+  seq::relations_invalidate_cache(scene, strip);
   WM_event_add_notifier(C, NC_SCENE | ND_SEQUENCER, scene);
 
   return OPERATOR_FINISHED;
@@ -367,7 +367,7 @@ void SEQUENCER_OT_strip_modifier_equalizer_redefine(wmOperatorType *ot)
   ot->idname = "SEQUENCER_OT_strip_modifier_equalizer_redefine";
   ot->description = "Redefine equalizer graphs";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = strip_modifier_equalizer_redefine_exec;
   ot->poll = sequencer_strip_editable_poll;
 

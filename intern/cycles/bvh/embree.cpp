@@ -18,11 +18,7 @@
 
 #ifdef WITH_EMBREE
 
-#  if EMBREE_MAJOR_VERSION >= 4
-#    include <embree4/rtcore_geometry.h>
-#  else
-#    include <embree3/rtcore_geometry.h>
-#  endif
+#  include <embree4/rtcore_geometry.h>
 
 #  include "bvh/embree.h"
 
@@ -34,10 +30,6 @@
 #  include "util/log.h"
 #  include "util/progress.h"
 #  include "util/stats.h"
-
-#  if EMBREE_MAJOR_VERSION < 4
-#    include "kernel/device/cpu/bvh.h"
-#  endif
 
 CCL_NAMESPACE_BEGIN
 
@@ -136,11 +128,8 @@ void BVHEmbree::build(Progress &progress,
   scene = rtcNewScene(rtc_device);
   const RTCSceneFlags scene_flags = (dynamic ? RTC_SCENE_FLAG_DYNAMIC : RTC_SCENE_FLAG_NONE) |
                                     (compact ? RTC_SCENE_FLAG_COMPACT : RTC_SCENE_FLAG_NONE) |
-                                    RTC_SCENE_FLAG_ROBUST
-#  if EMBREE_MAJOR_VERSION >= 4
-                                    | RTC_SCENE_FLAG_FILTER_FUNCTION_IN_ARGUMENTS
-#  endif
-      ;
+                                    RTC_SCENE_FLAG_ROBUST |
+                                    RTC_SCENE_FLAG_FILTER_FUNCTION_IN_ARGUMENTS;
   rtcSetSceneFlags(scene, scene_flags);
   build_quality = dynamic ? RTC_BUILD_QUALITY_LOW :
                             (params.use_spatial_split ? RTC_BUILD_QUALITY_HIGH :
@@ -289,11 +278,16 @@ void BVHEmbree::add_instance(Object *ob, const int i)
         geom_id, 0, RTC_FORMAT_FLOAT3X4_ROW_MAJOR, (const float *)&ob->get_tfm());
   }
 
-  rtcSetGeometryUserData(geom_id, (void *)instance_bvh->scene);
-  rtcSetGeometryMask(geom_id, ob->visibility_for_tracing());
-#  if EMBREE_MAJOR_VERSION >= 4
-  rtcSetGeometryEnableFilterFunctionFromArguments(geom_id, true);
+  rtcSetGeometryUserData(geom_id,
+#  if RTC_VERSION >= 40400
+                         (void *)rtcGetSceneTraversable(instance_bvh->scene)
+#  else
+                         (void *)instance_bvh->scene
 #  endif
+  );
+
+  rtcSetGeometryMask(geom_id, ob->visibility_for_tracing());
+  rtcSetGeometryEnableFilterFunctionFromArguments(geom_id, true);
 
   rtcCommitGeometry(geom_id);
   rtcAttachGeometryByID(scene, geom_id, i * 2);
@@ -338,8 +332,24 @@ void BVHEmbree::add_triangles(const Object *ob, const Mesh *mesh, const int i)
      * happen on GPU, and we cannot use standard host pointers at this point. So instead
      * of making a shared geometry buffer - a new Embree buffer will be created and data
      * will be copied. */
-    int *triangles_buffer = (int *)rtcSetNewGeometryBuffer(
-        geom_id, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT3, sizeof(int) * 3, num_triangles);
+    int *triangles_buffer = nullptr;
+#  if RTC_VERSION >= 40400
+    rtcSetNewGeometryBufferHostDevice(
+#  else
+    triangles_buffer = (int *)rtcSetNewGeometryBuffer(
+#  endif
+        geom_id,
+        RTC_BUFFER_TYPE_INDEX,
+        0,
+        RTC_FORMAT_UINT3,
+        sizeof(int) * 3,
+        num_triangles
+#  if RTC_VERSION >= 40400
+        ,
+        (void **)(&triangles_buffer),
+        nullptr
+#  endif
+    );
     assert(triangles_buffer);
     if (triangles_buffer) {
       static_assert(sizeof(int) == sizeof(uint));
@@ -350,12 +360,7 @@ void BVHEmbree::add_triangles(const Object *ob, const Mesh *mesh, const int i)
 
   rtcSetGeometryUserData(geom_id, (void *)prim_offset);
   rtcSetGeometryMask(geom_id, ob->visibility_for_tracing());
-#  if EMBREE_MAJOR_VERSION >= 4
   rtcSetGeometryEnableFilterFunctionFromArguments(geom_id, true);
-#  else
-  rtcSetGeometryOccludedFilterFunction(geom_id, kernel_embree_filter_occluded_func);
-  rtcSetGeometryIntersectFilterFunction(geom_id, kernel_embree_filter_intersection_func);
-#  endif
 
   rtcCommitGeometry(geom_id);
   rtcAttachGeometryByID(scene, geom_id, i * 2);
@@ -415,13 +420,24 @@ void BVHEmbree::set_tri_vertex_buffer(RTCGeometry geom_id, const Mesh *mesh, con
         /* As float3 is packed on GPU side, we map it to packed_float3. */
         /* There is no need for additional padding in rtcSetNewGeometryBuffer since Embree 3.6:
          * "Fixed automatic vertex buffer padding when using rtcSetNewGeometry API function". */
-        packed_float3 *verts_buffer = (packed_float3 *)rtcSetNewGeometryBuffer(
+        packed_float3 *verts_buffer = nullptr;
+#  if RTC_VERSION >= 40400
+        rtcSetNewGeometryBufferHostDevice(
+#  else
+        verts_buffer = (packed_float3 *)rtcSetNewGeometryBuffer(
+#  endif
             geom_id,
             RTC_BUFFER_TYPE_VERTEX,
             t,
             RTC_FORMAT_FLOAT3,
             sizeof(packed_float3),
-            num_verts);
+            num_verts
+#  if RTC_VERSION >= 40400
+            ,
+            (void **)(&verts_buffer),
+            nullptr
+#  endif
+        );
         assert(verts_buffer);
         if (verts_buffer) {
           for (size_t i = (size_t)0; i < num_verts; ++i) {
@@ -492,14 +508,29 @@ void BVHEmbree::set_curve_vertex_buffer(RTCGeometry geom_id, const Hair *hair, c
     // handled separately. Attributes are float4s where the radius is stored in w and
     // the middle motion vector is from the mesh points which are stored float3s with
     // the radius stored in another array.
-    float4 *rtc_verts = (update) ? (float4 *)rtcGetGeometryBufferData(
-                                       geom_id, RTC_BUFFER_TYPE_VERTEX, t) :
-                                   (float4 *)rtcSetNewGeometryBuffer(geom_id,
-                                                                     RTC_BUFFER_TYPE_VERTEX,
-                                                                     t,
-                                                                     RTC_FORMAT_FLOAT4,
-                                                                     sizeof(float) * 4,
-                                                                     num_keys_embree);
+    float4 *rtc_verts = nullptr;
+    if (update) {
+      rtc_verts = (float4 *)rtcGetGeometryBufferData(geom_id, RTC_BUFFER_TYPE_VERTEX, t);
+    }
+    else {
+#  if RTC_VERSION >= 40400
+      rtcSetNewGeometryBufferHostDevice(
+#  else
+      rtc_verts = (float4 *)rtcSetNewGeometryBuffer(
+#  endif
+          geom_id,
+          RTC_BUFFER_TYPE_VERTEX,
+          t,
+          RTC_FORMAT_FLOAT4,
+          sizeof(float) * 4,
+          num_keys_embree
+#  if RTC_VERSION >= 40400
+          ,
+          (void **)(&rtc_verts),
+          nullptr
+#  endif
+      );
+    }
 
     assert(rtc_verts);
     if (rtc_verts) {
@@ -544,14 +575,30 @@ void BVHEmbree::set_point_vertex_buffer(RTCGeometry geom_id,
     // handled separately. Attributes are float4s where the radius is stored in w and
     // the middle motion vector is from the mesh points which are stored float3s with
     // the radius stored in another array.
-    float4 *rtc_verts = (update) ? (float4 *)rtcGetGeometryBufferData(
-                                       geom_id, RTC_BUFFER_TYPE_VERTEX, t) :
-                                   (float4 *)rtcSetNewGeometryBuffer(geom_id,
-                                                                     RTC_BUFFER_TYPE_VERTEX,
-                                                                     t,
-                                                                     RTC_FORMAT_FLOAT4,
-                                                                     sizeof(float) * 4,
-                                                                     num_points);
+
+    float4 *rtc_verts = nullptr;
+    if (update) {
+      rtc_verts = (float4 *)rtcGetGeometryBufferData(geom_id, RTC_BUFFER_TYPE_VERTEX, t);
+    }
+    else {
+#  if RTC_VERSION >= 40400
+      rtcSetNewGeometryBufferHostDevice(
+#  else
+      rtc_verts = (float4 *)rtcSetNewGeometryBuffer(
+#  endif
+          geom_id,
+          RTC_BUFFER_TYPE_VERTEX,
+          t,
+          RTC_FORMAT_FLOAT4,
+          sizeof(float) * 4,
+          num_points
+#  if RTC_VERSION >= 40400
+          ,
+          (void **)(&rtc_verts),
+          nullptr
+#  endif
+      );
+    }
 
     assert(rtc_verts);
     if (rtc_verts) {
@@ -603,12 +650,7 @@ void BVHEmbree::add_points(const Object *ob, const PointCloud *pointcloud, const
 
   rtcSetGeometryUserData(geom_id, (void *)prim_offset);
   rtcSetGeometryMask(geom_id, ob->visibility_for_tracing());
-#  if EMBREE_MAJOR_VERSION >= 4
   rtcSetGeometryEnableFilterFunctionFromArguments(geom_id, true);
-#  else
-  rtcSetGeometryIntersectFilterFunction(geom_id, kernel_embree_filter_func_backface_cull);
-  rtcSetGeometryOccludedFilterFunction(geom_id, kernel_embree_filter_occluded_func_backface_cull);
-#  endif
 
   rtcCommitGeometry(geom_id);
   rtcAttachGeometryByID(scene, geom_id, i * 2);
@@ -645,8 +687,25 @@ void BVHEmbree::add_curves(const Object *ob, const Hair *hair, const int i)
 
   RTCGeometry geom_id = rtcNewGeometry(rtc_device, type);
   rtcSetGeometryTessellationRate(geom_id, params.curve_subdivisions + 1);
-  unsigned *rtc_indices = (unsigned *)rtcSetNewGeometryBuffer(
-      geom_id, RTC_BUFFER_TYPE_INDEX, 0, RTC_FORMAT_UINT, sizeof(int), num_segments);
+  unsigned *rtc_indices = nullptr;
+#  if RTC_VERSION >= 40400
+  rtcSetNewGeometryBufferHostDevice(
+#  else
+  rtc_indices = (unsigned *)rtcSetNewGeometryBuffer(
+#  endif
+      geom_id,
+      RTC_BUFFER_TYPE_INDEX,
+      0,
+      RTC_FORMAT_UINT,
+      sizeof(int),
+      num_segments
+#  if RTC_VERSION >= 40400
+      ,
+      (void **)(&rtc_indices),
+      nullptr
+#  endif
+  );
+
   size_t rtc_index = 0;
   for (size_t j = 0; j < num_curves; ++j) {
     const Hair::Curve c = hair->get_curve(j);
@@ -666,19 +725,7 @@ void BVHEmbree::add_curves(const Object *ob, const Hair *hair, const int i)
 
   rtcSetGeometryUserData(geom_id, (void *)prim_offset);
   rtcSetGeometryMask(geom_id, ob->visibility_for_tracing());
-#  if EMBREE_MAJOR_VERSION >= 4
   rtcSetGeometryEnableFilterFunctionFromArguments(geom_id, true);
-#  else
-  if (hair->curve_shape == CURVE_RIBBON) {
-    rtcSetGeometryIntersectFilterFunction(geom_id, kernel_embree_filter_intersection_func);
-    rtcSetGeometryOccludedFilterFunction(geom_id, kernel_embree_filter_occluded_func);
-  }
-  else {
-    rtcSetGeometryIntersectFilterFunction(geom_id, kernel_embree_filter_func_backface_cull);
-    rtcSetGeometryOccludedFilterFunction(geom_id,
-                                         kernel_embree_filter_occluded_func_backface_cull);
-  }
-#  endif
 
   rtcCommitGeometry(geom_id);
   rtcAttachGeometryByID(scene, geom_id, i * 2 + 1);

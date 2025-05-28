@@ -50,6 +50,7 @@
 #include "ED_keyframing.hh"
 #include "ED_screen.hh"
 
+#include "ANIM_armature.hh"
 #include "ANIM_bone_collections.hh"
 #include "ANIM_keyframing.hh"
 #include "ANIM_keyingsets.hh"
@@ -393,7 +394,7 @@ static wmOperatorStatus apply_armature_pose2bones_exec(bContext *C, wmOperator *
   Scene *scene = CTX_data_scene(C);
   /* must be active object, not edit-object */
   Object *ob = BKE_object_pose_armature_get(CTX_data_active_object(C));
-  const Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  const Object *ob_eval = DEG_get_evaluated(depsgraph, ob);
   bArmature *arm = BKE_armature_from_object(ob);
   bPose *pose;
   blender::Vector<PointerRNA> selected_bones;
@@ -478,7 +479,7 @@ static void apply_armature_pose2bones_ui(bContext *C, wmOperator *op)
 
   PointerRNA ptr = RNA_pointer_create_discrete(&wm->id, op->type->srna, op->properties);
 
-  uiItemR(layout, &ptr, "selected", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(&ptr, "selected", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 }
 
 void POSE_OT_armature_apply(wmOperatorType *ot)
@@ -535,7 +536,9 @@ static wmOperatorStatus pose_visual_transform_apply_exec(bContext *C, wmOperator
 
     int i;
     LISTBASE_FOREACH_INDEX (bPoseChannel *, pchan, &ob->pose->chanbase, i) {
-      if (!((pchan->bone->flag & BONE_SELECTED) && PBONE_VISIBLE(arm, pchan->bone))) {
+      if (!((pchan->bone->flag & BONE_SELECTED) &&
+            blender::animrig::bone_is_visible_pchan(arm, pchan)))
+      {
         pchan_xform_array[i].is_set = false;
         continue;
       }
@@ -822,7 +825,7 @@ void POSE_OT_copy(wmOperatorType *ot)
   ot->idname = "POSE_OT_copy";
   ot->description = "Copy the current pose of the selected bones to the internal clipboard";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = pose_copy_exec;
   ot->poll = ED_operator_posemode;
 
@@ -926,7 +929,7 @@ void POSE_OT_paste(wmOperatorType *ot)
   ot->idname = "POSE_OT_paste";
   ot->description = "Paste the stored pose on to the current pose";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = pose_paste_exec;
   ot->poll = ED_operator_posemode;
 
@@ -1187,7 +1190,7 @@ static wmOperatorStatus pose_clear_transform_generic_exec(bContext *C,
   View3D *v3d = CTX_wm_view3d(C);
   FOREACH_OBJECT_IN_MODE_BEGIN (scene, view_layer, v3d, OB_ARMATURE, OB_MODE_POSE, ob_iter) {
     /* XXX: UGLY HACK (for auto-key + clear transforms). */
-    Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob_iter);
+    Object *ob_eval = DEG_get_evaluated(depsgraph, ob_iter);
     blender::Vector<PointerRNA> sources;
     bool changed = false;
 
@@ -1258,7 +1261,7 @@ void POSE_OT_scale_clear(wmOperatorType *ot)
   ot->idname = "POSE_OT_scale_clear";
   ot->description = "Reset scaling of selected bones to their default values";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = pose_clear_scale_exec;
   ot->poll = ED_operator_posemode;
 
@@ -1285,7 +1288,7 @@ void POSE_OT_rot_clear(wmOperatorType *ot)
   ot->idname = "POSE_OT_rot_clear";
   ot->description = "Reset rotations of selected bones to their default values";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = pose_clear_rot_exec;
   ot->poll = ED_operator_posemode;
 
@@ -1312,7 +1315,7 @@ void POSE_OT_loc_clear(wmOperatorType *ot)
   ot->idname = "POSE_OT_loc_clear";
   ot->description = "Reset locations of selected bones to their default values";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = pose_clear_loc_exec;
   ot->poll = ED_operator_posemode;
 
@@ -1340,7 +1343,7 @@ void POSE_OT_transforms_clear(wmOperatorType *ot)
   ot->description =
       "Reset location, rotation, and scaling of selected bones to their default values";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = pose_clear_transforms_exec;
   ot->poll = ED_operator_posemode;
 

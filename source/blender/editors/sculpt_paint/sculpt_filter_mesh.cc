@@ -166,19 +166,13 @@ void cache_init(bContext *C,
 
   float3 co;
 
-  if (vc.rv3d && SCULPT_stroke_get_location(C, co, mval_fl, false)) {
+  if (vc.rv3d && stroke_get_location_bvh(C, co, mval_fl, false)) {
     /* Get radius from brush. */
     const Brush *brush = BKE_paint_brush_for_read(&sd.paint);
 
     float radius;
     if (brush) {
-      if (BKE_brush_use_locked_size(scene, brush)) {
-        radius = paint_calc_object_space_radius(
-            vc, co, float(BKE_brush_size_get(scene, brush) * area_normal_radius));
-      }
-      else {
-        radius = BKE_brush_unprojected_radius_get(scene, brush) * area_normal_radius;
-      }
+      object_space_radius_get(vc, *scene, *brush, co, area_normal_radius);
     }
     else {
       radius = paint_calc_object_space_radius(vc, co, float(ups->size) * area_normal_radius);
@@ -1719,7 +1713,7 @@ static void calc_sharpen_filter(const Depsgraph &depsgraph,
     }
     case bke::pbvh::Type::BMesh: {
       BMesh &bm = *ss.bm;
-      BM_mesh_elem_index_ensure(&bm, BM_VERT);
+      vert_random_access_ensure(object);
       threading::EnumerableThreadSpecific<LocalData> all_tls;
       MutableSpan<bke::pbvh::BMeshNode> nodes = pbvh.nodes<bke::pbvh::BMeshNode>();
       node_mask.foreach_index(GrainSize(1), [&](const int node_index) {
@@ -2128,7 +2122,7 @@ static void sculpt_mesh_filter_apply(bContext *C, wmOperator *op, bool is_replay
   const MeshFilterType filter_type = MeshFilterType(RNA_enum_get(op->ptr, "type"));
   const float strength = RNA_float_get(op->ptr, "strength");
 
-  SCULPT_vertex_random_access_ensure(ob);
+  vert_random_access_ensure(ob);
 
   const IndexMask &node_mask = ss.filter_cache->node_mask;
   if (auto_mask::is_enabled(sd, ob, nullptr) && ss.filter_cache->automasking &&
@@ -2424,11 +2418,11 @@ static wmOperatorStatus sculpt_mesh_filter_start(bContext *C, wmOperator *op)
   if (use_automasking) {
     /* Update the active face set manually as the paint cursor is not enabled when using the
      * Mesh Filter Tool. */
-    SculptCursorGeometryInfo sgi;
-    SCULPT_cursor_geometry_info_update(C, &sgi, mval_fl, false);
+    CursorGeometryInfo cgi;
+    cursor_geometry_info_update(C, &cgi, mval_fl, false);
   }
 
-  SCULPT_vertex_random_access_ensure(ob);
+  vert_random_access_ensure(ob);
   if (needs_topology_info) {
     boundary::ensure_boundary_info(ob);
   }
@@ -2445,7 +2439,7 @@ static wmOperatorStatus sculpt_mesh_filter_start(bContext *C, wmOperator *op)
 
   filter::Cache *filter_cache = ss.filter_cache;
   filter_cache->active_face_set = SCULPT_FACE_SET_NONE;
-  filter_cache->automasking = auto_mask::cache_init(*depsgraph, sd, ob);
+  auto_mask::filter_cache_ensure(*depsgraph, sd, ob);
 
   sculpt_filter_specific_init(*depsgraph, filter_type, op, ob);
 
@@ -2530,11 +2524,11 @@ static void sculpt_mesh_ui_exec(bContext * /*C*/, wmOperator *op)
 {
   uiLayout *layout = op->layout;
 
-  uiItemR(layout, op->ptr, "strength", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-  uiItemR(layout, op->ptr, "iteration_count", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-  uiItemR(layout, op->ptr, "orientation", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(op->ptr, "strength", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(op->ptr, "iteration_count", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(op->ptr, "orientation", UI_ITEM_NONE, std::nullopt, ICON_NONE);
   layout = &layout->row(true);
-  uiItemR(layout, op->ptr, "deform_axis", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
+  layout->prop(op->ptr, "deform_axis", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
 }
 
 void SCULPT_OT_mesh_filter(wmOperatorType *ot)

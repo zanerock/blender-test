@@ -710,7 +710,7 @@ void VIEW3D_OT_ndof_orbit(wmOperatorType *ot)
   ot->description = "Orbit the view using the 3D mouse";
   ot->idname = ViewOpsType_ndof_orbit.idname;
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = ndof_orbit_invoke;
   ot->poll = ED_operator_view3d_active;
 
@@ -759,6 +759,14 @@ static wmOperatorStatus ndof_orbit_zoom_invoke_impl(bContext *C,
               vod->depsgraph, vod->area, vod->region))
       {
         negate_v3_v3(rv3d->ndof_ofs, center_test.value());
+        /* When `ndof_ofs` is set `rv3d->dist` should be set based on distance to `ndof_ofs`.
+         * Without this the user is unable to zoom to the `ndof_ofs` point. See: #134732. */
+        if (rv3d->is_persp) {
+          const float dist_min = ED_view3d_dist_soft_min_get(v3d, true);
+          if (!ED_view3d_distance_set_from_location(rv3d, center_test.value(), dist_min)) {
+            ED_view3d_distance_set(rv3d, dist_min);
+          }
+        }
         rv3d->ndof_flag |= RV3D_NDOF_OFS_IS_VALID;
       }
     }
@@ -839,7 +847,7 @@ void VIEW3D_OT_ndof_orbit_zoom(wmOperatorType *ot)
   ot->description = "Orbit and zoom the view using the 3D mouse";
   ot->idname = ViewOpsType_ndof_orbit_zoom.idname;
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = ndof_orbit_zoom_invoke;
   ot->poll = ED_operator_view3d_active;
 
@@ -924,7 +932,7 @@ void VIEW3D_OT_ndof_pan(wmOperatorType *ot)
   ot->description = "Pan the view with the 3D mouse";
   ot->idname = ViewOpsType_ndof_pan.idname;
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = ndof_pan_invoke;
   ot->poll = ED_operator_view3d_active;
 
@@ -975,7 +983,7 @@ void VIEW3D_OT_ndof_all(wmOperatorType *ot)
   ot->description = "Pan and rotate the view with the 3D mouse";
   ot->idname = ViewOpsType_ndof_all.idname;
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = ndof_all_invoke;
   ot->poll = ED_operator_view3d_active;
 

@@ -736,7 +736,7 @@ const EnumPropertyItem *vgroup_selection_itemf_helper(const bContext *C,
     return WT_vertex_group_select_item;
   }
 
-  ob = CTX_data_active_object(C);
+  ob = context_object(C);
   if (selection_mask & (1 << WT_VGROUP_ACTIVE)) {
     RNA_enum_items_add_value(&item, &totitem, WT_vertex_group_select_item, WT_VGROUP_ACTIVE);
   }
@@ -1341,20 +1341,13 @@ static void vgroup_levels_subset(Object *ob,
 static bool vgroup_normalize_all(Object *ob,
                                  const bool *vgroup_validmap,
                                  const int vgroup_tot,
-                                 const int subset_count,
                                  const bool lock_active,
                                  ReportList *reports)
 {
   MDeformVert *dv, **dvert_array = nullptr;
   int i, dvert_tot = 0;
   const int def_nr = BKE_object_defgroup_active_index_get(ob) - 1;
-
   const bool use_vert_sel = vertex_group_use_vert_sel(ob);
-
-  if (subset_count == 0) {
-    BKE_report(reports, RPT_ERROR, "No vertex groups to operate on");
-    return false;
-  }
 
   vgroup_parray_alloc(static_cast<ID *>(ob->data), &dvert_array, &dvert_tot, use_vert_sel);
 
@@ -1409,6 +1402,35 @@ static bool vgroup_normalize_all(Object *ob,
   }
 
   return false;
+}
+
+/**
+ * If the currently active vertex group is for a deform bone, normalize all
+ * vertex groups that are for deform bones.
+ *
+ * \param lock_active: If true, the active vertex group will be left untouched,
+ * and the remaining deform groups will be normalized to occupy the remaining
+ * weight not used by it.
+ */
+static void vgroup_normalize_all_deform_if_active_is_deform(Object *ob,
+                                                            const bool lock_active,
+                                                            ReportList *reports)
+{
+  int r_defgroup_tot = BKE_object_defgroup_count(ob);
+  bool *defgroup_validmap = BKE_object_defgroup_validmap_get(ob, r_defgroup_tot);
+  const int def_nr = BKE_object_defgroup_active_index_get(ob) - 1;
+
+  /* Only auto-normalize if the active group is bone-deforming. */
+  if (defgroup_validmap[def_nr] == true) {
+    int subset_count, vgroup_tot;
+    const bool *vgroup_validmap = BKE_object_defgroup_subset_from_select_type(
+        ob, WT_VGROUP_BONE_DEFORM, &vgroup_tot, &subset_count);
+
+    vgroup_normalize_all(ob, vgroup_validmap, vgroup_tot, lock_active, reports);
+    MEM_SAFE_FREE(vgroup_validmap);
+  }
+
+  MEM_SAFE_FREE(defgroup_validmap);
 }
 
 enum {
@@ -2583,7 +2605,7 @@ void OBJECT_OT_vertex_group_add(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_add";
   ot->description = "Add a new vertex group to the active object";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_supported_poll;
   ot->exec = vertex_group_add_exec;
 
@@ -2690,7 +2712,7 @@ void OBJECT_OT_vertex_group_remove(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_remove";
   ot->description = "Delete the active or all vertex groups from the active object";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_remove_exec;
 
@@ -2714,13 +2736,18 @@ void OBJECT_OT_vertex_group_remove(wmOperatorType *ot)
 /** \name Vertex Group Assign Operator
  * \{ */
 
-static wmOperatorStatus vertex_group_assign_exec(bContext *C, wmOperator * /*op*/)
+static wmOperatorStatus vertex_group_assign_exec(bContext *C, wmOperator *op)
 {
   ToolSettings *ts = CTX_data_tool_settings(C);
   Object *ob = context_object(C);
   Scene &scene = *CTX_data_scene(C);
 
   vgroup_assign_verts(ob, scene, ts->vgroup_weight);
+
+  if (ts->auto_normalize) {
+    vgroup_normalize_all_deform_if_active_is_deform(ob, true, op->reports);
+  }
+
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
 
@@ -2734,7 +2761,7 @@ void OBJECT_OT_vertex_group_assign(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_assign";
   ot->description = "Assign the selected vertices to the active vertex group";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_unlocked_poll;
   ot->exec = vertex_group_assign_exec;
 
@@ -2769,7 +2796,7 @@ void OBJECT_OT_vertex_group_assign_new(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_assign_new";
   ot->description = "Assign the selected vertices to a new vertex group";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_poll;
   ot->exec = vertex_group_assign_new_exec;
 
@@ -2818,6 +2845,11 @@ static wmOperatorStatus vertex_group_remove_from_exec(bContext *C, wmOperator *o
     }
   }
 
+  ToolSettings *ts = CTX_data_tool_settings(C);
+  if (ts->auto_normalize) {
+    vgroup_normalize_all_deform_if_active_is_deform(ob, false, op->reports);
+  }
+
   DEG_id_tag_update(&ob->id, ID_RECALC_GEOMETRY);
   WM_event_add_notifier(C, NC_GEOM | ND_DATA, ob->data);
 
@@ -2832,7 +2864,7 @@ void OBJECT_OT_vertex_group_remove_from(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_remove_from";
   ot->description = "Remove the selected vertices from active or all vertex group(s)";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_unlocked_poll;
   ot->exec = vertex_group_remove_from_exec;
 
@@ -2881,7 +2913,7 @@ void OBJECT_OT_vertex_group_select(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_select";
   ot->description = "Select all the vertices assigned to the active vertex group";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_poll;
   ot->exec = vertex_group_select_exec;
 
@@ -2915,7 +2947,7 @@ void OBJECT_OT_vertex_group_deselect(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_deselect";
   ot->description = "Deselect all selected vertices assigned to the active vertex group";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_poll;
   ot->exec = vertex_group_deselect_exec;
 
@@ -2949,7 +2981,7 @@ void OBJECT_OT_vertex_group_copy(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_copy";
   ot->description = "Make a copy of the active vertex group";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_copy_exec;
 
@@ -2994,7 +3026,7 @@ void OBJECT_OT_vertex_group_levels(wmOperatorType *ot)
   ot->description =
       "Add some offset and multiply with some gain the weights of the active vertex group";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_levels_exec;
 
@@ -3039,7 +3071,7 @@ void OBJECT_OT_vertex_group_normalize(wmOperatorType *ot)
   ot->description =
       "Normalize weights of the active vertex group, so that the highest ones are now 1.0";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_normalize_exec;
 
@@ -3096,8 +3128,14 @@ static wmOperatorStatus vertex_group_normalize_all_exec(bContext *C, wmOperator 
   const bool *vgroup_validmap = BKE_object_defgroup_subset_from_select_type(
       ob, subset_type, &vgroup_tot, &subset_count);
 
-  changed = vgroup_normalize_all(
-      ob, vgroup_validmap, vgroup_tot, subset_count, lock_active, op->reports);
+  if (subset_count == 0) {
+    BKE_report(op->reports, RPT_ERROR, "No vertex groups to operate on");
+    changed = false;
+  }
+  else {
+    changed = vgroup_normalize_all(ob, vgroup_validmap, vgroup_tot, lock_active, op->reports);
+  }
+
   MEM_freeN(vgroup_validmap);
 
   if (changed) {
@@ -3121,7 +3159,7 @@ void OBJECT_OT_vertex_group_normalize_all(wmOperatorType *ot)
       "Normalize all weights of all vertex groups, "
       "so that for each vertex, the sum of all weights is 1.0";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_normalize_all_exec;
 
@@ -3144,7 +3182,7 @@ void OBJECT_OT_vertex_group_normalize_all(wmOperatorType *ot)
 
 static wmOperatorStatus vertex_group_lock_exec(bContext *C, wmOperator *op)
 {
-  Object *ob = CTX_data_active_object(C);
+  Object *ob = context_object(C);
 
   int action = RNA_enum_get(op->ptr, "action");
   int mask = RNA_enum_get(op->ptr, "mask");
@@ -3227,7 +3265,7 @@ void OBJECT_OT_vertex_group_lock(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_lock";
   ot->description = "Change the lock state of all or some vertex groups of active object";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_lock_exec;
   ot->get_description = vertex_group_lock_get_description;
@@ -3286,7 +3324,7 @@ void OBJECT_OT_vertex_group_invert(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_invert";
   ot->description = "Invert active vertex group's weights";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_invert_exec;
 
@@ -3364,7 +3402,7 @@ void OBJECT_OT_vertex_group_smooth(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_smooth";
   ot->description = "Smooth weights for selected vertices";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_mesh_vert_poll;
   ot->exec = vertex_group_smooth_exec;
 
@@ -3424,7 +3462,7 @@ void OBJECT_OT_vertex_group_clean(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_clean";
   ot->description = "Remove vertex group assignments which are not required";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_clean_exec;
 
@@ -3483,7 +3521,7 @@ void OBJECT_OT_vertex_group_quantize(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_quantize";
   ot->description = "Set weights to a fixed number of steps";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_quantize_exec;
 
@@ -3548,7 +3586,7 @@ void OBJECT_OT_vertex_group_limit_total(wmOperatorType *ot)
       "Limit deform weights associated with a vertex to a specified number by removing lowest "
       "weights";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_limit_total_exec;
 
@@ -3597,7 +3635,7 @@ void OBJECT_OT_vertex_group_mirror(wmOperatorType *ot)
       "Mirror vertex group, flip weights and/or names, editing only selected vertices, "
       "flipping when both sides are selected otherwise copy from unselected";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_mirror_exec;
 
@@ -3663,7 +3701,7 @@ void OBJECT_OT_vertex_group_copy_to_selected(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_copy_to_selected";
   ot->description = "Replace vertex groups of selected objects by vertex groups of active object";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_copy_to_selected_exec;
 
@@ -3734,7 +3772,7 @@ void OBJECT_OT_vertex_group_set_active(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_set_active";
   ot->description = "Set the active vertex group";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = set_active_group_exec;
   ot->invoke = WM_menu_invoke;
@@ -3947,7 +3985,7 @@ void OBJECT_OT_vertex_group_sort(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_sort";
   ot->description = "Sort vertex groups";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vertex_group_sort_exec;
 
@@ -4010,7 +4048,7 @@ void OBJECT_OT_vertex_group_move(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_group_move";
   ot->description = "Move the active vertex group up/down in the list";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_poll;
   ot->exec = vgroup_move_exec;
 
@@ -4138,7 +4176,7 @@ void OBJECT_OT_vertex_weight_paste(wmOperatorType *ot)
   ot->description =
       "Copy this group's weight to other selected vertices (disabled if vertex group is locked)";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_mesh_poll;
   ot->exec = vertex_weight_paste_exec;
 
@@ -4188,7 +4226,7 @@ void OBJECT_OT_vertex_weight_delete(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_weight_delete";
   ot->description = "Delete this weight from the vertex (disabled if vertex group is locked)";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_mesh_poll;
   ot->exec = vertex_weight_delete_exec;
 
@@ -4235,7 +4273,7 @@ void OBJECT_OT_vertex_weight_set_active(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_weight_set_active";
   ot->description = "Set as active vertex group";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_mesh_poll;
   ot->exec = vertex_weight_set_active_exec;
 
@@ -4286,7 +4324,7 @@ void OBJECT_OT_vertex_weight_normalize_active_vertex(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_weight_normalize_active_vertex";
   ot->description = "Normalize active vertex's weights";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_mesh_poll;
   ot->exec = vertex_weight_normalize_active_vertex_exec;
 
@@ -4321,7 +4359,7 @@ void OBJECT_OT_vertex_weight_copy(wmOperatorType *ot)
   ot->idname = "OBJECT_OT_vertex_weight_copy";
   ot->description = "Copy weights from active to selected";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = vertex_group_vert_select_mesh_poll;
   ot->exec = vertex_weight_copy_exec;
 

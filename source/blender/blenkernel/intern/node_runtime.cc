@@ -576,6 +576,39 @@ static void ensure_topology_cache(const bNodeTree &ntree)
 
 }  // namespace blender::bke::node_tree_runtime
 
+namespace blender::bke {
+
+NodeLinkKey::NodeLinkKey(const bNodeLink &link)
+{
+  to_node_id_ = link.tonode->identifier;
+  input_socket_index_ = link.tosock->index();
+  input_link_index_ =
+      const_cast<const bNodeSocket *>(link.tosock)->directly_linked_links().first_index(&link);
+}
+
+bNodeLink *NodeLinkKey::try_find(bNodeTree &ntree) const
+{
+  return const_cast<bNodeLink *>(this->try_find(const_cast<const bNodeTree &>(ntree)));
+}
+
+const bNodeLink *NodeLinkKey::try_find(const bNodeTree &ntree) const
+{
+  const bNode *to_node = ntree.node_by_id(to_node_id_);
+  if (!to_node) {
+    return nullptr;
+  }
+  if (input_socket_index_ >= to_node->input_sockets().size()) {
+    return nullptr;
+  }
+  const bNodeSocket &input_socket = to_node->input_socket(input_socket_index_);
+  if (input_link_index_ >= input_socket.directly_linked_links().size()) {
+    return nullptr;
+  }
+  return input_socket.directly_linked_links()[input_link_index_];
+}
+
+}  // namespace blender::bke
+
 void bNodeTree::ensure_topology_cache() const
 {
   blender::bke::node_tree_runtime::ensure_topology_cache(*this);
@@ -666,16 +699,33 @@ bNodeSocket &bNode::socket_by_decl(const blender::nodes::SocketDeclaration &decl
   return decl.in_out == SOCK_IN ? this->input_socket(decl.index) : this->output_socket(decl.index);
 }
 
+static void ensure_inference_usage_cache(const bNodeTree &tree)
+{
+  tree.runtime->inferenced_input_socket_usage_mutex.ensure([&]() {
+    tree.runtime->inferenced_input_socket_usage =
+        blender::nodes::socket_usage_inference::infer_all_input_sockets_usage(tree);
+  });
+}
+
 bool bNodeSocket::affects_node_output() const
 {
   BLI_assert(this->is_input());
   BLI_assert(blender::bke::node_tree_runtime::topology_cache_is_available(*this));
   const bNodeTree &tree = this->owner_tree();
+  ensure_inference_usage_cache(tree);
+  return tree.runtime->inferenced_input_socket_usage[this->index_in_all_inputs()].is_used;
+}
 
-  tree.runtime->inferenced_input_socket_usage_mutex.ensure([&]() {
-    tree.runtime->inferenced_input_socket_usage =
-        blender::nodes::socket_usage_inference::infer_all_input_sockets_usage(tree);
-  });
+bool bNodeSocket::inferred_input_socket_visibility() const
+{
+  BLI_assert(this->is_input());
+  BLI_assert(blender::bke::node_tree_runtime::topology_cache_is_available(*this));
+  const bNode &node = this->owner_node();
+  if (node.typeinfo->ignore_inferred_input_socket_visibility) {
+    return true;
+  }
+  const bNodeTree &tree = this->owner_tree();
 
-  return tree.runtime->inferenced_input_socket_usage[this->index_in_all_inputs()];
+  ensure_inference_usage_cache(tree);
+  return tree.runtime->inferenced_input_socket_usage[this->index_in_all_inputs()].is_visible;
 }

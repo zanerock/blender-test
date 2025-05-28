@@ -130,8 +130,7 @@ typedef struct WorkSpaceLayout {
   struct bScreen *screen;
   /* The name of this layout, we override the RNA name of the screen with this
    * (but not ID name itself) */
-  /** MAX_NAME. */
-  char name[64];
+  char name[/*MAX_NAME*/ 64];
 } WorkSpaceLayout;
 
 /** Optional tags, which features to use, aligned with #bAddon names by convention. */
@@ -142,6 +141,11 @@ typedef struct wmOwnerID {
 } wmOwnerID;
 
 typedef struct WorkSpace {
+#ifdef __cplusplus
+  /** See #ID_Type comment for why this is here. */
+  static constexpr ID_Type id_type = ID_WS;
+#endif
+
   ID id;
 
   /** WorkSpaceLayout. */

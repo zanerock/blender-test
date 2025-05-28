@@ -62,7 +62,7 @@ void VIEW3D_OT_toggle_matcap_flip(wmOperatorType *ot)
   ot->description = "Flip MatCap";
   ot->idname = "VIEW3D_OT_toggle_matcap_flip";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = toggle_matcap_flip_exec;
 }
 
@@ -84,32 +84,23 @@ void uiTemplateEditModeSelection(uiLayout *layout, bContext *C)
 
   PointerRNA op_ptr;
   wmOperatorType *ot = WM_operatortype_find("MESH_OT_select_mode", true);
-  uiItemFullO_ptr(row,
-                  ot,
-                  "",
-                  ICON_VERTEXSEL,
-                  nullptr,
-                  WM_OP_INVOKE_DEFAULT,
-                  (em->selectmode & SCE_SELECT_VERTEX) ? UI_ITEM_O_DEPRESS : UI_ITEM_NONE,
-                  &op_ptr);
+  op_ptr = row->op(ot,
+                   "",
+                   ICON_VERTEXSEL,
+                   WM_OP_INVOKE_DEFAULT,
+                   (em->selectmode & SCE_SELECT_VERTEX) ? UI_ITEM_O_DEPRESS : UI_ITEM_NONE);
   RNA_enum_set(&op_ptr, "type", SCE_SELECT_VERTEX);
-  uiItemFullO_ptr(row,
-                  ot,
-                  "",
-                  ICON_EDGESEL,
-                  nullptr,
-                  WM_OP_INVOKE_DEFAULT,
-                  (em->selectmode & SCE_SELECT_EDGE) ? UI_ITEM_O_DEPRESS : UI_ITEM_NONE,
-                  &op_ptr);
+  op_ptr = row->op(ot,
+                   "",
+                   ICON_EDGESEL,
+                   WM_OP_INVOKE_DEFAULT,
+                   (em->selectmode & SCE_SELECT_EDGE) ? UI_ITEM_O_DEPRESS : UI_ITEM_NONE);
   RNA_enum_set(&op_ptr, "type", SCE_SELECT_EDGE);
-  uiItemFullO_ptr(row,
-                  ot,
-                  "",
-                  ICON_FACESEL,
-                  nullptr,
-                  WM_OP_INVOKE_DEFAULT,
-                  (em->selectmode & SCE_SELECT_FACE) ? UI_ITEM_O_DEPRESS : UI_ITEM_NONE,
-                  &op_ptr);
+  op_ptr = row->op(ot,
+                   "",
+                   ICON_FACESEL,
+                   WM_OP_INVOKE_DEFAULT,
+                   (em->selectmode & SCE_SELECT_FACE) ? UI_ITEM_O_DEPRESS : UI_ITEM_NONE);
   RNA_enum_set(&op_ptr, "type", SCE_SELECT_FACE);
 }
 
@@ -126,17 +117,17 @@ static void uiTemplatePaintModeSelection(uiLayout *layout, bContext *C)
     PointerRNA meshptr = RNA_pointer_create_discrete(
         static_cast<ID *>(ob->data), &RNA_Mesh, ob->data);
     if (ob->mode & OB_MODE_TEXTURE_PAINT) {
-      uiItemR(layout, &meshptr, "use_paint_mask", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
+      layout->prop(&meshptr, "use_paint_mask", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
     }
     else {
       uiLayout *row = &layout->row(true);
-      uiItemR(row, &meshptr, "use_paint_mask", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
-      uiItemR(row, &meshptr, "use_paint_mask_vertex", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
+      row->prop(&meshptr, "use_paint_mask", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
+      row->prop(&meshptr, "use_paint_mask_vertex", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
 
       /* Show the bone selection mode icon only if there is a pose mode armature */
       Object *ob_armature = BKE_object_pose_armature_get(ob);
       if (ob_armature) {
-        uiItemR(row, &meshptr, "use_paint_bone_selection", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
+        row->prop(&meshptr, "use_paint_bone_selection", UI_ITEM_R_ICON_ONLY, "", ICON_NONE);
       }
     }
   }

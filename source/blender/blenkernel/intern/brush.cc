@@ -10,6 +10,9 @@
 
 #include "MEM_guardedalloc.h"
 
+/* Allow using deprecated functionality for .blend file I/O. */
+#define DNA_DEPRECATED_ALLOW
+
 #include "DNA_ID.h"
 #include "DNA_brush_types.h"
 #include "DNA_defaults.h"
@@ -172,7 +175,10 @@ static void brush_make_local(Main *bmain, ID *id, const int flags)
   else if (force_copy) {
     Brush *brush_new = (Brush *)BKE_id_copy(bmain, &brush->id); /* Ensures FAKE_USER is set */
 
-    brush_new->id.us = 0;
+    id_us_min(&brush_new->id);
+
+    BLI_assert(brush_new->id.flag & ID_FLAG_FAKEUSER);
+    BLI_assert(brush_new->id.us == 1);
 
     /* Setting `newid` is mandatory for complex #make_lib_local logic. */
     ID_NEW_SET(brush, brush_new);
@@ -421,7 +427,7 @@ static AssetTypeInfo AssetType_BR = {
 };
 
 IDTypeInfo IDType_ID_BR = {
-    /*id_code*/ ID_BR,
+    /*id_code*/ Brush::id_type,
     /*id_filter*/ FILTER_ID_BR,
     /*dependencies_id_types*/
     (FILTER_ID_BR | FILTER_ID_IM | FILTER_ID_PC | FILTER_ID_TE | FILTER_ID_MA),
@@ -526,7 +532,7 @@ static void brush_defaults(Brush *brush)
 
 Brush *BKE_brush_add(Main *bmain, const char *name, const eObjectMode ob_mode)
 {
-  Brush *brush = (Brush *)BKE_id_new(bmain, ID_BR, name);
+  Brush *brush = BKE_id_new<Brush>(bmain, name);
 
   brush->ob_mode = ob_mode;
 
@@ -585,6 +591,64 @@ bool BKE_brush_delete(Main *bmain, Brush *brush)
   BKE_id_delete(bmain, brush);
 
   return true;
+}
+
+Brush *BKE_brush_duplicate(Main *bmain,
+                           Brush *brush,
+                           eDupli_ID_Flags /*dupflag*/,
+                           /*eLibIDDuplicateFlags*/ uint duplicate_options)
+{
+  const bool is_subprocess = (duplicate_options & LIB_ID_DUPLICATE_IS_SUBPROCESS) != 0;
+  const bool is_root_id = (duplicate_options & LIB_ID_DUPLICATE_IS_ROOT_ID) != 0;
+
+  const eDupli_ID_Flags dupflag = USER_DUP_OBDATA | USER_DUP_LINKED_ID;
+
+  if (!is_subprocess) {
+    BKE_main_id_newptr_and_tag_clear(bmain);
+  }
+  if (is_root_id) {
+    duplicate_options &= ~LIB_ID_DUPLICATE_IS_ROOT_ID;
+  }
+
+  constexpr int id_copy_flag = LIB_ID_COPY_DEFAULT;
+
+  Brush *new_brush = reinterpret_cast<Brush *>(
+      BKE_id_copy_for_duplicate(bmain, &brush->id, dupflag, id_copy_flag));
+
+  /* Currently this duplicates everything and the passed in value of `dupflag` is ignored. Ideally,
+   * this should both check user preferences and do further filtering based on eDupli_ID_Flags. */
+  auto dependencies_cb = [&](const LibraryIDLinkCallbackData *cb_data) -> int {
+    if (cb_data->cb_flag & (IDWALK_CB_EMBEDDED | IDWALK_CB_EMBEDDED_NOT_OWNING)) {
+      return IDWALK_NOP;
+    }
+    if (cb_data->cb_flag & IDWALK_CB_LOOPBACK) {
+      return IDWALK_NOP;
+    }
+
+    BKE_id_copy_for_duplicate(bmain, *cb_data->id_pointer, dupflag, id_copy_flag);
+    return IDWALK_NOP;
+  };
+
+  BKE_library_foreach_ID_link(bmain, &new_brush->id, dependencies_cb, nullptr, IDWALK_RECURSE);
+
+  if (!is_subprocess) {
+    /* This code will follow into all ID links using an ID tagged with ID_TAG_NEW. */
+    BKE_libblock_relink_to_newid(bmain, &new_brush->id, 0);
+
+#ifndef NDEBUG
+    /* Call to `BKE_libblock_relink_to_newid` above is supposed to have cleared all those flags. */
+    ID *id_iter;
+    FOREACH_MAIN_ID_BEGIN (bmain, id_iter) {
+      BLI_assert((id_iter->tag & ID_TAG_NEW) == 0);
+    }
+    FOREACH_MAIN_ID_END;
+#endif
+
+    /* Cleanup. */
+    BKE_main_id_newptr_and_tag_clear(bmain);
+  }
+
+  return new_brush;
 }
 
 void BKE_brush_init_curves_sculpt_settings(Brush *brush)
@@ -1506,6 +1570,30 @@ bool BKE_brush_has_cube_tip(const Brush *brush, PaintMode paint_mode)
  * \{ */
 
 namespace blender::bke::brush {
+bool supports_dyntopo(const Brush &brush)
+{
+  return !ELEM(brush.sculpt_brush_type,
+               /* These brushes, as currently coded, cannot support dynamic topology */
+               SCULPT_BRUSH_TYPE_GRAB,
+               SCULPT_BRUSH_TYPE_ROTATE,
+               SCULPT_BRUSH_TYPE_CLOTH,
+               SCULPT_BRUSH_TYPE_THUMB,
+               SCULPT_BRUSH_TYPE_LAYER,
+               SCULPT_BRUSH_TYPE_DISPLACEMENT_ERASER,
+               SCULPT_BRUSH_TYPE_DRAW_SHARP,
+               SCULPT_BRUSH_TYPE_SLIDE_RELAX,
+               SCULPT_BRUSH_TYPE_ELASTIC_DEFORM,
+               SCULPT_BRUSH_TYPE_BOUNDARY,
+               SCULPT_BRUSH_TYPE_POSE,
+               SCULPT_BRUSH_TYPE_DRAW_FACE_SETS,
+               SCULPT_BRUSH_TYPE_PAINT,
+               SCULPT_BRUSH_TYPE_SMEAR,
+
+               /* These brushes could handle dynamic topology,
+                * but user feedback indicates it's better not to */
+               SCULPT_BRUSH_TYPE_SMOOTH,
+               SCULPT_BRUSH_TYPE_MASK);
+}
 bool supports_accumulate(const Brush &brush)
 {
   return ELEM(brush.sculpt_brush_type,
@@ -1519,9 +1607,7 @@ bool supports_accumulate(const Brush &brush)
               SCULPT_BRUSH_TYPE_CLAY_STRIPS,
               SCULPT_BRUSH_TYPE_CLAY_THUMB,
               SCULPT_BRUSH_TYPE_ROTATE,
-              SCULPT_BRUSH_TYPE_PLANE,
-              SCULPT_BRUSH_TYPE_SCRAPE,
-              SCULPT_BRUSH_TYPE_FLATTEN);
+              SCULPT_BRUSH_TYPE_PLANE);
 }
 bool supports_topology_rake(const Brush &brush)
 {
@@ -1592,10 +1678,7 @@ bool supports_plane_offset(const Brush &brush)
               SCULPT_BRUSH_TYPE_CLAY,
               SCULPT_BRUSH_TYPE_CLAY_STRIPS,
               SCULPT_BRUSH_TYPE_CLAY_THUMB,
-              SCULPT_BRUSH_TYPE_PLANE,
-              SCULPT_BRUSH_TYPE_FILL,
-              SCULPT_BRUSH_TYPE_FLATTEN,
-              SCULPT_BRUSH_TYPE_SCRAPE);
+              SCULPT_BRUSH_TYPE_PLANE);
 }
 bool supports_random_texture_angle(const Brush &brush)
 {
@@ -1631,9 +1714,6 @@ bool supports_secondary_cursor_color(const Brush &brush)
               SCULPT_BRUSH_TYPE_PINCH,
               SCULPT_BRUSH_TYPE_CREASE,
               SCULPT_BRUSH_TYPE_LAYER,
-              SCULPT_BRUSH_TYPE_FLATTEN,
-              SCULPT_BRUSH_TYPE_FILL,
-              SCULPT_BRUSH_TYPE_SCRAPE,
               SCULPT_BRUSH_TYPE_MASK);
 }
 bool supports_smooth_stroke(const Brush &brush)
@@ -1672,9 +1752,6 @@ bool supports_inverted_direction(const Brush &brush)
               SCULPT_BRUSH_TYPE_BLOB,
               SCULPT_BRUSH_TYPE_CREASE,
               SCULPT_BRUSH_TYPE_PLANE,
-              SCULPT_BRUSH_TYPE_FLATTEN,
-              SCULPT_BRUSH_TYPE_FILL,
-              SCULPT_BRUSH_TYPE_SCRAPE,
               SCULPT_BRUSH_TYPE_CLAY,
               SCULPT_BRUSH_TYPE_PINCH,
               SCULPT_BRUSH_TYPE_MASK);
@@ -1697,9 +1774,6 @@ bool supports_tilt(const Brush &brush)
   return ELEM(brush.sculpt_brush_type,
               SCULPT_BRUSH_TYPE_DRAW,
               SCULPT_BRUSH_TYPE_DRAW_SHARP,
-              SCULPT_BRUSH_TYPE_FLATTEN,
-              SCULPT_BRUSH_TYPE_FILL,
-              SCULPT_BRUSH_TYPE_SCRAPE,
               SCULPT_BRUSH_TYPE_PLANE,
               SCULPT_BRUSH_TYPE_CLAY_STRIPS);
 }

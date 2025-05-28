@@ -276,7 +276,6 @@ bool processEvent(GHOST_EventHandle hEvent, GHOST_TUserDataPtr userData)
   int visibility;
   GHOST_TEventKeyData *keyData = NULL;
   GHOST_TEventWheelData *wheelData = NULL;
-  GHOST_DisplaySetting setting;
   GHOST_WindowHandle window = GHOST_GetEventWindow(hEvent);
 
   switch (GHOST_GetEventType(hEvent)) {
@@ -290,7 +289,7 @@ bool processEvent(GHOST_EventHandle hEvent, GHOST_TUserDataPtr userData)
 #endif
     case GHOST_kEventWheel: {
       wheelData = (GHOST_TEventWheelData *)GHOST_GetEventData(hEvent);
-      if (wheelData->z > 0) {
+      if (wheelData->value > 0) {
         view_rotz += 5.f;
       }
       else {

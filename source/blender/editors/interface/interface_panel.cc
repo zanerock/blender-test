@@ -1444,8 +1444,7 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
   /* Begin drawing. */
   GPU_line_smooth(true);
 
-  uint pos = GPU_vertformat_attr_add(
-      immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
+  uint pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
   immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
 
   /* Draw the background. */
@@ -1458,12 +1457,15 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
   }
 
   if (is_left) {
-    immRecti(
+    immRectf(
         pos, v2d->mask.xmin, v2d->mask.ymin, v2d->mask.xmin + category_tabs_width, v2d->mask.ymax);
   }
   else {
-    immRecti(
-        pos, v2d->mask.xmax - category_tabs_width, v2d->mask.ymin, v2d->mask.xmax, v2d->mask.ymax);
+    immRectf(pos,
+             v2d->mask.xmax - category_tabs_width,
+             v2d->mask.ymin,
+             v2d->mask.xmax + 1,
+             v2d->mask.ymax);
   }
 
   if (is_alpha) {
@@ -1492,11 +1494,10 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
 #ifdef USE_FLAT_INACTIVE
     /* Draw line between inactive tabs. */
     if (is_active == false && is_active_prev == false && pc_dyn->prev) {
-      pos = GPU_vertformat_attr_add(
-          immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
+      pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
       immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
       immUniformColor3fvAlpha(theme_col_tab_outline, 0.3f);
-      immRecti(pos,
+      immRectf(pos,
                is_left ? v2d->mask.xmin + (category_tabs_width / 5) :
                          v2d->mask.xmax - (category_tabs_width / 5),
                rct->ymax + px,
@@ -1526,12 +1527,11 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
       UI_draw_roundbox_4fv(&box_rect, false, tab_curve_radius, theme_col_tab_outline);
 
       /* Disguise the outline on one side to join the tab to the panel. */
-      pos = GPU_vertformat_attr_add(
-          immVertexFormat(), "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
+      pos = GPU_vertformat_attr_add(immVertexFormat(), "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
       immBindBuiltinProgram(GPU_SHADER_3D_UNIFORM_COLOR);
 
       immUniformColor4fv(is_active ? theme_col_tab_active : theme_col_tab_inactive);
-      immRecti(pos,
+      immRectf(pos,
                is_left ? rct->xmax - px : rct->xmin,
                rct->ymin + px,
                is_left ? rct->xmax : rct->xmin + px,
@@ -1575,6 +1575,30 @@ void UI_panel_category_draw_all(ARegion *region, const char *category_id_active)
 
 /** \} */
 
+static int ui_panel_category_show_active_tab(ARegion *region, const int mval[2])
+{
+  if (!ED_region_panel_category_gutter_isect_xy(region, mval)) {
+    return WM_UI_HANDLER_CONTINUE;
+  }
+  const View2D *v2d = &region->v2d;
+  LISTBASE_FOREACH (PanelCategoryDyn *, pc_dyn, &region->runtime->panels_category) {
+    const bool is_active = STREQ(pc_dyn->idname, region->runtime->category);
+    if (!is_active) {
+      continue;
+    }
+    const rcti *rct = &pc_dyn->rect;
+    region->category_scroll = v2d->mask.ymax - (rct->ymax - region->category_scroll);
+
+    if (pc_dyn->next) {
+      const PanelCategoryDyn *pc_dyn_next = static_cast<PanelCategoryDyn *>(pc_dyn->next);
+      const int tab_v_pad = rct->ymin - pc_dyn_next->rect.ymax;
+      region->category_scroll -= tab_v_pad;
+    }
+    break;
+  }
+  ED_region_tag_redraw(region);
+  return WM_UI_HANDLER_BREAK;
+}
 /* -------------------------------------------------------------------- */
 /** \name Panel Alignment
  * \{ */
@@ -2510,6 +2534,9 @@ int ui_handler_panel_region(bContext *C,
     {
       /* Cycle tabs. */
       retval = ui_handle_panel_category_cycling(event, region, active_but);
+    }
+    if (event->type == EVT_PADPERIOD) {
+      retval = ui_panel_category_show_active_tab(region, event->xy);
     }
   }
 

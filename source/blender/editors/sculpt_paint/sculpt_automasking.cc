@@ -179,10 +179,6 @@ static bool needs_factors_cache(const Sculpt &sd, const Brush *brush)
     return true;
   }
 
-  if (automasking_flags & BRUSH_AUTOMASKING_VIEW_NORMAL) {
-    return brush && brush->automasking_boundary_edges_propagation_steps != 1;
-  }
-
   if (automasking_flags &
       (BRUSH_AUTOMASKING_BOUNDARY_EDGES | BRUSH_AUTOMASKING_BOUNDARY_FACE_SETS))
   {
@@ -241,7 +237,7 @@ static bool calc_view_occlusion_factor(const Depsgraph &depsgraph,
                                        const float3 &vert_position)
 {
   if (automasking.occlusion[vert] == Cache::OcclusionValue::Unknown) {
-    const bool occluded = SCULPT_vertex_is_occluded(depsgraph, object, vert_position, true);
+    const bool occluded = vertex_is_occluded(depsgraph, object, vert_position, true);
     automasking.occlusion[vert] = occluded ? Cache::OcclusionValue::Occluded :
                                              Cache::OcclusionValue::Visible;
   }
@@ -1211,6 +1207,12 @@ static void fill_topology_automasking_factors(const Depsgraph &depsgraph,
   /* TODO: This method is to be removed when more of the automasking code handles the different
    * pbvh types. */
   SculptSession &ss = *ob.sculpt;
+  if (std::holds_alternative<std::monostate>(ss.active_vert())) {
+    /* If we don't have an active vertex (i.e. the cursor is not over the mesh), we cannot
+     * accurately calculate the topology automasking factor as it may be ambiguous which island the
+     * user is intending to affect. */
+    return;
+  }
 
   switch (bke::object::pbvh_get(ob)->type()) {
     case bke::pbvh::Type::Mesh:
@@ -1628,11 +1630,6 @@ static void normal_occlusion_automasking_fill(const Depsgraph &depsgraph,
   }
 }
 
-std::unique_ptr<Cache> cache_init(const Depsgraph &depsgraph, const Sculpt &sd, Object &ob)
-{
-  return cache_init(depsgraph, sd, nullptr, ob);
-}
-
 std::unique_ptr<Cache> cache_init(const Depsgraph &depsgraph,
                                   const Sculpt &sd,
                                   const Brush *brush,
@@ -1650,7 +1647,7 @@ std::unique_ptr<Cache> cache_init(const Depsgraph &depsgraph,
 
   int mode = calc_effective_bits(sd, brush);
 
-  SCULPT_vertex_random_access_ensure(ob);
+  vert_random_access_ensure(ob);
   if (mode & BRUSH_AUTOMASKING_TOPOLOGY && ss.active_vert_index() != -1) {
     islands::ensure_cache(ob);
     automasking->settings.initial_island_nr = islands::vert_id_get(ss, ss.active_vert_index());
@@ -1688,24 +1685,24 @@ std::unique_ptr<Cache> cache_init(const Depsgraph &depsgraph,
 
   /* Additive modes. */
   if (mode_enabled(sd, brush, BRUSH_AUTOMASKING_TOPOLOGY)) {
-    SCULPT_vertex_random_access_ensure(ob);
+    vert_random_access_ensure(ob);
 
     automasking->settings.topology_use_brush_limit = is_constrained_by_radius(brush);
     fill_topology_automasking_factors(depsgraph, sd, ob, factors);
   }
 
   if (mode_enabled(sd, brush, BRUSH_AUTOMASKING_FACE_SETS)) {
-    SCULPT_vertex_random_access_ensure(ob);
+    vert_random_access_ensure(ob);
     init_face_sets_masking(sd, ob, factors);
   }
 
   const int steps = boundary_propagation_steps(sd, brush);
   if (mode_enabled(sd, brush, BRUSH_AUTOMASKING_BOUNDARY_EDGES)) {
-    SCULPT_vertex_random_access_ensure(ob);
+    vert_random_access_ensure(ob);
     init_boundary_masking(ob, depsgraph, BoundaryAutomaskMode::Edges, steps, factors);
   }
   if (mode_enabled(sd, brush, BRUSH_AUTOMASKING_BOUNDARY_FACE_SETS)) {
-    SCULPT_vertex_random_access_ensure(ob);
+    vert_random_access_ensure(ob);
     init_boundary_masking(ob, depsgraph, BoundaryAutomaskMode::FaceSets, steps, factors);
   }
 
@@ -1719,6 +1716,31 @@ std::unique_ptr<Cache> cache_init(const Depsgraph &depsgraph,
   }
 
   return automasking;
+}
+
+Cache &filter_cache_ensure(const Depsgraph &depsgraph, const Sculpt &sd, Object &ob)
+{
+  BLI_assert(is_enabled(sd, ob, nullptr));
+  if (ob.sculpt->filter_cache->automasking) {
+    return *ob.sculpt->filter_cache->automasking;
+  }
+
+  ob.sculpt->filter_cache->automasking = cache_init(depsgraph, sd, nullptr, ob);
+  return *ob.sculpt->filter_cache->automasking;
+}
+
+Cache &stroke_cache_ensure(const Depsgraph &depsgraph,
+                           const Sculpt &sd,
+                           const Brush *brush,
+                           Object &ob)
+{
+  BLI_assert(is_enabled(sd, ob, brush));
+  if (ob.sculpt->cache->automasking) {
+    return *ob.sculpt->cache->automasking;
+  }
+
+  ob.sculpt->cache->automasking = cache_init(depsgraph, sd, brush, ob);
+  return *ob.sculpt->cache->automasking;
 }
 
 void Cache::calc_cavity_factor(const Depsgraph &depsgraph,

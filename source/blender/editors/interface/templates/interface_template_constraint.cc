@@ -52,34 +52,28 @@ static void constraint_ops_extra_draw(bContext *C, uiLayout *layout, void *con_v
   uiLayoutSetUnitsX(layout, 4.0f);
 
   /* Apply. */
-  uiItemO(layout,
-          CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply"),
-          ICON_CHECKMARK,
-          "CONSTRAINT_OT_apply");
+  layout->op("CONSTRAINT_OT_apply",
+             CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply"),
+             ICON_CHECKMARK);
 
   /* Duplicate. */
-  uiItemO(layout,
-          CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Duplicate"),
-          ICON_DUPLICATE,
-          "CONSTRAINT_OT_copy");
+  layout->op("CONSTRAINT_OT_copy",
+             CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Duplicate"),
+             ICON_DUPLICATE);
 
-  uiItemO(layout,
-          CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy to Selected"),
-          0,
-          "CONSTRAINT_OT_copy_to_selected");
+  layout->op("CONSTRAINT_OT_copy_to_selected",
+             CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy to Selected"),
+             0);
 
-  uiItemS(layout);
+  layout->separator();
 
   /* Move to first. */
   row = &layout->column(false);
-  uiItemFullO(row,
-              "CONSTRAINT_OT_move_to_index",
-              IFACE_("Move to First"),
-              ICON_TRIA_UP,
-              nullptr,
-              WM_OP_INVOKE_DEFAULT,
-              UI_ITEM_NONE,
-              &op_ptr);
+  op_ptr = row->op("CONSTRAINT_OT_move_to_index",
+                   IFACE_("Move to First"),
+                   ICON_TRIA_UP,
+                   WM_OP_INVOKE_DEFAULT,
+                   UI_ITEM_NONE);
   RNA_int_set(&op_ptr, "index", 0);
   if (!con->prev) {
     uiLayoutSetEnabled(row, false);
@@ -87,14 +81,11 @@ static void constraint_ops_extra_draw(bContext *C, uiLayout *layout, void *con_v
 
   /* Move to last. */
   row = &layout->column(false);
-  uiItemFullO(row,
-              "CONSTRAINT_OT_move_to_index",
-              IFACE_("Move to Last"),
-              ICON_TRIA_DOWN,
-              nullptr,
-              WM_OP_INVOKE_DEFAULT,
-              UI_ITEM_NONE,
-              &op_ptr);
+  op_ptr = row->op("CONSTRAINT_OT_move_to_index",
+                   IFACE_("Move to Last"),
+                   ICON_TRIA_DOWN,
+                   WM_OP_INVOKE_DEFAULT,
+                   UI_ITEM_NONE);
   ListBase *constraint_list = blender::ed::object::constraint_list_from_constraint(
       ob, con, nullptr);
   RNA_int_set(&op_ptr, "index", BLI_listbase_count(constraint_list) - 1);
@@ -126,28 +117,28 @@ static void draw_constraint_header(uiLayout *layout, Object *ob, bConstraint *co
   uiLayout *sub = &layout->row(false);
   uiLayoutSetEmboss(sub, blender::ui::EmbossType::Emboss);
   uiLayoutSetRedAlert(sub, (con->flag & CONSTRAINT_DISABLE));
-  uiItemL(sub, "", RNA_struct_ui_icon(ptr.type));
+  sub->label("", RNA_struct_ui_icon(ptr.type));
 
   UI_block_emboss_set(block, blender::ui::EmbossType::Emboss);
 
   uiLayout *row = &layout->row(true);
 
-  uiItemR(row, &ptr, "name", UI_ITEM_NONE, "", ICON_NONE);
+  row->prop(&ptr, "name", UI_ITEM_NONE, "", ICON_NONE);
 
   /* Enabled eye icon. */
-  uiItemR(row, &ptr, "enabled", UI_ITEM_NONE, "", ICON_NONE);
+  row->prop(&ptr, "enabled", UI_ITEM_NONE, "", ICON_NONE);
 
   /* Extra operators menu. */
-  uiItemMenuF(row, "", ICON_DOWNARROW_HLT, constraint_ops_extra_draw, con);
+  row->menu_fn("", ICON_DOWNARROW_HLT, constraint_ops_extra_draw, con);
 
   /* Close 'button' - emboss calls here disable drawing of 'button' behind X */
   sub = &row->row(false);
   uiLayoutSetEmboss(sub, blender::ui::EmbossType::None);
   uiLayoutSetOperatorContext(sub, WM_OP_INVOKE_DEFAULT);
-  uiItemO(sub, "", ICON_X, "CONSTRAINT_OT_delete");
+  sub->op("CONSTRAINT_OT_delete", "", ICON_X);
 
   /* Some extra padding at the end, so the 'x' icon isn't too close to drag button. */
-  uiItemS(layout);
+  layout->separator();
 
   /* clear any locks set up for proxies/lib-linking */
   UI_block_lock_clear(block);

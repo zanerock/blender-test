@@ -18,6 +18,7 @@
 #include "BKE_brush.hh"
 #include "BKE_context.hh"
 #include "BKE_global.hh"
+#include "BKE_lib_id.hh"
 #include "BKE_paint.hh"
 #include "BKE_preferences.h"
 #include "BKE_preview_image.hh"
@@ -69,11 +70,23 @@ static wmOperatorStatus brush_asset_activate_exec(bContext *C, wmOperator *op)
     return OPERATOR_CANCELLED;
   }
 
+  const bool use_toggle = RNA_boolean_get(op->ptr, "use_toggle");
   AssetWeakReference brush_asset_reference = asset->make_weak_reference();
+  Paint *paint = BKE_paint_get_active_from_context(C);
+  std::optional<AssetWeakReference> asset_to_save;
+  if (use_toggle) {
+    BLI_assert(paint->brush_asset_reference);
+    if (brush_asset_reference == *paint->brush_asset_reference) {
+      if (paint->runtime.previous_active_brush_reference != nullptr) {
+        brush_asset_reference = *paint->runtime.previous_active_brush_reference;
+      }
+    }
+    else {
+      asset_to_save = *paint->brush_asset_reference;
+    }
+  }
   Brush *brush = reinterpret_cast<Brush *>(
       bke::asset_edit_id_from_weak_reference(*bmain, ID_BR, brush_asset_reference));
-
-  Paint *paint = BKE_paint_get_active_from_context(C);
 
   /* Activate brush through tool system rather than calling #BKE_paint_brush_set() directly, to let
    * the tool system switch tools if necessary, and update which brush was the last recently used
@@ -82,6 +95,15 @@ static wmOperatorStatus brush_asset_activate_exec(bContext *C, wmOperator *op)
     /* Note brush datablock was still added, so was not a no-op. */
     BKE_report(op->reports, RPT_WARNING, "Unable to activate brush, wrong object mode");
     return OPERATOR_FINISHED;
+  }
+
+  if (asset_to_save) {
+    BKE_paint_previous_asset_reference_set(paint, std::move(*asset_to_save));
+  }
+  else if (!use_toggle) {
+    /* If we aren't toggling, clear the previous reference so that we don't swap back to an
+     * incorrect "previous" asset */
+    BKE_paint_previous_asset_reference_clear(paint);
   }
 
   WM_main_add_notifier(NC_ASSET | NA_ACTIVATED, nullptr);
@@ -99,6 +121,13 @@ void BRUSH_OT_asset_activate(wmOperatorType *ot)
   ot->exec = brush_asset_activate_exec;
 
   asset::operator_asset_reference_props_register(*ot->srna);
+  PropertyRNA *prop;
+  prop = RNA_def_boolean(ot->srna,
+                         "use_toggle",
+                         false,
+                         "Toggle",
+                         "Switch between the current and assigned brushes on consecutive uses.");
+  RNA_def_property_flag(prop, PropertyFlag(PROP_HIDDEN | PROP_SKIP_SAVE));
 }
 
 static bool brush_asset_save_as_poll(bContext *C)
@@ -111,11 +140,6 @@ static bool brush_asset_save_as_poll(bContext *C)
   if (!paint->brush_asset_reference) {
     /* The brush should always be an imported asset. We use this asset reference to find
      * which library and catalog the brush came from, as defaults for the popup. */
-    return false;
-  }
-
-  if (BLI_listbase_is_empty(&U.asset_libraries)) {
-    CTX_wm_operator_poll_msg_set(C, "No asset library available to save to");
     return false;
   }
 
@@ -138,17 +162,29 @@ static wmOperatorStatus brush_asset_save_as_exec(bContext *C, wmOperator *op)
     STRNCPY(name, brush->id.name + 2);
   }
 
-  const bUserAssetLibrary *user_library = asset::get_asset_library_from_opptr(*op->ptr);
-  if (!user_library) {
-    return OPERATOR_CANCELLED;
-  }
+  const eAssetLibraryType enum_value = (eAssetLibraryType)RNA_enum_get(op->ptr,
+                                                                       "asset_library_reference");
+  const bool is_local_library = enum_value == ASSET_LIBRARY_LOCAL;
 
-  asset_system::AssetLibrary *library = AS_asset_library_load(
-      bmain, asset::user_library_to_library_ref(*user_library));
+  AssetLibraryReference library_reference;
+  const bUserAssetLibrary *user_library = nullptr;
+  if (is_local_library) {
+    library_reference = asset_system::current_file_library_reference();
+  }
+  else {
+    user_library = asset::get_asset_library_from_opptr(*op->ptr);
+    if (!user_library) {
+      return OPERATOR_CANCELLED;
+    }
+    library_reference = asset::user_library_to_library_ref(*user_library);
+  }
+  asset_system::AssetLibrary *library = AS_asset_library_load(bmain, library_reference);
   if (!library) {
     BKE_report(op->reports, RPT_ERROR, "Failed to load asset library");
     return OPERATOR_CANCELLED;
   }
+
+  BLI_assert(is_local_library || user_library);
 
   /* Turn brush into asset if it isn't yet. */
   if (!ID_IS_ASSET(&brush->id)) {
@@ -157,7 +193,23 @@ static wmOperatorStatus brush_asset_save_as_exec(bContext *C, wmOperator *op)
   }
   BLI_assert(ID_IS_ASSET(&brush->id));
 
+  if (is_local_library) {
+    const Brush *original_brush = brush;
+    brush = BKE_brush_duplicate(
+        bmain, brush, USER_DUP_OBDATA | USER_DUP_LINKED_ID, LIB_ID_DUPLICATE_IS_ROOT_ID);
+
+    BKE_libblock_rename(*bmain, brush->id, name);
+    asset::mark_id(&brush->id);
+    BLI_assert(brush->id.us == 1);
+
+    BKE_asset_metadata_free(&brush->id.asset_data);
+    brush->id.asset_data = BKE_asset_metadata_copy(original_brush->id.asset_data);
+    BLI_assert(brush->id.asset_data != nullptr);
+  }
+
   /* Add asset to catalog. */
+  /* Note: This needs to happen after the local asset is created but BEFORE a non-local library
+   * is saved */
   char catalog_path_c[MAX_NAME];
   RNA_string_get(op->ptr, "catalog_path", catalog_path_c);
 
@@ -169,28 +221,36 @@ static wmOperatorStatus brush_asset_save_as_exec(bContext *C, wmOperator *op)
     BKE_asset_metadata_catalog_id_set(&meta_data, catalog.catalog_id, catalog.simple_name.c_str());
   }
 
-  AssetWeakReference brush_asset_reference;
-  const std::optional<std::string> final_full_asset_filepath = bke::asset_edit_id_save_as(
-      *bmain, brush->id, name, *user_library, brush_asset_reference, *op->reports);
-  if (!final_full_asset_filepath) {
-    return OPERATOR_CANCELLED;
+  if (!is_local_library) {
+    AssetWeakReference brush_asset_reference;
+    const std::optional<std::string> final_full_asset_filepath = bke::asset_edit_id_save_as(
+        *bmain, brush->id, name, *user_library, brush_asset_reference, *op->reports);
+    if (!final_full_asset_filepath) {
+      return OPERATOR_CANCELLED;
+    }
+    library->catalog_service().write_to_disk(*final_full_asset_filepath);
+
+    brush = reinterpret_cast<Brush *>(
+        bke::asset_edit_id_from_weak_reference(*bmain, ID_BR, brush_asset_reference));
+    brush->has_unsaved_changes = false;
   }
 
-  library->catalog_service().write_to_disk(*final_full_asset_filepath);
   asset::shelf::show_catalog_in_visible_shelves(*C, catalog_path_c);
-
-  brush = reinterpret_cast<Brush *>(
-      bke::asset_edit_id_from_weak_reference(*bmain, ID_BR, brush_asset_reference));
-  brush->has_unsaved_changes = false;
 
   if (!WM_toolsystem_activate_brush_and_tool(C, paint, brush)) {
     /* Note brush asset was still saved in editable asset library, so was not a no-op. */
     BKE_report(op->reports, RPT_WARNING, "Unable to activate just-saved brush asset");
   }
 
-  asset::refresh_asset_library(C, *user_library);
+  asset::refresh_asset_library(C, library_reference);
   WM_main_add_notifier(NC_ASSET | ND_ASSET_LIST | NA_ADDED, nullptr);
-  WM_main_add_notifier(NC_BRUSH | NA_EDITED, brush);
+  if (is_local_library) {
+    WM_main_add_notifier(NC_BRUSH | NA_ADDED, brush);
+    WM_file_tag_modified();
+  }
+  else {
+    WM_main_add_notifier(NC_BRUSH | NA_EDITED, brush);
+  }
 
   return OPERATOR_FINISHED;
 }
@@ -259,8 +319,7 @@ static const EnumPropertyItem *rna_asset_library_reference_itemf(bContext * /*C*
   const EnumPropertyItem *items = asset::library_reference_to_rna_enum_itemf(
       /* Only get writable libraries. */
       /*include_readonly=*/false,
-      /* Saving brushes to the current file isn't working correctly yet. */
-      /*include_current_file=*/false);
+      /*include_current_file=*/true);
   if (!items) {
     *r_free = false;
     return nullptr;
@@ -433,7 +492,7 @@ static bool brush_asset_edit_metadata_poll(bContext *C)
     CTX_wm_operator_poll_msg_set(C, "Asset library is not editable");
     return false;
   }
-  if (!bke::asset_edit_id_is_writable(brush->id)) {
+  if (!(library_ref->type & ASSET_LIBRARY_LOCAL) && !bke::asset_edit_id_is_writable(brush->id)) {
     CTX_wm_operator_poll_msg_set(C, "Asset file is not editable");
     return false;
   }
@@ -454,8 +513,8 @@ void BRUSH_OT_asset_edit_metadata(wmOperatorType *ot)
       ot->srna, "catalog_path", nullptr, MAX_NAME, "Catalog", "The asset's catalog path");
   RNA_def_property_string_search_func_runtime(
       prop, visit_active_library_catalogs_catalog_for_search_fn, PROP_STRING_SEARCH_SUGGESTION);
-  RNA_def_string(ot->srna, "author", nullptr, MAX_NAME, "Author", "");
-  RNA_def_string(ot->srna, "description", nullptr, MAX_NAME, "Description", "");
+  RNA_def_string(ot->srna, "author", nullptr, 0, "Author", "");
+  RNA_def_string(ot->srna, "description", nullptr, 0, "Description", "");
 }
 
 static wmOperatorStatus brush_asset_load_preview_exec(bContext *C, wmOperator *op)
@@ -593,6 +652,28 @@ void BRUSH_OT_asset_delete(wmOperatorType *ot)
   ot->poll = brush_asset_delete_poll;
 }
 
+static std::optional<AssetLibraryReference> get_asset_library_reference(const bContext &C,
+                                                                        const Paint &paint,
+                                                                        const Brush &brush)
+{
+  if (!ID_IS_ASSET(&brush.id)) {
+    BLI_assert_unreachable();
+    return std::nullopt;
+  }
+  const AssetWeakReference *brush_weak_ref = paint.brush_asset_reference;
+  if (!brush_weak_ref) {
+    BLI_assert_unreachable();
+    return std::nullopt;
+  }
+  const asset_system::AssetRepresentation *asset = asset::find_asset_from_weak_ref(
+      C, *brush_weak_ref, CTX_wm_reports(&C));
+  if (!asset) {
+    /* May happen if library loading hasn't finished. */
+    return std::nullopt;
+  }
+  return asset->owner_asset_library().library_reference();
+}
+
 static bool brush_asset_save_poll(bContext *C)
 {
   Paint *paint = BKE_paint_get_active_from_context(C);
@@ -601,11 +682,15 @@ static bool brush_asset_save_poll(bContext *C)
     return false;
   }
 
-  if (!bke::asset_edit_id_is_editable(brush->id)) {
+  const std::optional<AssetLibraryReference> library_ref = get_asset_library_reference(
+      *C, *paint, *brush);
+  if (!library_ref) {
+    BLI_assert_unreachable();
     return false;
   }
 
-  if (!(paint->brush_asset_reference && ID_IS_ASSET(brush))) {
+  if ((library_ref->type == ASSET_LIBRARY_LOCAL)) {
+    CTX_wm_operator_poll_msg_set(C, "Assets in the current file cannot be individually saved");
     return false;
   }
 
@@ -660,7 +745,18 @@ static bool brush_asset_revert_poll(bContext *C)
     return false;
   }
 
-  return paint->brush_asset_reference && bke::asset_edit_id_is_editable(brush->id);
+  const std::optional<AssetLibraryReference> library_ref = get_asset_library_reference(
+      *C, *paint, *brush);
+  if (!library_ref) {
+    BLI_assert_unreachable();
+    return false;
+  }
+  if ((library_ref->type == ASSET_LIBRARY_LOCAL)) {
+    CTX_wm_operator_poll_msg_set(C, "Assets in the current file cannot be reverted");
+    return false;
+  }
+
+  return bke::asset_edit_id_is_editable(brush->id);
 }
 
 static wmOperatorStatus brush_asset_revert_exec(bContext *C, wmOperator *op)

@@ -12,6 +12,7 @@
 #include "GPU_capabilities.hh"
 
 #include "BKE_material.hh"
+#include "DNA_world_types.h"
 
 #include "gpu_shader_create_info.hh"
 
@@ -72,18 +73,18 @@ ShaderModule::ShaderModule()
 
 ShaderModule::~ShaderModule()
 {
-  /* Finish compilation to avoid asserts on exit at GLShaderCompiler destructor. */
+  /* Cancel compilation to avoid asserts on exit at ShaderCompiler destructor. */
 
-  if (compilation_handle_) {
-    static_shaders_are_ready(true);
-  }
-
+  /* Specializations first, to avoid releasing the base shader while the specialization compilation
+   * is still in flight. */
   for (SpecializationBatchHandle &handle : specialization_handles_.values()) {
     if (handle) {
-      while (!GPU_shader_batch_specializations_is_ready(handle)) {
-        /* Block until ready. */
-      }
+      GPU_shader_batch_specializations_cancel(handle);
     }
+  }
+
+  if (compilation_handle_) {
+    GPU_shader_batch_cancel(compilation_handle_);
   }
 }
 
@@ -117,7 +118,9 @@ bool ShaderModule::static_shaders_are_ready(bool block_until_ready)
 bool ShaderModule::request_specializations(bool block_until_ready,
                                            int render_buffers_shadow_id,
                                            int shadow_ray_count,
-                                           int shadow_ray_step_count)
+                                           int shadow_ray_step_count,
+                                           bool use_split_indirect,
+                                           bool use_lightprobe_eval)
 {
   if (!GPU_use_parallel_compilation()) {
     return true;
@@ -127,23 +130,34 @@ bool ShaderModule::request_specializations(bool block_until_ready,
 
   std::lock_guard lock(mutex_);
 
-  SpecializationBatchHandle specialization_handle = specialization_handles_.lookup_or_add_cb(
-      {render_buffers_shadow_id, shadow_ray_count, shadow_ray_step_count}, [&]() {
+  SpecializationBatchHandle &specialization_handle = specialization_handles_.lookup_or_add_cb(
+      {render_buffers_shadow_id,
+       shadow_ray_count,
+       shadow_ray_step_count,
+       use_split_indirect,
+       use_lightprobe_eval},
+      [&]() {
         Vector<ShaderSpecialization> specializations;
         for (int i = 0; i < 3; i++) {
           GPUShader *sh = static_shader_get(eShaderType(DEFERRED_LIGHT_SINGLE + i));
-          for (bool use_split_indirect : {false, true}) {
-            for (bool use_lightprobe_eval : {false, true}) {
-              for (bool use_transmission : {false, true}) {
-                specializations.append({sh,
-                                        {{"render_pass_shadow_id", render_buffers_shadow_id},
-                                         {"use_split_indirect", use_split_indirect},
-                                         {"use_lightprobe_eval", use_lightprobe_eval},
-                                         {"use_transmission", use_transmission},
-                                         {"shadow_ray_count", shadow_ray_count},
-                                         {"shadow_ray_step_count", shadow_ray_step_count}}});
-              }
-            }
+          int render_pass_shadow_id_index = GPU_shader_get_constant(sh, "render_pass_shadow_id");
+          int use_split_indirect_index = GPU_shader_get_constant(sh, "use_split_indirect");
+          int use_lightprobe_eval_index = GPU_shader_get_constant(sh, "use_lightprobe_eval");
+          int use_transmission_index = GPU_shader_get_constant(sh, "use_transmission");
+          int shadow_ray_count_index = GPU_shader_get_constant(sh, "shadow_ray_count");
+          int shadow_ray_step_count_index = GPU_shader_get_constant(sh, "shadow_ray_step_count");
+
+          gpu::shader::SpecializationConstants sp = GPU_shader_get_default_constant_state(sh);
+
+          for (bool use_transmission : {false, true}) {
+            sp.set_value(render_pass_shadow_id_index, render_buffers_shadow_id);
+            sp.set_value(use_split_indirect_index, use_split_indirect);
+            sp.set_value(use_lightprobe_eval_index, use_lightprobe_eval);
+            sp.set_value(use_transmission_index, use_transmission);
+            sp.set_value(shadow_ray_count_index, shadow_ray_count);
+            sp.set_value(shadow_ray_step_count_index, shadow_ray_step_count);
+
+            specializations.append({sh, sp});
           }
         }
 
@@ -636,6 +650,9 @@ void ShaderModule::material_create_info_amend(GPUMaterial *gpumat, GPUCodegenOut
     }
   }
 
+  /* Allow to use Reverse-Z on OpenGL. Does nothing in other backend. */
+  info.builtins(BuiltinBits::CLIP_CONTROL);
+
   std::stringstream global_vars;
   switch (geometry_type) {
     case MAT_GEOM_MESH:
@@ -701,8 +718,10 @@ void ShaderModule::material_create_info_amend(GPUMaterial *gpumat, GPUCodegenOut
       break;
   }
 
+  const bool support_volume_attributes = ELEM(geometry_type, MAT_GEOM_MESH, MAT_GEOM_VOLUME);
   const bool do_vertex_attrib_load = !ELEM(geometry_type, MAT_GEOM_WORLD, MAT_GEOM_VOLUME) &&
-                                     (pipeline_type != MAT_PIPE_VOLUME_MATERIAL);
+                                     (pipeline_type != MAT_PIPE_VOLUME_MATERIAL ||
+                                      !support_volume_attributes);
 
   if (!do_vertex_attrib_load && !info.vertex_out_interfaces_.is_empty()) {
     /* Codegen outputs only one interface. */
@@ -898,16 +917,24 @@ void ShaderModule::material_create_info_amend(GPUMaterial *gpumat, GPUCodegenOut
   }
 }
 
+struct CallbackThunk {
+  ShaderModule *shader_module;
+  ::Material *default_mat;
+};
+
 /* WATCH: This can be called from another thread! Needs to not touch the shader module in any
  * thread unsafe manner. */
-static void codegen_callback(void *thunk, GPUMaterial *mat, GPUCodegenOutput *codegen)
+static void codegen_callback(void *void_thunk, GPUMaterial *mat, GPUCodegenOutput *codegen)
 {
-  reinterpret_cast<ShaderModule *>(thunk)->material_create_info_amend(mat, codegen);
+  CallbackThunk *thunk = static_cast<CallbackThunk *>(void_thunk);
+  thunk->shader_module->material_create_info_amend(mat, codegen);
 }
 
-static GPUPass *pass_replacement_cb(void *thunk, GPUMaterial *mat)
+static GPUPass *pass_replacement_cb(void *void_thunk, GPUMaterial *mat)
 {
   using namespace blender::gpu::shader;
+
+  CallbackThunk *thunk = static_cast<CallbackThunk *>(void_thunk);
 
   const ::Material *blender_mat = GPU_material_get_material(mat);
 
@@ -945,100 +972,66 @@ static GPUPass *pass_replacement_cb(void *thunk, GPUMaterial *mat)
                          (is_prepass && (!has_vertex_displacement && !has_transparency &&
                                          !has_raytraced_transmission));
   if (can_use_default) {
-    GPUMaterial *mat = reinterpret_cast<ShaderModule *>(thunk)->material_default_shader_get(
-        pipeline_type, geometry_type);
+    GPUMaterial *mat = thunk->shader_module->material_shader_get(thunk->default_mat,
+                                                                 thunk->default_mat->nodetree,
+                                                                 pipeline_type,
+                                                                 geometry_type,
+                                                                 false,
+                                                                 nullptr);
     return GPU_material_get_pass(mat);
   }
 
   return nullptr;
 }
 
-GPUMaterial *ShaderModule::material_default_shader_get(eMaterialPipeline pipeline_type,
-                                                       eMaterialGeometry geometry_type)
-{
-  bool is_volume = ELEM(pipeline_type, MAT_PIPE_VOLUME_MATERIAL, MAT_PIPE_VOLUME_OCCUPANCY);
-  ::Material *blender_mat = (is_volume) ? BKE_material_default_volume() :
-                                          BKE_material_default_surface();
-
-  return material_shader_get(
-      blender_mat, blender_mat->nodetree, pipeline_type, geometry_type, false);
-}
-
 GPUMaterial *ShaderModule::material_shader_get(::Material *blender_mat,
                                                bNodeTree *nodetree,
                                                eMaterialPipeline pipeline_type,
                                                eMaterialGeometry geometry_type,
-                                               bool deferred_compilation)
+                                               bool deferred_compilation,
+                                               ::Material *default_mat)
 {
-  bool is_volume = ELEM(pipeline_type, MAT_PIPE_VOLUME_MATERIAL, MAT_PIPE_VOLUME_OCCUPANCY);
-
   eMaterialDisplacement displacement_type = to_displacement_type(blender_mat->displacement_method);
   eMaterialThickness thickness_type = to_thickness_type(blender_mat->thickness_mode);
 
   uint64_t shader_uuid = shader_uuid_from_material_type(
       pipeline_type, geometry_type, displacement_type, thickness_type, blender_mat->blend_flag);
 
-  bool is_default_material = ELEM(
-      blender_mat, BKE_material_default_surface(), BKE_material_default_volume());
+  bool is_default_material = default_mat == nullptr;
+  BLI_assert(blender_mat != default_mat);
 
-  GPUMaterial *mat = DRW_shader_from_material(blender_mat,
-                                              nodetree,
-                                              GPU_MAT_EEVEE,
-                                              shader_uuid,
-                                              is_volume,
-                                              deferred_compilation,
-                                              codegen_callback,
-                                              this,
-                                              is_default_material ? nullptr : pass_replacement_cb);
+  CallbackThunk thunk = {this, default_mat};
 
-  return mat;
+  return GPU_material_from_nodetree(blender_mat,
+                                    nodetree,
+                                    &blender_mat->gpumaterial,
+                                    blender_mat->id.name,
+                                    GPU_MAT_EEVEE,
+                                    shader_uuid,
+                                    deferred_compilation,
+                                    codegen_callback,
+                                    &thunk,
+                                    is_default_material ? nullptr : pass_replacement_cb);
 }
 
 GPUMaterial *ShaderModule::world_shader_get(::World *blender_world,
                                             bNodeTree *nodetree,
-                                            eMaterialPipeline pipeline_type)
+                                            eMaterialPipeline pipeline_type,
+                                            bool deferred_compilation)
 {
-  bool is_volume = (pipeline_type == MAT_PIPE_VOLUME_MATERIAL);
-  bool defer_compilation = is_volume;
-
   uint64_t shader_uuid = shader_uuid_from_material_type(pipeline_type, MAT_GEOM_WORLD);
 
-  return DRW_shader_from_world(blender_world,
-                               nodetree,
-                               GPU_MAT_EEVEE,
-                               shader_uuid,
-                               is_volume,
-                               defer_compilation,
-                               codegen_callback,
-                               this);
-}
+  CallbackThunk thunk = {this, nullptr};
 
-GPUMaterial *ShaderModule::material_shader_get(const char *name,
-                                               ListBase &materials,
-                                               bNodeTree *nodetree,
-                                               eMaterialPipeline pipeline_type,
-                                               eMaterialGeometry geometry_type)
-{
-  uint64_t shader_uuid = shader_uuid_from_material_type(pipeline_type, geometry_type);
-
-  bool is_volume = ELEM(pipeline_type, MAT_PIPE_VOLUME_MATERIAL, MAT_PIPE_VOLUME_OCCUPANCY);
-
-  GPUMaterial *gpumat = GPU_material_from_nodetree(nullptr,
-                                                   nullptr,
-                                                   nodetree,
-                                                   &materials,
-                                                   name,
-                                                   GPU_MAT_EEVEE,
-                                                   shader_uuid,
-                                                   is_volume,
-                                                   false,
-                                                   codegen_callback,
-                                                   this);
-  GPU_material_status_set(gpumat, GPU_MAT_CREATED);
-  GPU_material_compile(gpumat);
-  /* Queue deferred material optimization. */
-  DRW_shader_queue_optimize_material(gpumat);
-  return gpumat;
+  return GPU_material_from_nodetree(nullptr,
+                                    nodetree,
+                                    &blender_world->gpumaterial,
+                                    blender_world->id.name,
+                                    GPU_MAT_EEVEE,
+                                    shader_uuid,
+                                    deferred_compilation,
+                                    codegen_callback,
+                                    &thunk);
 }
 
 /** \} */

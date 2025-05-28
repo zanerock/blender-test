@@ -332,7 +332,7 @@ static wmOperatorStatus viewrotate_modal_impl(bContext *C,
   return ret;
 }
 
-static wmOperatorStatus viewrotate_invoke_impl(bContext * /*C*/,
+static wmOperatorStatus viewrotate_invoke_impl(bContext *C,
                                                ViewOpsData *vod,
                                                const wmEvent *event,
                                                PointerRNA * /*ptr*/)
@@ -357,6 +357,8 @@ static wmOperatorStatus viewrotate_invoke_impl(bContext * /*C*/,
       copy_v2_v2_int(m_xy, event->prev_xy);
     }
     viewrotate_apply(vod, m_xy);
+
+    ED_view3d_camera_lock_autokey(vod->v3d, vod->rv3d, C, true, true);
     return OPERATOR_FINISHED;
   }
 
@@ -375,7 +377,7 @@ void VIEW3D_OT_rotate(wmOperatorType *ot)
   ot->description = "Rotate the view";
   ot->idname = ViewOpsType_rotate.idname;
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = viewrotate_invoke;
   ot->modal = view3d_navigate_modal_fn;
   ot->poll = view3d_rotation_poll;

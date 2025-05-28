@@ -10,13 +10,21 @@
 
 #include "node_composite_util.hh"
 
+#include "UI_interface.hh"
+#include "UI_resources.hh"
+
 /* **************** VALUE ******************** */
 
 namespace blender::nodes::node_composite_value_cc {
 
 static void cmp_node_value_declare(NodeDeclarationBuilder &b)
 {
-  b.add_output<decl::Float>("Value").default_value(0.5f);
+  b.add_output<decl::Float>("Value").default_value(0.5f).custom_draw(
+      [](CustomSocketDrawParams &params) {
+        uiLayout &row = params.layout.row(true);
+        row.prop(&params.socket_ptr, "default_value", UI_ITEM_NONE, "", ICON_NONE);
+      });
+  ;
 }
 
 using namespace blender::compositor;
@@ -44,7 +52,7 @@ static NodeOperation *get_compositor_operation(Context &context, DNode node)
 
 }  // namespace blender::nodes::node_composite_value_cc
 
-void register_node_type_cmp_value()
+static void register_node_type_cmp_value()
 {
   namespace file_ns = blender::nodes::node_composite_value_cc;
 
@@ -62,3 +70,4 @@ void register_node_type_cmp_value()
 
   blender::bke::node_register_type(ntype);
 }
+NOD_REGISTER_NODE(register_node_type_cmp_value)

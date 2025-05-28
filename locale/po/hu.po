@@ -1,9 +1,9 @@
 
 msgid ""
 msgstr ""
-"Project-Id-Version: Blender 4.5.0 Alpha (b'b6372b3af3f7')\n"
+"Project-Id-Version: Blender 4.5.0 Alpha (b'ba454989554a')\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-04-21 07:54+0000\n"
+"POT-Creation-Date: 2025-05-26 07:36+0000\n"
 "PO-Revision-Date: 2025-04-14 08:24+0000\n"
 "Last-Translator: Balázs Füvesi <fuvesib@gmail.com>\n"
 "Language-Team: Hungarian <https://translate.blender.org/projects/blender-ui/ui/hu/>\n"
@@ -1066,6 +1066,10 @@ msgstr "Egyenes"
 
 msgid "Children"
 msgstr "Gyermek"
+
+
+msgid "Wire"
+msgstr "Drótváz"
 
 
 msgid "Length"
@@ -2695,10 +2699,6 @@ msgid "Target Z"
 msgstr "Célobjektum Z"
 
 
-msgid "Target's Z axis, not World Z axis, will constraint the Up direction"
-msgstr "A felfelé írány kényszerítése a célobjektum Z-tengelye által"
-
-
 msgid "From Maximum X"
 msgstr "Maximum X-től"
 
@@ -4039,10 +4039,6 @@ msgstr "Csoportok"
 
 msgid "Layers"
 msgstr "Rétegek"
-
-
-msgid "Wire"
-msgstr "Drótváz"
 
 
 msgid "Exclusion"
@@ -12675,10 +12671,6 @@ msgid "Remove"
 msgstr "Eltávolítás"
 
 
-msgid "Save a Collada file"
-msgstr "Collada fájl mentése"
-
-
 msgid "Only export deforming bones with armatures"
 msgstr "Csak a deformáló csontok exportálása a csontvázzal"
 
@@ -12741,10 +12733,6 @@ msgstr "Sokszorosított objektumok helyettesítése azonos adatból"
 
 msgid "Copy textures to same folder where the .dae file is exported"
 msgstr "Textúrák másolása ugyanabba a mappába, ahova a .dae fájl"
-
-
-msgid "Load a Collada file"
-msgstr "Egy Collada fájl megnyitása"
 
 
 msgid "Import Units"
@@ -15073,6 +15061,10 @@ msgid "Add & Replace"
 msgstr "Hozzáadás és Csere"
 
 
+msgid "Snap to Strips"
+msgstr "Sávokhoz csapás"
+
+
 msgid "Automatic keyframe insertion using active Keying Set only"
 msgstr "Automatikus kulcskockázás kizárólag a Kulcsozási készlet alapján"
 
@@ -15945,10 +15937,6 @@ msgstr "Létrehozás"
 msgctxt "Operator"
 msgid "Movie"
 msgstr "Videó"
-
-
-msgid "Snap to Strips"
-msgstr "Sávokhoz csapás"
 
 
 msgctxt "Operator"
@@ -17124,10 +17112,6 @@ msgstr "Film klip nem található"
 
 msgid "Please select two strips"
 msgstr "Két sáv kijelölése szükséges"
-
-
-msgid "No active sequence!"
-msgstr "Nincs aktív szekvencia!"
 
 
 msgid "No Recent Files"

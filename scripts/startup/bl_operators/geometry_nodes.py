@@ -50,12 +50,16 @@ def geometry_node_group_empty_tool_new(context):
         group.is_type_curve = True
     elif ob_type == 'POINTCLOUD':
         group.is_type_pointcloud = True
+    elif ob_type == 'GREASEPENCIL':
+        group.is_type_grease_pencil = True
     else:
         group.is_type_mesh = True
 
     mode = ob.mode if ob else 'OBJECT'
-    if mode in {'SCULPT', 'SCULPT_CURVES'}:
+    if mode in {'SCULPT', 'SCULPT_CURVES', 'SCULPT_GREASE_PENCIL'}:
         group.is_mode_sculpt = True
+    elif mode == 'PAINT_GREASE_PENCIL':
+        group.is_mode_paint = True
     elif mode == 'EDIT':
         group.is_mode_edit = True
     else:
@@ -178,7 +182,20 @@ def create_wrapper_group(operator, modifier, old_group):
             output_socket = get_enabled_socket_with_name(input_node.outputs, "Attribute")
             group.links.new(output_socket, group_node_input)
         elif hasattr(input_socket, "default_value"):
-            group_node_input.default_value = modifier[identifier]
+            # Special case for menu sockets: the modifier property is just the int
+            # value, which must be converted to the enum identifier to set the new
+            # interface default value. Use the RNA definition of the modifier property
+            # UI to get that identifier.
+            if input_socket.socket_type == 'NodeSocketMenu':
+                default_value_int = modifier[identifier]
+                menu_enum_items = modifier.id_properties_ui(identifier).as_dict()['items']
+                # Tuples have same order as in bpy.props.EnumProperty: (identifier, name, description, icon, number).
+                # In the case of an unconnected menu socket there will be one valid "DUMMY" item only.
+                if len(menu_enum_items) > 1:
+                    default_value_enum_item = next(item for item in menu_enum_items if item[4] == default_value_int)
+                    group_node_input.default_value = default_value_enum_item[0]
+            else:
+                group_node_input.default_value = modifier[identifier]
 
     if first_geometry_input:
         group.links.new(

@@ -411,7 +411,7 @@ static void object_transfer_mode_reposition_view_pivot(ARegion *region,
 static void object_overlay_mode_transfer_animation_start(bContext *C, Object *ob_dst)
 {
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
-  Object *ob_dst_eval = DEG_get_evaluated_object(depsgraph, ob_dst);
+  Object *ob_dst_eval = DEG_get_evaluated(depsgraph, ob_dst);
   ob_dst_eval->runtime->overlay_mode_transfer_start_time = BLI_time_now_seconds();
 }
 
@@ -530,7 +530,7 @@ void OBJECT_OT_transfer_mode(wmOperatorType *ot)
       "Switches the active object and assigns the same mode to a new one under the mouse cursor, "
       "leaving the active mode in the current one";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = object_transfer_mode_invoke;
   ot->poll = object_transfer_mode_poll;
 

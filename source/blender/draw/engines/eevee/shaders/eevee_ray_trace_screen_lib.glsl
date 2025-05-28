@@ -18,6 +18,7 @@
 #include "eevee_bxdf_diffuse_lib.glsl"
 #include "eevee_bxdf_microfacet_lib.glsl"
 #include "eevee_ray_types_lib.glsl"
+#include "eevee_reverse_z_lib.glsl"
 #include "eevee_thickness_lib.glsl"
 #include "gpu_shader_codegen_lib.glsl"
 #include "gpu_shader_math_fast_lib.glsl"
@@ -186,7 +187,8 @@ ScreenTraceHitData raytrace_planar(RayTraceData rt_data,
   ScreenSpaceRay ssray = raytrace_screenspace_ray_create(ray, 2.0f * inv_texture_size);
 
   float prev_delta = 0.0f, prev_time = 0.0f;
-  float depth_sample = texture(planar_depth_tx, float3(ssray.origin.xy, planar.layer_id)).r;
+  float depth_sample = reverse_z::read(
+      texture(planar_depth_tx, float3(ssray.origin.xy, planar.layer_id)).r);
   float delta = depth_sample - ssray.origin.z;
 
   float t = 0.0f, time = 0.0f;
@@ -203,7 +205,7 @@ ScreenTraceHitData raytrace_planar(RayTraceData rt_data,
 
     float4 ss_ray = ssray.origin + ssray.direction * time;
 
-    depth_sample = texture(planar_depth_tx, float3(ss_ray.xy, planar.layer_id)).r;
+    depth_sample = reverse_z::read(texture(planar_depth_tx, float3(ss_ray.xy, planar.layer_id)).r);
 
     delta = depth_sample - ss_ray.z;
     /* Check if the ray is below the surface. */
@@ -237,6 +239,11 @@ Ray raytrace_thickness_ray_amend(Ray ray, ClosureUndetermined cl, float3 V, floa
       return bxdf_ggx_ray_amend_transmission(cl, V, ray, thickness);
     case CLOSURE_BSDF_TRANSLUCENT_ID:
       return bxdf_translucent_ray_amend(cl, V, ray, thickness);
+    case CLOSURE_NONE_ID:
+    case CLOSURE_BSDF_DIFFUSE_ID:
+    case CLOSURE_BSDF_MICROFACET_GGX_REFLECTION_ID:
+    case CLOSURE_BSSRDF_BURLEY_ID:
+      break;
   }
   return ray;
 }

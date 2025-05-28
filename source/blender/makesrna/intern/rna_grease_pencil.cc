@@ -981,6 +981,7 @@ static void rna_def_grease_pencil_tree_node(BlenderRNA *brna)
   RNA_def_property_struct_type(prop, "GreasePencilTreeNode");
   RNA_def_property_ui_text(prop, "Next Node", "The layer tree node after (i.e. above) this one");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE | PROP_ANIMATABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_NO_COMPARISON);
 
   /* Previous tree node. */
   prop = RNA_def_property(srna, "prev_node", PROP_POINTER, PROP_NONE);
@@ -989,6 +990,7 @@ static void rna_def_grease_pencil_tree_node(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop, "Previous Node", "The layer tree node before (i.e. below) this one");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE | PROP_ANIMATABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_NO_COMPARISON);
 
   /* Parent group. */
   prop = RNA_def_property(srna, "parent_group", PROP_POINTER, PROP_NONE);
@@ -997,6 +999,7 @@ static void rna_def_grease_pencil_tree_node(BlenderRNA *brna)
       prop, "rna_GreasePencilTreeNode_parent_layer_group_get", nullptr, nullptr, nullptr);
   RNA_def_property_ui_text(prop, "Parent Layer Group", "The parent group of this layer tree node");
   RNA_def_property_clear_flag(prop, PROP_EDITABLE | PROP_ANIMATABLE);
+  RNA_def_property_override_flag(prop, PROPOVERRIDE_NO_COMPARISON);
 }
 
 static void rna_def_grease_pencil_layer(BlenderRNA *brna)
@@ -1242,7 +1245,7 @@ static void rna_def_grease_pencil_layer_group(BlenderRNA *brna)
   prop = RNA_def_property(srna, "is_expanded", PROP_BOOLEAN, PROP_NONE);
   RNA_def_property_boolean_sdna(
       prop, "GreasePencilLayerTreeNode", "flag", GP_LAYER_TREE_NODE_EXPANDED);
-  RNA_def_property_ui_text(prop, "Expanded", "The layer groups is expanded in the UI");
+  RNA_def_property_ui_text(prop, "Expanded", "The layer group is expanded in the UI");
   RNA_def_property_flag(prop, PROP_LIB_EXCEPTION);
   RNA_def_property_override_flag(prop, PROPOVERRIDE_OVERRIDABLE_LIBRARY);
   RNA_def_property_boolean_funcs(prop, nullptr, "rna_GreasePencilLayerGroup_is_expanded_set");

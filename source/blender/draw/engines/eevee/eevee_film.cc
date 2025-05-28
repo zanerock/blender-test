@@ -270,6 +270,20 @@ void Film::init(const int2 &extent, const rcti *output_rect)
   Sampling &sampling = inst_.sampling;
   Scene &scene = *inst_.scene;
 
+  if (inst_.is_viewport()) {
+    /* Update detection of viewport setting. */
+    const View3DShading &shading = inst_.v3d->shading;
+    int update = 0;
+    update += assign_if_different(ui_render_pass_, eViewLayerEEVEEPassType(shading.render_pass));
+    update += assign_if_different(ui_aov_name_, std::string(shading.aov_name));
+    if (update) {
+      inst_.sampling.reset();
+    }
+  }
+
+  this->depth = GPU_clip_control_support() ? DepthState{0.0f, DRW_STATE_DEPTH_GREATER_EQUAL} :
+                                             DepthState{1.0f, DRW_STATE_DEPTH_LESS_EQUAL};
+
   /* Compute the passes needed by the viewport compositor. */
   Set<std::string> passes_used_by_viewport_compositor;
   if (inst_.is_viewport_compositor_enabled) {
@@ -285,13 +299,18 @@ void Film::init(const int2 &extent, const rcti *output_rect)
     /* Enable passes that need to be rendered. */
     if (inst_.is_viewport()) {
       /* Viewport Case. */
-      enabled_passes_ = eViewLayerEEVEEPassType(inst_.v3d->shading.render_pass) |
-                        viewport_compositor_enabled_passes_;
+      eViewLayerEEVEEPassType enabled_passes = eViewLayerEEVEEPassType(
+                                                   inst_.v3d->shading.render_pass) |
+                                               viewport_compositor_enabled_passes_;
 
       if (inst_.overlays_enabled() || inst_.gpencil_engine_enabled()) {
         /* Overlays and Grease Pencil needs the depth for correct compositing.
          * Using the render pass ensure we store the center depth. */
-        enabled_passes_ |= EEVEE_RENDER_PASS_Z;
+        enabled_passes |= EEVEE_RENDER_PASS_Z;
+      }
+
+      if (assign_if_different(enabled_passes_, enabled_passes)) {
+        inst_.sampling.reset();
       }
     }
     else {
@@ -622,6 +641,15 @@ void Film::end_sync()
   aovs_info.push_update();
 
   sync_mist();
+
+  /* Update sample table length for specialization warm up.
+   * Otherwise, we will warm a specialization that is not actually used.
+   * We still need to update it once per sample afterward. */
+  update_sample_table();
+
+  inst_.manager->warm_shader_specialization(accumulate_ps_);
+  inst_.manager->warm_shader_specialization(copy_ps_);
+  inst_.manager->warm_shader_specialization(cryptomatte_post_ps_);
 }
 
 float2 Film::pixel_jitter_get() const
@@ -682,20 +710,6 @@ int Film::cryptomatte_layer_len_get() const
   return result;
 }
 
-int Film::cryptomatte_layer_max_get() const
-{
-  if (data_.cryptomatte_material_id != -1) {
-    return 3;
-  }
-  if (data_.cryptomatte_asset_id != -1) {
-    return 2;
-  }
-  if (data_.cryptomatte_object_id != -1) {
-    return 1;
-  }
-  return 0;
-}
-
 void Film::update_sample_table()
 {
   /* Offset in render target pixels. */
@@ -703,6 +717,12 @@ void Film::update_sample_table()
 
   int filter_radius_ceil = ceilf(data_.filter_radius);
   float filter_radius_sqr = square_f(data_.filter_radius);
+
+  /* Reset */
+  for (FilmSample &sample : data_.samples) {
+    sample.texel = int2(0, 0);
+    sample.weight = 0.0f;
+  }
 
   data_.samples_len = 0;
   if (data_.scaling_factor > 1) {
@@ -760,6 +780,11 @@ void Film::update_sample_table()
     if (closest_index != 0) {
       std::swap(data_.samples[closest_index], data_.samples[0]);
     }
+    /* Avoid querying a different shader specialization for this case.
+     * This can happen with the default settings. */
+    if (data_.samples_len <= 9) {
+      data_.samples_len = 9;
+    }
   }
   else {
     /* Large Filter Size. */
@@ -786,6 +811,24 @@ void Film::update_sample_table()
       data_.samples_weight_total += sample.weight;
       i++;
     }
+  }
+
+  /* Round to specific amount of sample to avoid variation in sample count to cause stutter on
+   * startup because of shader specialization. */
+  if (data_.samples_len == 1) {
+    data_.samples_len = 1;
+  }
+  else if (data_.samples_len <= 4) {
+    data_.samples_len = 4;
+  }
+  else if (data_.samples_len <= 9) {
+    data_.samples_len = 9;
+  }
+  else if (data_.samples_len <= 16) {
+    data_.samples_len = 16;
+  }
+  else {
+    BLI_assert_unreachable();
   }
 }
 

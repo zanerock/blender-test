@@ -577,9 +577,9 @@ bool Action::slot_remove(Slot &slot_to_remove)
     return false;
   }
 
-  /* Remove the slot's data from each layer. */
-  for (Layer *layer : this->layers()) {
-    layer->slot_data_remove(*this, slot_to_remove.handle);
+  /* Remove the slot's data from each keyframe strip. */
+  for (StripKeyframeData *strip_data : this->strip_keyframe_data()) {
+    strip_data->slot_data_remove(slot_to_remove.handle);
   }
 
   /* Don't bother un-assigning this slot from its users. The slot handle will
@@ -1004,13 +1004,6 @@ int64_t Layer::find_strip_index(const Strip &strip) const
     }
   }
   return -1;
-}
-
-void Layer::slot_data_remove(Action &owning_action, const slot_handle_t slot_handle)
-{
-  for (Strip *strip : this->strips()) {
-    strip->slot_data_remove(owning_action, slot_handle);
-  }
 }
 
 /* ----- ActionSlot implementation ----------- */
@@ -1695,14 +1688,6 @@ template<> StripKeyframeData &Strip::data<StripKeyframeData>(Action &owning_acti
   return *owning_action.strip_keyframe_data()[this->data_index];
 }
 
-void Strip::slot_data_remove(Action &owning_action, const slot_handle_t slot_handle)
-{
-  switch (this->type()) {
-    case Type::Keyframe:
-      this->data<StripKeyframeData>(owning_action).slot_data_remove(slot_handle);
-  }
-}
-
 /* ----- ActionStripKeyframeData implementation ----------- */
 
 StripKeyframeData::StripKeyframeData(const StripKeyframeData &other)
@@ -2110,10 +2095,10 @@ void Channelbag::fcurves_clear()
 
 static void cyclic_keying_ensure_modifier(FCurve &fcurve)
 {
-  /* BKE_fcurve_get_cycle_type() only looks at the first modifier to see if it's a Cycle modifier,
+  /* #BKE_fcurve_get_cycle_type() only looks at the first modifier to see if it's a Cycle modifier,
    * so if we're going to add one, better make sure it's the first one.
-
-   * BUT: add_fmodifier() only allows adding a Cycle modifier when there are none yet, so that's
+   *
+   * BUT: #add_fmodifier() only allows adding a Cycle modifier when there are none yet, so that's
    * all that we need to check for here.
    */
   if (!BLI_listbase_is_empty(&fcurve.modifiers)) {

@@ -95,27 +95,29 @@ float give_frame_index(const Scene *scene, const Strip *strip, float timeline_fr
   return frame_index;
 }
 
-static int metaseq_start(Strip *metaseq)
+static int metastrip_start_get(Strip *strip_meta)
 {
-  return metaseq->start + metaseq->startofs;
+  return strip_meta->start + strip_meta->startofs;
 }
 
-static int metaseq_end(Strip *metaseq)
+static int metastrip_end_get(Strip *strip_meta)
 {
-  return metaseq->start + metaseq->len - metaseq->endofs;
+  return strip_meta->start + strip_meta->len - strip_meta->endofs;
 }
 
 static void strip_update_sound_bounds_recursive_impl(const Scene *scene,
-                                                     Strip *metaseq,
+                                                     Strip *strip_meta,
                                                      int start,
                                                      int end)
 {
   /* For sound we go over full meta tree to update bounds of the sound strips,
    * since sound is played outside of evaluating the image-buffers (#ImBuf). */
-  LISTBASE_FOREACH (Strip *, strip, &metaseq->seqbase) {
+  LISTBASE_FOREACH (Strip *, strip, &strip_meta->seqbase) {
     if (strip->type == STRIP_TYPE_META) {
-      strip_update_sound_bounds_recursive_impl(
-          scene, strip, max_ii(start, metaseq_start(strip)), min_ii(end, metaseq_end(strip)));
+      strip_update_sound_bounds_recursive_impl(scene,
+                                               strip,
+                                               max_ii(start, metastrip_start_get(strip)),
+                                               min_ii(end, metastrip_end_get(strip)));
     }
     else if (ELEM(strip->type, STRIP_TYPE_SOUND_RAM, STRIP_TYPE_SCENE)) {
       if (strip->scene_sound) {
@@ -145,10 +147,10 @@ static void strip_update_sound_bounds_recursive_impl(const Scene *scene,
   }
 }
 
-void strip_update_sound_bounds_recursive(const Scene *scene, Strip *metaseq)
+void strip_update_sound_bounds_recursive(const Scene *scene, Strip *strip_meta)
 {
   strip_update_sound_bounds_recursive_impl(
-      scene, metaseq, metaseq_start(metaseq), metaseq_end(metaseq));
+      scene, strip_meta, metastrip_start_get(strip_meta), metastrip_end_get(strip_meta));
 }
 
 void time_update_meta_strip_range(const Scene *scene, Strip *strip_meta)
@@ -191,23 +193,23 @@ void time_update_meta_strip_range(const Scene *scene, Strip *strip_meta)
 
 void strip_time_effect_range_set(const Scene *scene, Strip *strip)
 {
-  if (strip->seq1 == nullptr && strip->seq2 == nullptr) {
+  if (strip->input1 == nullptr && strip->input2 == nullptr) {
     return;
   }
 
-  if (strip->seq1 && strip->seq2) { /* 2 - input effect. */
-    strip->startdisp = max_ii(time_left_handle_frame_get(scene, strip->seq1),
-                              time_left_handle_frame_get(scene, strip->seq2));
-    strip->enddisp = min_ii(time_right_handle_frame_get(scene, strip->seq1),
-                            time_right_handle_frame_get(scene, strip->seq2));
+  if (strip->input1 && strip->input2) { /* 2 - input effect. */
+    strip->startdisp = max_ii(time_left_handle_frame_get(scene, strip->input1),
+                              time_left_handle_frame_get(scene, strip->input2));
+    strip->enddisp = min_ii(time_right_handle_frame_get(scene, strip->input1),
+                            time_right_handle_frame_get(scene, strip->input2));
   }
-  else if (strip->seq1) { /* Single input effect. */
-    strip->startdisp = time_right_handle_frame_get(scene, strip->seq1);
-    strip->enddisp = time_left_handle_frame_get(scene, strip->seq1);
+  else if (strip->input1) { /* Single input effect. */
+    strip->startdisp = time_right_handle_frame_get(scene, strip->input1);
+    strip->enddisp = time_left_handle_frame_get(scene, strip->input1);
   }
-  else if (strip->seq2) { /* Strip may be missing one of inputs. */
-    strip->startdisp = time_right_handle_frame_get(scene, strip->seq2);
-    strip->enddisp = time_left_handle_frame_get(scene, strip->seq2);
+  else if (strip->input2) { /* Strip may be missing one of inputs. */
+    strip->startdisp = time_right_handle_frame_get(scene, strip->input2);
+    strip->enddisp = time_left_handle_frame_get(scene, strip->input2);
   }
 
   if (strip->startdisp > strip->enddisp) {
@@ -313,7 +315,7 @@ int time_find_next_prev_edit(Scene *scene,
   return best_frame;
 }
 
-float time_sequence_get_fps(Scene *scene, Strip *strip)
+float time_strip_fps_get(Scene *scene, Strip *strip)
 {
   switch (strip->type) {
     case STRIP_TYPE_MOVIE: {
@@ -359,7 +361,7 @@ void timeline_expand_boundbox(const Scene *scene, const ListBase *seqbase, rctf 
     rect->xmin = std::min<float>(rect->xmin, time_left_handle_frame_get(scene, strip) - 1);
     rect->xmax = std::max<float>(rect->xmax, time_right_handle_frame_get(scene, strip) + 1);
     /* We do +1 here to account for the channel thickness. Channel n has range of <n, n+1>. */
-    rect->ymax = std::max(rect->ymax, strip->machine + 1.0f);
+    rect->ymax = std::max(rect->ymax, strip->channel + 1.0f);
   }
 }
 
@@ -481,7 +483,7 @@ float time_content_end_frame_get(const Scene *scene, const Strip *strip)
 
 int time_left_handle_frame_get(const Scene * /*scene*/, const Strip *strip)
 {
-  if (strip->seq1 || strip->seq2) {
+  if (strip->input1 || strip->input2) {
     return strip->startdisp;
   }
 
@@ -490,7 +492,7 @@ int time_left_handle_frame_get(const Scene * /*scene*/, const Strip *strip)
 
 int time_right_handle_frame_get(const Scene *scene, const Strip *strip)
 {
-  if (strip->seq1 || strip->seq2) {
+  if (strip->input1 || strip->input2) {
     return strip->enddisp;
   }
 
@@ -569,7 +571,7 @@ static void strip_time_slip_strip_ex(const Scene *scene,
 
   /* Skip effect strips where the length is dependent on another strip,
    * as they are calculated with #strip_time_update_effects_strip_range. */
-  if (strip->seq1 != nullptr || strip->seq2 != nullptr) {
+  if (strip->input1 != nullptr || strip->input2 != nullptr) {
     return;
   }
 

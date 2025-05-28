@@ -767,7 +767,7 @@ static void rna_def_sculpt(BlenderRNA *brna)
   RNA_def_property_ui_text(
       prop,
       "Detail Percentage",
-      "Maximum edge length for dynamic topology sculpting (in brush percenage)");
+      "Maximum edge length for dynamic topology sculpting (in brush percentage)");
   RNA_def_property_update(prop, NC_SCENE | ND_TOOLSETTINGS, nullptr);
 
   prop = RNA_def_property(srna, "constant_detail_resolution", PROP_FLOAT, PROP_NONE);
@@ -1176,7 +1176,7 @@ static void rna_def_image_paint(BlenderRNA *brna)
   prop = RNA_def_property(srna, "seam_bleed", PROP_INT, PROP_PIXEL);
   RNA_def_property_ui_range(prop, 0, 8, 1, -1);
   RNA_def_property_ui_text(
-      prop, "Bleed", "Extend paint beyond the faces UVs to reduce seams (in pixels, slower)");
+      prop, "Bleed", "Extend paint beyond the faces' UVs to reduce seams (in pixels, slower)");
 
   prop = RNA_def_property(srna, "normal_angle", PROP_INT, PROP_UNSIGNED);
   RNA_def_property_range(prop, 0, 90);

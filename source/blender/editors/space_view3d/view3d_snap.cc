@@ -52,6 +52,7 @@
 #include "ED_transverts.hh"
 
 #include "ANIM_action.hh"
+#include "ANIM_armature.hh"
 #include "ANIM_bone_collections.hh"
 #include "ANIM_keyframing.hh"
 #include "ANIM_keyingsets.hh"
@@ -270,7 +271,7 @@ void VIEW3D_OT_snap_selected_to_grid(wmOperatorType *ot)
   ot->description = "Snap selected item(s) to their nearest grid division";
   ot->idname = "VIEW3D_OT_snap_selected_to_grid";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = snap_sel_to_grid_exec;
   ot->poll = ED_operator_region_view3d_active;
 
@@ -403,7 +404,8 @@ static bool snap_selected_to_location_rotation(bContext *C,
       mul_v3_m4v3(target_loc_local, ob->world_to_object().ptr(), target_loc_global);
 
       LISTBASE_FOREACH (bPoseChannel *, pchan, &ob->pose->chanbase) {
-        if ((pchan->bone->flag & BONE_SELECTED) && PBONE_VISIBLE(arm, pchan->bone) &&
+        if ((pchan->bone->flag & BONE_SELECTED) &&
+            blender::animrig::bone_is_visible_pchan(arm, pchan) &&
             /* if the bone has a parent and is connected to the parent,
              * don't do anything - will break chain unless we do auto-ik.
              */
@@ -584,7 +586,7 @@ static bool snap_selected_to_location_rotation(bContext *C,
         /* Use the evaluated object here because sometimes
          * `ob->parent->runtime->curve_cache` is required. */
         BKE_scene_graph_evaluated_ensure(depsgraph, bmain);
-        Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+        Object *ob_eval = DEG_get_evaluated(depsgraph, ob);
 
         BKE_object_get_parent_matrix(ob_eval, ob_eval->parent, parentmat);
         mul_m3_m4m4(originmat, parentmat, ob->parentinv);
@@ -726,7 +728,7 @@ void VIEW3D_OT_snap_selected_to_cursor(wmOperatorType *ot)
   ot->description = "Snap selected item(s) to the 3D cursor";
   ot->idname = "VIEW3D_OT_snap_selected_to_cursor";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = snap_selected_to_cursor_exec;
   ot->poll = ED_operator_view3d_active;
 
@@ -775,7 +777,7 @@ void VIEW3D_OT_snap_selected_to_active(wmOperatorType *ot)
   ot->description = "Snap selected item(s) to the active item";
   ot->idname = "VIEW3D_OT_snap_selected_to_active";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = snap_selected_to_active_exec;
   ot->poll = ED_operator_view3d_active;
 
@@ -817,7 +819,7 @@ void VIEW3D_OT_snap_cursor_to_grid(wmOperatorType *ot)
   ot->description = "Snap 3D cursor to the nearest grid division";
   ot->idname = "VIEW3D_OT_snap_cursor_to_grid";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = snap_curs_to_grid_exec;
   ot->poll = ED_operator_region_view3d_active;
 
@@ -921,7 +923,7 @@ static bool snap_curs_to_sel_ex(bContext *C, const int pivot_point, float r_curs
 
       count += tvs.transverts_tot;
       if (tvs.transverts_tot != 0) {
-        Object *obedit_eval = DEG_get_evaluated_object(depsgraph, obedit);
+        Object *obedit_eval = DEG_get_evaluated(depsgraph, obedit);
         copy_m3_m4(bmat, obedit_eval->object_to_world().ptr());
 
         tv = tvs.transverts;
@@ -940,7 +942,7 @@ static bool snap_curs_to_sel_ex(bContext *C, const int pivot_point, float r_curs
     Object *obact = CTX_data_active_object(C);
 
     if (obact && (obact->mode & OB_MODE_POSE)) {
-      Object *obact_eval = DEG_get_evaluated_object(depsgraph, obact);
+      Object *obact_eval = DEG_get_evaluated(depsgraph, obact);
       bArmature *arm = static_cast<bArmature *>(obact_eval->data);
       LISTBASE_FOREACH (bPoseChannel *, pchan, &obact_eval->pose->chanbase) {
         if (ANIM_bonecoll_is_visible_pchan(arm, pchan)) {
@@ -1008,7 +1010,7 @@ void VIEW3D_OT_snap_cursor_to_selected(wmOperatorType *ot)
   ot->description = "Snap 3D cursor to the middle of the selected item(s)";
   ot->idname = "VIEW3D_OT_snap_cursor_to_selected";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = snap_curs_to_sel_exec;
   ot->poll = ED_operator_view3d_active;
 
@@ -1057,7 +1059,7 @@ void VIEW3D_OT_snap_cursor_to_active(wmOperatorType *ot)
   ot->description = "Snap 3D cursor to the active item";
   ot->idname = "VIEW3D_OT_snap_cursor_to_active";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = snap_curs_to_active_exec;
   ot->poll = ED_operator_view3d_active;
 
@@ -1091,7 +1093,7 @@ void VIEW3D_OT_snap_cursor_to_center(wmOperatorType *ot)
   ot->description = "Snap 3D cursor to the world origin";
   ot->idname = "VIEW3D_OT_snap_cursor_to_center";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = snap_curs_to_center_exec;
   ot->poll = ED_operator_view3d_active;
 

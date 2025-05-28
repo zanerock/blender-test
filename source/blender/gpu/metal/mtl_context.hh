@@ -776,8 +776,6 @@ class MTLContext : public Context {
   GPUVertFormat dummy_vertformat_[GPU_SAMPLER_TYPE_MAX];
   VertBuf *dummy_verts_[GPU_SAMPLER_TYPE_MAX] = {nullptr};
 
-  ShaderCompiler *compiler;
-
  public:
   /* GPUContext interface. */
   MTLContext(void *ghost_window, void *ghost_context);
@@ -792,11 +790,6 @@ class MTLContext : public Context {
 
   void flush() override;
   void finish() override;
-
-  ShaderCompiler *get_compiler() override
-  {
-    return compiler;
-  }
 
   void memory_statistics_get(int *r_total_mem, int *r_free_mem) override;
 
@@ -844,6 +837,11 @@ class MTLContext : public Context {
   void sampler_state_cache_init();
   id<MTLSamplerState> get_sampler_from_state(MTLSamplerState state);
   id<MTLSamplerState> get_default_sampler_state();
+
+  /* Active shader specialization constants state. */
+  shader::SpecializationConstants constants_state;
+
+  void specialization_constants_set(const shader::SpecializationConstants *constants_state);
 
   /* Metal Context pipeline state. */
   void pipeline_state_init();

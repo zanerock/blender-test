@@ -221,7 +221,6 @@ static void normalEditModifier_do_radial(NormalEditModifierData *enmd,
                                          const int defgrp_index,
                                          const bool use_invert_vgroup,
                                          blender::Span<blender::float3> vert_positions,
-                                         const blender::Span<blender::int2> edges,
                                          blender::MutableSpan<bool> sharp_edges,
                                          blender::MutableSpan<int> corner_verts,
                                          blender::MutableSpan<int> corner_edges,
@@ -319,10 +318,10 @@ static void normalEditModifier_do_radial(NormalEditModifierData *enmd,
   const bke::AttributeAccessor attributes = mesh->attributes();
   const VArraySpan sharp_faces = *attributes.lookup<bool>("sharp_face", bke::AttrDomain::Face);
   bke::mesh::normals_corner_custom_set(vert_positions,
-                                       edges,
                                        faces,
                                        corner_verts,
                                        corner_edges,
+                                       mesh->vert_to_face_map(),
                                        mesh->vert_normals_true(),
                                        mesh->face_normals_true(),
                                        sharp_faces,
@@ -347,7 +346,6 @@ static void normalEditModifier_do_directional(NormalEditModifierData *enmd,
                                               const int defgrp_index,
                                               const bool use_invert_vgroup,
                                               const blender::Span<blender::float3> positions,
-                                              const blender::Span<blender::int2> edges,
                                               blender::MutableSpan<bool> sharp_edges,
                                               blender::MutableSpan<int> corner_verts,
                                               blender::MutableSpan<int> corner_edges,
@@ -424,10 +422,10 @@ static void normalEditModifier_do_directional(NormalEditModifierData *enmd,
   const bke::AttributeAccessor attributes = mesh->attributes();
   const VArraySpan sharp_faces = *attributes.lookup<bool>("sharp_face", bke::AttrDomain::Face);
   bke::mesh::normals_corner_custom_set(positions,
-                                       edges,
                                        faces,
                                        corner_verts,
                                        corner_edges,
+                                       mesh->vert_to_face_map(),
                                        mesh->vert_normals_true(),
                                        mesh->face_normals_true(),
                                        sharp_faces,
@@ -484,7 +482,6 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
   }
 
   const blender::Span<blender::float3> positions = result->vert_positions();
-  const blender::Span<int2> edges = result->edges();
   const OffsetIndices faces = result->faces();
   blender::MutableSpan<int> corner_verts = result->corner_verts_for_write();
   blender::MutableSpan<int> corner_edges = result->corner_edges_for_write();
@@ -507,11 +504,10 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
     corner_normals.reinitialize(corner_verts.size());
     const VArraySpan sharp_faces = *attributes.lookup<bool>("sharp_face", bke::AttrDomain::Face);
     blender::bke::mesh::normals_calc_corners(positions,
-                                             edges,
                                              faces,
                                              corner_verts,
                                              corner_edges,
-                                             result->corner_to_face_map(),
+                                             result->vert_to_face_map(),
                                              result->face_normals_true(),
                                              sharp_edges.span,
                                              sharp_faces,
@@ -536,7 +532,6 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
                                  defgrp_index,
                                  use_invert_vgroup,
                                  positions,
-                                 edges,
                                  sharp_edges.span,
                                  corner_verts,
                                  corner_edges,
@@ -556,7 +551,6 @@ static Mesh *normalEditModifier_do(NormalEditModifierData *enmd,
                                       defgrp_index,
                                       use_invert_vgroup,
                                       positions,
-                                      edges,
                                       sharp_edges.span,
                                       corner_verts,
                                       corner_edges,
@@ -628,17 +622,17 @@ static void panel_draw(const bContext * /*C*/, Panel *panel)
 
   int mode = RNA_enum_get(ptr, "mode");
 
-  uiItemR(layout, ptr, "mode", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
+  layout->prop(ptr, "mode", UI_ITEM_R_EXPAND, std::nullopt, ICON_NONE);
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, ptr, "target", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(ptr, "target", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 
   col = &layout->column(false);
   uiLayoutSetActive(col, mode == MOD_NORMALEDIT_MODE_DIRECTIONAL);
-  uiItemR(col, ptr, "use_direction_parallel", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  col->prop(ptr, "use_direction_parallel", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 
-  modifier_panel_end(layout, ptr);
+  modifier_error_message_draw(layout, ptr);
 }
 
 /* This panel could be open by default, but it isn't currently. */
@@ -652,19 +646,18 @@ static void mix_mode_panel_draw(const bContext * /*C*/, Panel *panel)
 
   uiLayoutSetPropSep(layout, true);
 
-  uiItemR(layout, ptr, "mix_mode", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-  uiItemR(layout, ptr, "mix_factor", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(ptr, "mix_mode", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(ptr, "mix_factor", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 
   modifier_vgroup_ui(layout, ptr, &ob_ptr, "vertex_group", "invert_vertex_group", std::nullopt);
 
   row = &layout->row(true);
-  uiItemR(row, ptr, "mix_limit", UI_ITEM_NONE, std::nullopt, ICON_NONE);
-  uiItemR(row,
-          ptr,
-          "no_polynors_fix",
-          UI_ITEM_NONE,
-          "",
-          (RNA_boolean_get(ptr, "no_polynors_fix") ? ICON_LOCKED : ICON_UNLOCKED));
+  row->prop(ptr, "mix_limit", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  row->prop(ptr,
+            "no_polynors_fix",
+            UI_ITEM_NONE,
+            "",
+            (RNA_boolean_get(ptr, "no_polynors_fix") ? ICON_LOCKED : ICON_UNLOCKED));
 }
 
 static void offset_panel_draw(const bContext * /*C*/, Panel *panel)
@@ -683,7 +676,7 @@ static void offset_panel_draw(const bContext * /*C*/, Panel *panel)
   uiLayoutSetPropSep(layout, true);
 
   uiLayoutSetActive(layout, needs_object_offset);
-  uiItemR(layout, ptr, "offset", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(ptr, "offset", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 }
 
 static void panel_register(ARegionType *region_type)

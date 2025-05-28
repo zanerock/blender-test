@@ -234,6 +234,7 @@ class MTLShader : public Shader {
   ~MTLShader();
 
   void init(const shader::ShaderCreateInfo & /*info*/, bool is_batch_compilation) override;
+  void init() override {}
 
   /* Assign GLSL source. */
   void vertex_shader_from_glsl(MutableSpan<StringRefNull> sources) override;
@@ -282,7 +283,7 @@ class MTLShader : public Shader {
   std::string geometry_layout_declare(const shader::ShaderCreateInfo &info) const override;
   std::string compute_layout_declare(const shader::ShaderCreateInfo &info) const override;
 
-  void bind() override;
+  void bind(const shader::SpecializationConstants *constants_state) override;
   void unbind() override;
 
   void uniform_float(int location, int comp_len, int array_size, const float *data) override;
@@ -321,94 +322,12 @@ class MTLShader : public Shader {
   MEM_CXX_CLASS_ALLOC_FUNCS("MTLShader");
 };
 
-class MTLParallelShaderCompiler {
- private:
-  enum ParallelWorkType {
-    PARALLELWORKTYPE_UNSPECIFIED,
-    PARALLELWORKTYPE_COMPILE_SHADER,
-    PARALLELWORKTYPE_BAKE_PSO,
-  };
-
-  struct ParallelWork {
-    const shader::ShaderCreateInfo *info = nullptr;
-    class MTLShaderCompiler *shader_compiler = nullptr;
-    MTLShader *shader = nullptr;
-    Vector<Shader::Constants::Value> specialization_values;
-
-    ParallelWorkType work_type = PARALLELWORKTYPE_UNSPECIFIED;
-    bool is_ready = false;
-  };
-
-  struct Batch {
-    Vector<ParallelWork *> items;
-    bool is_ready = false;
-  };
-
-  std::mutex batch_mutex;
-  BatchHandle next_batch_handle = 1;
-  Map<BatchHandle, Batch> batches;
-
-  std::vector<std::thread> compile_threads;
-
-  volatile bool terminate_compile_threads;
-  std::condition_variable cond_var;
-  std::mutex queue_mutex;
-  std::deque<ParallelWork *> parallel_work_queue;
-
-  void parallel_compilation_thread_func(GPUContext *blender_gpu_context,
-                                        GHOST_ContextHandle ghost_gpu_context);
-  BatchHandle create_batch(size_t batch_size);
-  void add_item_to_batch(ParallelWork *work_item, BatchHandle batch_handle);
-  void add_parallel_item_to_queue(ParallelWork *add_parallel_item_to_queuework_item,
-                                  BatchHandle batch_handle);
-
-  std::atomic<int> ref_count = 1;
-
- public:
-  MTLParallelShaderCompiler();
-  ~MTLParallelShaderCompiler();
-
-  void create_compile_threads();
-  BatchHandle batch_compile(MTLShaderCompiler *shade_compiler,
-                            Span<const shader::ShaderCreateInfo *> &infos);
-  bool batch_is_ready(BatchHandle handle);
-  Vector<Shader *> batch_finalize(BatchHandle &handle);
-
-  SpecializationBatchHandle precompile_specializations(Span<ShaderSpecialization> specializations);
-  bool specialization_batch_is_ready(SpecializationBatchHandle &handle);
-
-  void increment_ref_count()
-  {
-    ref_count++;
-  }
-  void decrement_ref_count()
-  {
-    BLI_assert(ref_count > 0);
-    ref_count--;
-  }
-  int get_ref_count()
-  {
-    return ref_count;
-  }
-};
-
 class MTLShaderCompiler : public ShaderCompiler {
- private:
-  MTLParallelShaderCompiler *parallel_shader_compiler;
-
  public:
   MTLShaderCompiler();
-  virtual ~MTLShaderCompiler() override;
 
-  virtual BatchHandle batch_compile(Span<const shader::ShaderCreateInfo *> &infos) override;
-  virtual bool batch_is_ready(BatchHandle handle) override;
-  virtual Vector<Shader *> batch_finalize(BatchHandle &handle) override;
-
-  virtual SpecializationBatchHandle precompile_specializations(
-      Span<ShaderSpecialization> specializations) override;
-  virtual bool specialization_batch_is_ready(SpecializationBatchHandle &handle) override;
-
-  void release_parallel_shader_compiler();
+  Shader *compile_shader(const shader::ShaderCreateInfo &info) override;
+  void specialize_shader(ShaderSpecialization &specialization) override;
 };
 
 /* Vertex format conversion.
@@ -503,9 +422,6 @@ inline MTLVertexFormat to_mtl(GPUVertCompType component_type,
     case GPU_FETCH_FLOAT: \
       BLI_assert_msg(0, "Invalid fetch mode for integer attribute"); \
       break; \
-    case GPU_FETCH_INT_TO_FLOAT: \
-      /* Fallback to manual conversion */ \
-      break; \
   } \
   break;
 
@@ -517,7 +433,6 @@ inline MTLVertexFormat to_mtl(GPUVertCompType component_type,
       BLI_assert_msg(0, "Invalid fetch mode for integer attribute"); \
       break; \
     case GPU_FETCH_INT_TO_FLOAT_UNIT: \
-    case GPU_FETCH_INT_TO_FLOAT: \
       /* Fallback to manual conversion */ \
       break; \
   } \
@@ -543,7 +458,6 @@ inline MTLVertexFormat to_mtl(GPUVertCompType component_type,
           break;
         case GPU_FETCH_INT:
         case GPU_FETCH_INT_TO_FLOAT_UNIT:
-        case GPU_FETCH_INT_TO_FLOAT:
           BLI_assert_msg(0, "Invalid fetch mode for float attribute");
           break;
       }
@@ -553,7 +467,6 @@ inline MTLVertexFormat to_mtl(GPUVertCompType component_type,
           return MTLVertexFormatInt1010102Normalized;
         case GPU_FETCH_FLOAT:
         case GPU_FETCH_INT:
-        case GPU_FETCH_INT_TO_FLOAT:
           BLI_assert_msg(0, "Invalid fetch mode for compressed attribute");
           break;
       }

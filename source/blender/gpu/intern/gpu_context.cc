@@ -27,6 +27,7 @@
 #include "GPU_context.hh"
 
 #include "GPU_batch.hh"
+#include "GPU_pass.hh"
 #include "gpu_backend.hh"
 #include "gpu_context_private.hh"
 #include "gpu_matrix_private.hh"
@@ -53,7 +54,7 @@ using namespace blender::gpu;
 
 static thread_local Context *active_ctx = nullptr;
 
-static std::mutex backend_users_mutex;
+static blender::Mutex backend_users_mutex;
 static int num_backend_users = 0;
 
 static void gpu_backend_create();
@@ -234,6 +235,7 @@ void GPU_context_active_set(GPUContext *ctx_)
   Context *ctx = unwrap(ctx_);
 
   if (active_ctx) {
+    GPU_shader_unbind();
     active_ctx->deactivate();
   }
 
@@ -241,6 +243,12 @@ void GPU_context_active_set(GPUContext *ctx_)
 
   if (ctx) {
     ctx->activate();
+    /* It can happen that the previous context drew with a different colorspace.
+     * In the case where the new context is drawing with the same shader that was previously bound
+     * (shader binding optimization), the uniform would not be set again because the dirty flag
+     * would not have been set (since the color space of this new context never changed). The
+     * shader would reuse the same colorspace as the previous context framebuffer (see #137855). */
+    ctx->shader_builtin_srgb_is_dirty = true;
   }
 }
 
@@ -271,7 +279,7 @@ void GPU_context_end_frame(GPUContext *ctx)
  * Used to avoid crash on some old drivers.
  * \{ */
 
-static std::mutex main_context_mutex;
+static blender::Mutex main_context_mutex;
 
 void GPU_context_main_lock()
 {
@@ -321,6 +329,8 @@ void GPU_render_step(bool force_resource_release)
     backend->render_step(force_resource_release);
     printf_begin(active_ctx);
   }
+
+  GPU_pass_cache_update();
 }
 
 /** \} */
@@ -554,7 +564,7 @@ GPUSecondaryContext::GPUSecondaryContext()
   gpu_settings.preferred_device.vendor_id = U.gpu_preferred_vendor_id;
   gpu_settings.preferred_device.device_id = U.gpu_preferred_device_id;
 
-  /* Grab the system handle.  */
+  /* Grab the system handle. */
   GHOST_SystemHandle ghost_system = reinterpret_cast<GHOST_SystemHandle>(
       GPU_backend_ghost_system_get());
   BLI_assert(ghost_system);

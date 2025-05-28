@@ -141,7 +141,7 @@ void PAINT_OT_weight_from_bones(wmOperatorType *ot)
       ("Set the weights of the groups matching the attached armature's selected bones, "
        "using the distance between the vertices and the bones");
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = weight_from_bones_exec;
   ot->invoke = WM_menu_invoke;
   ot->poll = weight_from_bones_poll;
@@ -278,7 +278,7 @@ void PAINT_OT_weight_sample(wmOperatorType *ot)
   ot->idname = "PAINT_OT_weight_sample";
   ot->description = "Use the mouse to sample a weight in the 3D view";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = weight_sample_invoke;
   ot->poll = weight_paint_mode_poll;
 
@@ -372,9 +372,7 @@ static wmOperatorStatus weight_sample_group_invoke(bContext *C,
     if (groups[i] == false) {
       continue;
     }
-    PointerRNA op_ptr;
-    uiItemFullO_ptr(
-        layout, ot, dg->name, ICON_NONE, nullptr, WM_OP_EXEC_DEFAULT, UI_ITEM_NONE, &op_ptr);
+    PointerRNA op_ptr = layout->op(ot, dg->name, ICON_NONE, WM_OP_EXEC_DEFAULT, UI_ITEM_NONE);
     RNA_property_enum_set(&op_ptr, ot->prop, i);
   }
   UI_popup_menu_end(C, pup);
@@ -389,7 +387,7 @@ void PAINT_OT_weight_sample_group(wmOperatorType *ot)
   ot->idname = "PAINT_OT_weight_sample_group";
   ot->description = "Select one of the vertex groups available under current mouse position";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = weight_sample_group_invoke;
   ot->poll = weight_paint_mode_region_view3d_poll;
 
@@ -519,7 +517,7 @@ void PAINT_OT_weight_set(wmOperatorType *ot)
   ot->idname = "PAINT_OT_weight_set";
   ot->description = "Fill the active vertex group with the current paint weight";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = weight_paint_set_exec;
   ot->poll = weight_paint_mode_poll;
 
@@ -829,7 +827,7 @@ static wmOperatorStatus paint_weight_gradient_exec(bContext *C, wmOperator *op)
 
   ED_view3d_init_mats_rv3d(ob, static_cast<RegionView3D *>(region->regiondata));
 
-  const Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  const Object *ob_eval = DEG_get_evaluated(depsgraph, ob);
   const Mesh *mesh_eval = BKE_object_get_evaluated_mesh(ob_eval);
   if (data.is_init) {
     data.vert_visit = BLI_BITMAP_NEW(mesh->verts_num, __func__);
@@ -914,7 +912,7 @@ void PAINT_OT_weight_gradient(wmOperatorType *ot)
   ot->idname = "PAINT_OT_weight_gradient";
   ot->description = "Draw a line to apply a weight gradient to selected vertices";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = paint_weight_gradient_invoke;
   ot->modal = paint_weight_gradient_modal;
   ot->exec = paint_weight_gradient_exec;

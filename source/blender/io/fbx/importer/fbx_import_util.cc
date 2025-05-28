@@ -43,20 +43,25 @@ void matrix_to_m44(const ufbx_matrix &src, float dst[4][4])
   dst[3][3] = 1.0f;
 }
 
-void m44_to_matrix(const float src[4][4], ufbx_matrix &dst)
+ufbx_matrix calc_bone_pose_matrix(const ufbx_transform &local_xform,
+                                  const ufbx_node &node,
+                                  const ufbx_matrix &local_bind_inv_matrix)
 {
-  dst.m00 = src[0][0];
-  dst.m01 = src[1][0];
-  dst.m02 = src[2][0];
-  dst.m03 = src[3][0];
-  dst.m10 = src[0][1];
-  dst.m11 = src[1][1];
-  dst.m12 = src[2][1];
-  dst.m13 = src[3][1];
-  dst.m20 = src[0][2];
-  dst.m21 = src[1][2];
-  dst.m22 = src[2][2];
-  dst.m23 = src[3][2];
+  ufbx_transform xform = local_xform;
+
+  /* For bones that have "ignore parent scale" on them, ufbx helpfully applies global scale to
+   * the evaluated transform. However we really need to get local transform without global
+   * scale, so undo that. */
+  if (node.adjust_post_scale != 1.0) {
+    xform.scale.x /= node.adjust_post_scale;
+    xform.scale.y /= node.adjust_post_scale;
+    xform.scale.z /= node.adjust_post_scale;
+  }
+
+  /* Transformed to the bind transform in joint-local space. */
+  ufbx_matrix matrix = ufbx_transform_to_matrix(&xform);
+  matrix = ufbx_matrix_mul(&local_bind_inv_matrix, &matrix);
+  return matrix;
 }
 
 void ufbx_matrix_to_obj(const ufbx_matrix &mtx, Object *obj)
@@ -81,12 +86,20 @@ void node_matrix_to_obj(const ufbx_node *node, Object *obj, const FbxElementMapp
   /* Handle case of an object parented to a bone: need to set
    * bone as parent, and make transform be at the end of the bone. */
   const ufbx_node *parbone = node->parent;
-  if (obj->parent == nullptr && parbone && parbone->bone) {
+  if (obj->parent == nullptr && parbone && mapping.node_is_blender_bone.contains(parbone)) {
     Object *arm = mapping.bone_to_armature.lookup_default(parbone, nullptr);
     if (arm != nullptr) {
       ufbx_matrix offset_mtx = ufbx_identity_matrix;
       offset_mtx.cols[3].y = -mapping.bone_to_length.lookup_default(parbone, 0.0);
-      mtx = ufbx_matrix_mul(&offset_mtx, &mtx);
+      if (mapping.node_is_blender_bone.contains(node)) {
+        /* The node itself is a "fake bone", in which case parent it to the matching
+         * fake bone, and matrix is just what puts transform at the bone tail. */
+        parbone = node;
+        mtx = offset_mtx;
+      }
+      else {
+        mtx = ufbx_matrix_mul(&offset_mtx, &mtx);
+      }
 
       obj->parent = arm;
       obj->partype = PARBONE;

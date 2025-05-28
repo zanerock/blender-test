@@ -84,7 +84,7 @@ void DPAINT_OT_surface_slot_add(wmOperatorType *ot)
   ot->idname = "DPAINT_OT_surface_slot_add";
   ot->description = "Add a new Dynamic Paint surface slot";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = surface_slot_add_exec;
   ot->poll = ED_operator_object_active_local_editable;
 
@@ -132,7 +132,7 @@ void DPAINT_OT_surface_slot_remove(wmOperatorType *ot)
   ot->idname = "DPAINT_OT_surface_slot_remove";
   ot->description = "Remove the selected surface slot";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = surface_slot_remove_exec;
   ot->poll = ED_operator_object_active_local_editable;
 
@@ -184,7 +184,7 @@ void DPAINT_OT_type_toggle(wmOperatorType *ot)
   ot->idname = "DPAINT_OT_type_toggle";
   ot->description = "Toggle whether given type is active or not";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = type_toggle_exec;
   ot->poll = ED_operator_object_active_local_editable;
 
@@ -269,7 +269,7 @@ void DPAINT_OT_output_toggle(wmOperatorType *ot)
   ot->idname = "DPAINT_OT_output_toggle";
   ot->description = "Add or remove Dynamic Paint output data layer";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = output_toggle_exec;
   ot->poll = ED_operator_object_active_local_editable;
 
@@ -460,7 +460,7 @@ static wmOperatorStatus dynamicpaint_bake_exec(bContext *C, wmOperator *op)
 {
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Object *ob_ = blender::ed::object::context_active_object(C);
-  Object *object_eval = DEG_get_evaluated_object(depsgraph, ob_);
+  Object *object_eval = DEG_get_evaluated(depsgraph, ob_);
   Scene *scene_eval = DEG_get_evaluated_scene(depsgraph);
 
   DynamicPaintSurface *surface;
@@ -521,7 +521,7 @@ void DPAINT_OT_bake(wmOperatorType *ot)
   ot->description = "Bake dynamic paint image sequence surface";
   ot->idname = "DPAINT_OT_bake";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = dynamicpaint_bake_exec;
   ot->poll = ED_operator_object_active_local_editable;
 }

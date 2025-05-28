@@ -203,7 +203,7 @@ void do_enhance_details_brush(const Depsgraph &depsgraph,
   const Brush &brush = *BKE_paint_brush_for_read(&sd.paint);
   bke::pbvh::Tree &pbvh = *bke::object::pbvh_get(object);
 
-  if (SCULPT_stroke_is_first_brush_step(*ss.cache)) {
+  if (ss.cache->detail_directions.is_empty()) {
     ss.cache->detail_directions.reinitialize(SCULPT_vertex_count_get(object));
     IndexMaskMemory memory;
     const IndexMask effective_nodes = bke::pbvh::search_nodes(
@@ -309,8 +309,7 @@ void calc_smooth_translations(const Depsgraph &depsgraph,
       break;
     }
     case bke::pbvh::Type::BMesh:
-      BM_mesh_elem_index_ensure(ss.bm, BM_VERT);
-      BM_mesh_elem_table_ensure(ss.bm, BM_VERT);
+      vert_random_access_ensure(const_cast<Object &>(object));
       const Span<bke::pbvh::BMeshNode> nodes = pbvh.nodes<bke::pbvh::BMeshNode>();
       node_mask.foreach_index(GrainSize(1), [&](const int i) {
         brushes::LocalData &tls = all_tls.local();

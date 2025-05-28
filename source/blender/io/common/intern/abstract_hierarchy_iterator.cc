@@ -645,7 +645,7 @@ void AbstractHierarchyIterator::make_writers(const HierarchyContext *parent_cont
       return;
     }
 
-    BLI_assert(DEG_is_evaluated_object(context->object));
+    BLI_assert(DEG_is_evaluated(context->object));
     if (transform_writer.is_newly_created() || export_subset_.transforms) {
       /* XXX This can lead to too many XForms being written. For example, a camera writer can
        * refuse to write an orthographic camera. By the time that this is known, the XForm has
@@ -811,8 +811,8 @@ bool AbstractHierarchyIterator::mark_as_weak_export(const Object * /*object*/) c
 bool AbstractHierarchyIterator::should_visit_dupli_object(const DupliObject *dupli_object) const
 {
   /* Do not visit dupli objects if their `no_draw` flag is set (things like custom bone shapes) or
-   * if they are meta-balls. */
-  if (dupli_object->no_draw || dupli_object->ob->type == OB_MBALL) {
+   * if they are meta-balls / text objects. */
+  if (dupli_object->no_draw || ELEM(dupli_object->ob->type, OB_MBALL, OB_FONT)) {
     return false;
   }
 

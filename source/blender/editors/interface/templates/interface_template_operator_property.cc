@@ -84,7 +84,7 @@ static eAutoPropButsReturn template_operator_property_buts_draw_single(
   UI_block_lock_clear(block);
 
   if (layout_flags & UI_TEMPLATE_OP_PROPS_SHOW_TITLE) {
-    uiItemL(layout, WM_operatortype_name(op->type, op->ptr), ICON_NONE);
+    layout->label(WM_operatortype_name(op->type, op->ptr), ICON_NONE);
   }
 
   /* menu */
@@ -97,14 +97,13 @@ static eAutoPropButsReturn template_operator_property_buts_draw_single(
     UI_block_set_active_operator(block, op, false);
 
     row = &layout->row(true);
-    uiItemM(row, "WM_MT_operator_presets", std::nullopt, ICON_NONE);
+    row->menu("WM_MT_operator_presets", std::nullopt, ICON_NONE);
 
     wmOperatorType *ot = WM_operatortype_find("WM_OT_operator_preset_add", false);
-    uiItemFullO_ptr(row, ot, "", ICON_ADD, nullptr, WM_OP_INVOKE_DEFAULT, UI_ITEM_NONE, &op_ptr);
+    op_ptr = op_ptr = row->op(ot, "", ICON_ADD, WM_OP_INVOKE_DEFAULT, UI_ITEM_NONE);
     RNA_string_set(&op_ptr, "operator", op->type->idname);
 
-    uiItemFullO_ptr(
-        row, ot, "", ICON_REMOVE, nullptr, WM_OP_INVOKE_DEFAULT, UI_ITEM_NONE, &op_ptr);
+    op_ptr = row->op(ot, "", ICON_REMOVE, WM_OP_INVOKE_DEFAULT, UI_ITEM_NONE);
     RNA_string_set(&op_ptr, "operator", op->type->idname);
     RNA_boolean_set(&op_ptr, "remove_active", true);
   }
@@ -143,7 +142,7 @@ static eAutoPropButsReturn template_operator_property_buts_draw_single(
     if ((return_info & UI_PROP_BUTS_NONE_ADDED) &&
         (layout_flags & UI_TEMPLATE_OP_PROPS_SHOW_EMPTY))
     {
-      uiItemL(layout, IFACE_("No Properties"), ICON_NONE);
+      layout->label(IFACE_("No Properties"), ICON_NONE);
     }
   }
 
@@ -299,14 +298,11 @@ void uiTemplateOperatorRedoProperties(uiLayout *layout, const bContext *C)
   /* Disable for now, doesn't fit well in popover. */
 #if 0
   /* Repeat button with operator name as text. */
-  uiItemFullO(layout,
-              "SCREEN_OT_repeat_last",
-              WM_operatortype_name(op->type, op->ptr),
-              ICON_NONE,
-              nullptr,
-              WM_OP_INVOKE_DEFAULT,
-              0,
-              nullptr);
+  layout->op("SCREEN_OT_repeat_last",
+             WM_operatortype_name(op->type, op->ptr),
+             ICON_NONE,
+             WM_OP_INVOKE_DEFAULT,
+             0);
 #endif
 
   if (WM_operator_repeat_check(C, op)) {
@@ -325,7 +321,7 @@ void uiTemplateOperatorRedoProperties(uiLayout *layout, const bContext *C)
 
 #if 0
     if (has_advanced) {
-      uiItemO(layout, IFACE_("More..."), ICON_NONE, "SCREEN_OT_redo_last");
+      layout->op( "SCREEN_OT_redo_last", IFACE_("More..."), ICON_NONE);
     }
 #endif
   }
@@ -351,17 +347,19 @@ static wmOperator *minimal_operator_create(wmOperatorType *ot, PointerRNA *prope
 static void draw_export_controls(
     bContext *C, uiLayout *layout, const std::string &label, int index, bool valid)
 {
-  uiItemL(layout, label, ICON_NONE);
+  layout->label(label, ICON_NONE);
   if (valid) {
     uiLayout *row = &layout->row(false);
     uiLayoutSetEmboss(row, blender::ui::EmbossType::None);
     uiItemPopoverPanel(row, C, "WM_PT_operator_presets", "", ICON_PRESET);
-    uiItemIntO(row, "", ICON_EXPORT, "COLLECTION_OT_exporter_export", "index", index);
+    PointerRNA op_ptr = row->op("COLLECTION_OT_exporter_export", "", ICON_EXPORT);
+    RNA_int_set(&op_ptr, "index", index);
   }
 }
 
 static void draw_export_properties(bContext *C,
                                    uiLayout *layout,
+                                   PointerRNA &exporter_ptr,
                                    wmOperator *op,
                                    const std::string &filename)
 {
@@ -370,24 +368,20 @@ static void draw_export_properties(bContext *C,
   uiLayoutSetPropSep(col, true);
   uiLayoutSetPropDecorate(col, false);
 
-  PropertyRNA *prop = RNA_struct_find_property(op->ptr, "filepath");
-
-  /* WARNING: using relative paths for the operator file-path is not exactly correct:
-   * A relative path can be set here but it is never passed to the operator.
-   * The export collection reads & expands this path before passing it to the operator.
-   * Suppress the check here to avoid this showing red-alert with an warning in the tip. */
-  uiLayoutSuppressFlagSet(layout, LayoutSuppressFlag::PathSupportsBlendFileRelative);
+  /* Note this property is used as an alternative to the `filepath` property of `op->ptr`.
+   * This property is a wrapper to access that property, see the `CollectionExport::filepath`
+   * code comments for details. */
+  PropertyRNA *prop = RNA_struct_find_property(&exporter_ptr, "filepath");
 
   std::string placeholder = "//" + filename;
-  uiItemFullR(col,
-              op->ptr,
-              prop,
-              RNA_NO_INDEX,
-              0,
-              UI_ITEM_NONE,
-              std::nullopt,
-              ICON_NONE,
-              placeholder.c_str());
+  col->prop(&exporter_ptr,
+            prop,
+            RNA_NO_INDEX,
+            0,
+            UI_ITEM_NONE,
+            std::nullopt,
+            ICON_NONE,
+            placeholder.c_str());
 
   template_operator_property_buts_draw_single(C,
                                               op,
@@ -395,8 +389,6 @@ static void draw_export_properties(bContext *C,
                                               UI_BUT_LABEL_ALIGN_NONE,
                                               UI_TEMPLATE_OP_PROPS_HIDE_PRESETS |
                                                   UI_TEMPLATE_OP_PROPS_ALLOW_UNDO_PUSH);
-
-  uiLayoutSuppressFlagClear(layout, LayoutSuppressFlag::PathSupportsBlendFileRelative);
 }
 
 static void draw_exporter_item(uiList * /*ui_list*/,
@@ -412,7 +404,7 @@ static void draw_exporter_item(uiList * /*ui_list*/,
 {
   uiLayout *row = &layout->row(false);
   uiLayoutSetEmboss(row, blender::ui::EmbossType::None);
-  uiItemR(row, itemptr, "name", UI_ITEM_NONE, "", ICON_NONE);
+  row->prop(itemptr, "name", UI_ITEM_NONE, "", ICON_NONE);
 }
 
 void uiTemplateCollectionExporters(uiLayout *layout, bContext *C)
@@ -449,11 +441,12 @@ void uiTemplateCollectionExporters(uiLayout *layout, bContext *C)
                  UI_TEMPLATE_LIST_FLAG_NONE);
 
   uiLayout *col = &row->column(true);
-  uiItemM(col, "COLLECTION_MT_exporter_add", "", ICON_ADD);
-  uiItemIntO(col, "", ICON_REMOVE, "COLLECTION_OT_exporter_remove", "index", index);
+  col->menu("COLLECTION_MT_exporter_add", "", ICON_ADD);
+  PointerRNA op_ptr = col->op("COLLECTION_OT_exporter_remove", "", ICON_REMOVE);
+  RNA_int_set(&op_ptr, "index", index);
 
   col = &layout->column(true);
-  uiItemO(col, std::nullopt, ICON_EXPORT, "COLLECTION_OT_export_all");
+  col->op("COLLECTION_OT_export_all", std::nullopt, ICON_EXPORT);
   uiLayoutSetEnabled(col, !BLI_listbase_is_empty(exporters));
 
   /* Draw the active exporter. */
@@ -465,7 +458,7 @@ void uiTemplateCollectionExporters(uiLayout *layout, bContext *C)
   using namespace blender;
   PointerRNA exporter_ptr = RNA_pointer_create_discrete(
       &collection->id, &RNA_CollectionExport, data);
-  PanelLayout panel = uiLayoutPanelProp(C, layout, &exporter_ptr, "is_open");
+  PanelLayout panel = layout->panel_prop(C, &exporter_ptr, "is_open");
 
   bke::FileHandlerType *fh = bke::file_handler_find(data->fh_idname);
   if (!fh) {
@@ -491,6 +484,7 @@ void uiTemplateCollectionExporters(uiLayout *layout, bContext *C)
   std::string label(fh->label);
   draw_export_controls(C, panel.header, label, index, true);
   if (panel.body) {
-    draw_export_properties(C, panel.body, op, fh->get_default_filename(collection->id.name + 2));
+    draw_export_properties(
+        C, panel.body, exporter_ptr, op, fh->get_default_filename(collection->id.name + 2));
   }
 }

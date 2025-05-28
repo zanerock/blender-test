@@ -644,8 +644,8 @@ static void file_add_preview_drag_but(const SpaceFile *sfile,
   const ImBuf *drag_image = preview_image ? preview_image :
                                             /* Larger directory or document icon. */
                                             filelist_geticon_special_file_image_ex(file);
-  const auto [scaled_width, scaled_height, scale] = preview_image_scaled_dimensions_get(
-      drag_image->x, drag_image->y, *layout);
+  const float scale = (PREVIEW_DRAG_DRAW_SIZE * UI_SCALE_FAC) /
+                      std::max(drag_image->x, drag_image->y);
   file_but_enable_drag(but, sfile, file, path, drag_image, file_type_icon, scale);
   file_but_tooltip_func_set(sfile, file, but);
 }
@@ -1001,7 +1001,7 @@ static void draw_dividers(FileLayout *layout, View2D *v2d)
   }
 
   if (vertex_len > 0) {
-    int v1[2], v2[2];
+    float v1[2], v2[2];
     float col_hi[3], col_lo[3];
 
     UI_GetThemeColorShade3fv(TH_BACK, 30, col_hi);
@@ -1011,7 +1011,7 @@ static void draw_dividers(FileLayout *layout, View2D *v2d)
     v2[1] = v2d->cur.ymin;
 
     GPUVertFormat *format = immVertexFormat();
-    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_I32, 2, GPU_FETCH_INT_TO_FLOAT);
+    uint pos = GPU_vertformat_attr_add(format, "pos", GPU_COMP_F32, 2, GPU_FETCH_FLOAT);
     uint color = GPU_vertformat_attr_add(format, "color", GPU_COMP_F32, 3, GPU_FETCH_FLOAT);
 
     immBindBuiltinProgram(GPU_SHADER_3D_FLAT_COLOR);
@@ -1023,15 +1023,15 @@ static void draw_dividers(FileLayout *layout, View2D *v2d)
 
       v1[0] = v2[0] = sx;
       immAttrSkip(color);
-      immVertex2iv(pos, v1);
+      immVertex2fv(pos, v1);
       immAttr3fv(color, col_lo);
-      immVertex2iv(pos, v2);
+      immVertex2fv(pos, v2);
 
       v1[0] = v2[0] = sx + 1;
       immAttrSkip(color);
-      immVertex2iv(pos, v1);
+      immVertex2fv(pos, v1);
       immAttr3fv(color, col_hi);
-      immVertex2iv(pos, v2);
+      immVertex2fv(pos, v2);
     }
 
     immEnd();
@@ -1488,7 +1488,7 @@ void file_draw_list(const bContext *C, ARegion *region)
                             float(sizeof(params->renamefile)),
                             "");
       UI_but_func_rename_set(but, renamebutton_cb, file);
-      UI_but_flag_enable(but, UI_BUT_NO_UTF8); /* allow non utf8 names */
+      UI_but_flag_enable(but, UI_BUT_NO_UTF8); /* Allow non UTF8 names. */
       UI_but_flag_disable(but, UI_BUT_UNDO);
       if (false == UI_but_active_only(C, region, block, but)) {
         /* Note that this is the only place where we can also handle a cancelled renaming. */

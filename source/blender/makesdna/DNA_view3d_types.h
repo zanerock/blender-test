@@ -75,7 +75,13 @@ typedef struct RegionView3D {
 
   /** View rotation, must be kept normalized. */
   float viewquat[4];
-  /** Distance from 'ofs' along -viewinv[2] vector, where result is negative as is 'ofs'. */
+  /**
+   * Distance from `ofs` along `-viewinv[2]` vector, where result is negative as is `ofs`.
+   *
+   * \note Besides being above zero, the range of this value is not strictly defined,
+   * see #ED_view3d_dist_soft_range_get to calculate a working range
+   * viewport "zoom" functions to use.
+   */
   float dist;
   /** Camera view offsets, 1.0 = viewplane moves entire width/height. */
   float camdx, camdy;
@@ -118,6 +124,11 @@ typedef struct RegionView3D {
   char _pad8[4];
 
   char ndof_flag;
+  /**
+   * Rotation center used for for "Auto Orbit" (see #NDOF_ORBIT_CENTER_AUTO).
+   * Any modification should be followed by adjusting #RegionView3D::dist
+   * to prevent problems zooming in after navigation. See: #134732.
+   */
   float ndof_ofs[3];
 
   /** Active rotation from NDOF (run-time only). */
@@ -166,12 +177,9 @@ typedef struct View3DShading {
 
   char _pad;
 
-  /** FILE_MAXFILE. */
-  char studio_light[256];
-  /** FILE_MAXFILE. */
-  char lookdev_light[256];
-  /** FILE_MAXFILE. */
-  char matcap[256];
+  char studio_light[/*FILE_MAXFILE*/ 256];
+  char lookdev_light[/*FILE_MAXFILE*/ 256];
+  char matcap[/*FILE_MAXFILE*/ 256];
 
   float shadow_intensity;
   float single_color[3];
@@ -317,8 +325,8 @@ typedef struct View3D {
   /** Allocated backup of itself while in local-view. */
   struct View3D *localvd;
 
-  /** Optional string for armature bone to define center, MAXBONENAME. */
-  char ob_center_bone[64];
+  /** Optional string for armature bone to define center. */
+  char ob_center_bone[/*MAXBONENAME*/ 64];
 
   unsigned short local_view_uid;
   char _pad6[2];
@@ -556,6 +564,8 @@ enum {
   V3D_GP_SHOW_GRID_XRAY = 1 << 9,
   /** Force 3D depth rendering and ignore per-object stroke depth mode. */
   V3D_GP_FORCE_STROKE_ORDER_3D = 1 << 10,
+  /** Onion skin for active object only. */
+  V3D_GP_ONION_SKIN_ACTIVE_OBJECT = 1 << 11,
 };
 
 /** #View3DShading.flag */

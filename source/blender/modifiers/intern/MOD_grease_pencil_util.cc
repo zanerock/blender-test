@@ -38,6 +38,7 @@ namespace blender::modifier::greasepencil {
 using bke::greasepencil::Drawing;
 using bke::greasepencil::FramesMapKeyT;
 using bke::greasepencil::Layer;
+using bke::greasepencil::LayerGroup;
 
 void init_influence_data(GreasePencilModifierInfluenceData *influence_data,
                          const bool has_custom_curve)
@@ -96,6 +97,7 @@ void draw_layer_filter_settings(const bContext * /*C*/, uiLayout *layout, Pointe
   PointerRNA ob_ptr = RNA_pointer_create_discrete(ptr->owner_id, &RNA_Object, ptr->owner_id);
   PointerRNA obj_data_ptr = RNA_pointer_get(&ob_ptr, "data");
   const bool use_layer_pass = RNA_boolean_get(ptr, "use_layer_pass_filter");
+  const bool use_layer_group_filter = RNA_boolean_get(ptr, "use_layer_group_filter");
   uiLayout *row, *col, *sub, *subsub;
 
   uiLayoutSetPropSep(layout, true);
@@ -103,24 +105,36 @@ void draw_layer_filter_settings(const bContext * /*C*/, uiLayout *layout, Pointe
   col = &layout->column(true);
   row = &col->row(true);
   uiLayoutSetPropDecorate(row, false);
-  uiItemPointerR(row,
-                 ptr,
-                 "layer_filter",
-                 &obj_data_ptr,
-                 "layers",
-                 std::nullopt,
-                 ICON_OUTLINER_DATA_GP_LAYER);
+  if (use_layer_group_filter) {
+    uiItemPointerR(row,
+                   ptr,
+                   "tree_node_filter",
+                   &obj_data_ptr,
+                   "layer_groups",
+                   "Group",
+                   ICON_GREASEPENCIL_LAYER_GROUP);
+  }
+  else {
+    uiItemPointerR(row,
+                   ptr,
+                   "tree_node_filter",
+                   &obj_data_ptr,
+                   "layers",
+                   std::nullopt,
+                   ICON_OUTLINER_DATA_GP_LAYER);
+  }
   sub = &row->row(true);
-  uiItemR(sub, ptr, "invert_layer_filter", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
+  sub->prop(ptr, "use_layer_group_filter", UI_ITEM_NONE, "", ICON_GREASEPENCIL_LAYER_GROUP);
+  sub->prop(ptr, "invert_layer_filter", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
 
   row = &col->row(true, IFACE_("Layer Pass"));
   uiLayoutSetPropDecorate(row, false);
   sub = &row->row(true);
-  uiItemR(sub, ptr, "use_layer_pass_filter", UI_ITEM_NONE, "", ICON_NONE);
+  sub->prop(ptr, "use_layer_pass_filter", UI_ITEM_NONE, "", ICON_NONE);
   subsub = &sub->row(true);
   uiLayoutSetActive(subsub, use_layer_pass);
-  uiItemR(subsub, ptr, "layer_pass_filter", UI_ITEM_NONE, "", ICON_NONE);
-  uiItemR(subsub, ptr, "invert_layer_pass_filter", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
+  subsub->prop(ptr, "layer_pass_filter", UI_ITEM_NONE, "", ICON_NONE);
+  subsub->prop(ptr, "invert_layer_pass_filter", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
 }
 
 void draw_material_filter_settings(const bContext * /*C*/, uiLayout *layout, PointerRNA *ptr)
@@ -138,16 +152,16 @@ void draw_material_filter_settings(const bContext * /*C*/, uiLayout *layout, Poi
   uiItemPointerR(
       row, ptr, "material_filter", &obj_data_ptr, "materials", std::nullopt, ICON_SHADING_TEXTURE);
   sub = &row->row(true);
-  uiItemR(sub, ptr, "invert_material_filter", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
+  sub->prop(ptr, "invert_material_filter", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
 
   row = &col->row(true, IFACE_("Material Pass"));
   uiLayoutSetPropDecorate(row, false);
   sub = &row->row(true);
-  uiItemR(sub, ptr, "use_material_pass_filter", UI_ITEM_NONE, "", ICON_NONE);
+  sub->prop(ptr, "use_material_pass_filter", UI_ITEM_NONE, "", ICON_NONE);
   subsub = &sub->row(true);
   uiLayoutSetActive(subsub, use_material_pass);
-  uiItemR(subsub, ptr, "material_pass_filter", UI_ITEM_NONE, "", ICON_NONE);
-  uiItemR(subsub, ptr, "invert_material_pass_filter", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
+  subsub->prop(ptr, "material_pass_filter", UI_ITEM_NONE, "", ICON_NONE);
+  subsub->prop(ptr, "invert_material_pass_filter", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
 }
 
 void draw_vertex_group_settings(const bContext * /*C*/, uiLayout *layout, PointerRNA *ptr)
@@ -165,7 +179,7 @@ void draw_vertex_group_settings(const bContext * /*C*/, uiLayout *layout, Pointe
   sub = &row->row(true);
   uiLayoutSetActive(sub, has_vertex_group);
   uiLayoutSetPropDecorate(sub, false);
-  uiItemR(sub, ptr, "invert_vertex_group", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
+  sub->prop(ptr, "invert_vertex_group", UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
 }
 
 void draw_custom_curve_settings(const bContext * /*C*/, uiLayout *layout, PointerRNA *ptr)
@@ -176,7 +190,7 @@ void draw_custom_curve_settings(const bContext * /*C*/, uiLayout *layout, Pointe
   uiLayoutSetPropSep(layout, true);
   row = &layout->row(true);
   uiLayoutSetPropDecorate(row, false);
-  uiItemR(row, ptr, "use_custom_curve", UI_ITEM_NONE, IFACE_("Custom Curve"), ICON_NONE);
+  row->prop(ptr, "use_custom_curve", UI_ITEM_NONE, IFACE_("Custom Curve"), ICON_NONE);
   if (use_custom_curve) {
     uiTemplateCurveMapping(layout, ptr, "custom_curve", 0, false, false, false, false);
   }
@@ -202,14 +216,14 @@ static Vector<int> get_grease_pencil_material_passes(const Object *ob)
 }
 
 static IndexMask get_filtered_layer_mask(const GreasePencil &grease_pencil,
-                                         const std::optional<StringRef> layer_name_filter,
+                                         const std::optional<StringRef> tree_node_name_filter,
                                          const std::optional<int> layer_pass_filter,
                                          const bool layer_filter_invert,
                                          const bool layer_pass_filter_invert,
                                          IndexMaskMemory &memory)
 {
   const IndexMask full_mask = grease_pencil.layers().index_range();
-  if (!layer_name_filter && !layer_pass_filter) {
+  if (!tree_node_name_filter && !layer_pass_filter) {
     return full_mask;
   }
 
@@ -218,13 +232,31 @@ static IndexMask get_filtered_layer_mask(const GreasePencil &grease_pencil,
   const VArray<int> layer_passes =
       layer_attributes.lookup_or_default<int>("pass_index", bke::AttrDomain::Layer, 0).varray;
 
+  const LayerGroup *filter_layer_group = nullptr;
+  if (tree_node_name_filter) {
+    for (const LayerGroup *group : grease_pencil.layer_groups()) {
+      if (group->name() == tree_node_name_filter.value()) {
+        filter_layer_group = group;
+        break;
+      }
+    }
+  }
+
   IndexMask result = IndexMask::from_predicate(
       full_mask, GrainSize(4096), memory, [&](const int64_t layer_i) {
-        if (layer_name_filter) {
-          const Layer &layer = *layers[layer_i];
-          const bool match = (layer.name() == layer_name_filter.value());
-          if (match == layer_filter_invert) {
-            return false;
+        if (tree_node_name_filter) {
+          const Layer *layer = layers[layer_i];
+          if (filter_layer_group) {
+            const bool match = layer->is_child_of(*filter_layer_group);
+            if (match == layer_filter_invert) {
+              return false;
+            }
+          }
+          else {
+            const bool match = (layer->name() == tree_node_name_filter.value());
+            if (match == layer_filter_invert) {
+              return false;
+            }
           }
         }
         if (layer_pass_filter) {

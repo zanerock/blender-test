@@ -14,6 +14,7 @@
 
 #include "BLI_fileops.h"
 #include "BLI_math_rotation.h"
+#include "BLI_task.hh"
 
 #include "DEG_depsgraph.hh"
 #include "DEG_depsgraph_build.hh"
@@ -110,11 +111,36 @@ void FbxImportContext::import_meshes()
   io::fbx::import_meshes(*this->bmain, this->fbx, this->mapping, this->params);
 }
 
+static bool should_import_camera(const ufbx_scene &fbx, const ufbx_camera *camera)
+{
+  BLI_assert(camera->instances.count > 0);
+  const ufbx_node *node = camera->instances[0];
+  /* Files produced by MotionBuilder have several cameras at the root,
+   * which just map to "viewports" and should not get imported. */
+  if (node->node_depth == 1 && node->children.count == 0 &&
+      STREQ("MotionBuilder", fbx.metadata.original_application.name.data))
+  {
+    if (STREQ(node->name.data, camera->name.data)) {
+      if (STREQ("Producer Perspective", node->name.data) ||
+          STREQ("Producer Front", node->name.data) || STREQ("Producer Back", node->name.data) ||
+          STREQ("Producer Right", node->name.data) || STREQ("Producer Left", node->name.data) ||
+          STREQ("Producer Top", node->name.data) || STREQ("Producer Bottom", node->name.data))
+      {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
 void FbxImportContext::import_cameras()
 {
   for (const ufbx_camera *fcam : this->fbx.cameras) {
     if (fcam->instances.count == 0) {
       continue; /* Ignore if not used by any objects. */
+    }
+    if (!should_import_camera(this->fbx, fcam)) {
+      continue;
     }
     const ufbx_node *node = fcam->instances[0];
 
@@ -154,6 +180,7 @@ void FbxImportContext::import_cameras()
     }
     node_matrix_to_obj(node, obj, this->mapping);
     this->mapping.el_to_object.add(&node->element, obj);
+    this->mapping.imported_objects.add(obj);
   }
 }
 
@@ -189,6 +216,7 @@ void FbxImportContext::import_lights()
     lamp->g = flight->color.y;
     lamp->b = flight->color.z;
     lamp->energy = flight->intensity;
+    lamp->exposure = ufbx_find_real(&flight->props, "Exposure", 0.0);
     if (flight->cast_shadows) {
       lamp->mode |= LA_SHADOW;
     }
@@ -205,6 +233,7 @@ void FbxImportContext::import_lights()
     }
     node_matrix_to_obj(node, obj, this->mapping);
     this->mapping.el_to_object.add(&node->element, obj);
+    this->mapping.imported_objects.add(obj);
   }
 }
 
@@ -217,8 +246,17 @@ void FbxImportContext::import_empties()
 {
   /* Create empties for fbx nodes. */
   for (const ufbx_node *node : this->fbx.nodes) {
-    /* Ignore root, and bones and nodes for which we have created objects already. */
-    if (node->is_root || node->bone || this->mapping.el_to_object.contains(&node->element)) {
+    /* Ignore root, bones and nodes for which we have created objects already. */
+    if (node->is_root || this->mapping.node_is_blender_bone.contains(node) ||
+        this->mapping.el_to_object.contains(&node->element))
+    {
+      continue;
+    }
+    /* Ignore nodes at root for cameras (normally already imported, except for ignored cameras)
+     * and camera switchers. */
+    if (ELEM(node->attrib_type, UFBX_ELEMENT_CAMERA, UFBX_ELEMENT_CAMERA_SWITCHER) &&
+        node->node_depth == 1 && node->children.count == 0)
+    {
       continue;
     }
     Object *obj = BKE_object_add_only_object(this->bmain, OB_EMPTY, get_fbx_name(node->name));
@@ -231,6 +269,7 @@ void FbxImportContext::import_empties()
     }
     node_matrix_to_obj(node, obj, this->mapping);
     this->mapping.el_to_object.add(&node->element, obj);
+    this->mapping.imported_objects.add(obj);
   }
 }
 
@@ -252,11 +291,6 @@ void FbxImportContext::setup_hierarchy()
     if (node == nullptr) {
       continue;
     }
-    if (node->bone != nullptr) {
-      /* If this node is for a bone, do not try to setup object parenting for it
-       * (the object for bone bones is whole armature). */
-      continue;
-    }
     if (node->parent) {
       Object *obj_par = this->mapping.el_to_object.lookup_default(&node->parent->element, nullptr);
       if (!ELEM(obj_par, nullptr, item.value)) {
@@ -264,6 +298,26 @@ void FbxImportContext::setup_hierarchy()
       }
     }
   }
+}
+
+static void fbx_task_run_fn(void * /* user */,
+                            ufbx_thread_pool_context ctx,
+                            uint32_t /* group */,
+                            uint32_t start_index,
+                            uint32_t count)
+{
+  threading::parallel_for_each(IndexRange(start_index, count), [&](const int64_t index) {
+    ufbx_thread_pool_run_task(ctx, index);
+  });
+}
+
+static void fbx_task_wait_fn(void * /* user */,
+                             ufbx_thread_pool_context /* ctx */,
+                             uint32_t /* group */,
+                             uint32_t /* max_index */)
+{
+  /* Empty implementation; #fbx_task_run_fn already waits for the tasks.
+   * This means that only one fbx "task group" is effectively scheduled at once. */
 }
 
 void importer_main(Main *bmain, Scene *scene, ViewLayer *view_layer, const FBXImportParams &params)
@@ -289,7 +343,8 @@ void importer_main(Main *bmain, Scene *scene, ViewLayer *view_layer, const FBXIm
    * cause armatures/skins to not import correctly, when inserted in the middle of bone chain. */
   opts.geometry_transform_handling = UFBX_GEOMETRY_TRANSFORM_HANDLING_MODIFY_GEOMETRY_NO_FALLBACK;
 
-  //@TODO: axes according to import settings
+  opts.pivot_handling = UFBX_PIVOT_HANDLING_ADJUST_TO_PIVOT;
+
   opts.space_conversion = UFBX_SPACE_CONVERSION_ADJUST_TRANSFORMS;
   opts.target_axes.right = UFBX_COORDINATE_AXIS_POSITIVE_X;
   opts.target_axes.up = UFBX_COORDINATE_AXIS_POSITIVE_Z;
@@ -302,6 +357,10 @@ void importer_main(Main *bmain, Scene *scene, ViewLayer *view_layer, const FBXIm
   opts.target_light_axes.right = UFBX_COORDINATE_AXIS_POSITIVE_X;
   opts.target_light_axes.up = UFBX_COORDINATE_AXIS_POSITIVE_Y;
   opts.target_light_axes.front = UFBX_COORDINATE_AXIS_POSITIVE_Z;
+
+  /* Setup ufbx threading to go through our own task system. */
+  opts.thread_opts.pool.run_fn = fbx_task_run_fn;
+  opts.thread_opts.pool.wait_fn = fbx_task_wait_fn;
 
   ufbx_error fbx_error;
   ufbx_scene *fbx = ufbx_load_stdio(file, &opts, &fbx_error);
@@ -366,14 +425,14 @@ void importer_main(Main *bmain, Scene *scene, ViewLayer *view_layer, const FBXIm
   ufbx_free_scene(fbx);
 
   /* Add objects to collection. */
-  for (Object *obj : ctx.mapping.el_to_object.values()) {
+  for (Object *obj : ctx.mapping.imported_objects) {
     BKE_collection_object_add(bmain, lc->collection, obj);
   }
 
   /* Select objects, sync layers etc. */
   BKE_view_layer_base_deselect_all(scene, view_layer);
   BKE_view_layer_synced_ensure(scene, view_layer);
-  for (Object *obj : ctx.mapping.el_to_object.values()) {
+  for (Object *obj : ctx.mapping.imported_objects) {
     Base *base = BKE_view_layer_base_find(view_layer, obj);
     BKE_view_layer_base_select_and_set_active(view_layer, base);
 

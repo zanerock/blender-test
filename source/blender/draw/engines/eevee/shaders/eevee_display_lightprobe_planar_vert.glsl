@@ -7,6 +7,7 @@
 VERTEX_SHADER_CREATE_INFO(eevee_display_lightprobe_planar)
 
 #include "draw_view_lib.glsl"
+#include "eevee_reverse_z_lib.glsl"
 #include "gpu_shader_math_matrix_lib.glsl"
 
 void main()
@@ -27,10 +28,11 @@ void main()
   probe_index = display_data_buf[display_index].probe_index;
 
   float4x4 plane_to_world = display_data_buf[display_index].plane_to_world;
-  probe_normal = safe_normalize(plane_to_world[2].xyz);
+  probe_normal = safe_normalize(float3(plane_to_world[2].xyz));
 
   float3 P = transform_point(plane_to_world, float3(lP, 0.0f));
   gl_Position = drw_point_world_to_homogenous(P);
   /* Small bias to let the probe draw without Z-fighting. */
   gl_Position.z -= 0.0001f;
+  gl_Position = reverse_z::transform(gl_Position);
 }

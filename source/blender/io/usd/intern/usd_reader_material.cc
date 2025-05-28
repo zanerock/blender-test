@@ -30,6 +30,8 @@
 
 #include "DNA_material_types.h"
 
+#include "IMB_colormanagement.hh"
+
 #include <pxr/base/gf/vec3f.h>
 #include <pxr/usd/ar/packageUtils.h>
 #include <pxr/usd/usdShade/material.h>
@@ -1080,6 +1082,18 @@ bool USDMaterialReader::follow_connection(const pxr::UsdShadeInput &usd_input,
   else if (shader_id == usdtokens::UsdTransform2d) {
     convert_usd_transform_2d(source_shader, dest_node, dest_socket_name, ntree, column + 1, ctx);
   }
+  else {
+    /* Handle any remaining "generic" primvar readers. */
+    StringRef shader_id_name(shader_id.GetString());
+    if (shader_id_name.startswith("UsdPrimvarReader_")) {
+      int64_t type_offset = shader_id_name.rfind('_');
+      if (type_offset >= 0) {
+        StringRef output_type = shader_id_name.drop_prefix(type_offset + 1);
+        convert_usd_primvar_reader_generic(
+            source_shader, output_type, dest_node, dest_socket_name, ntree, column + 1, ctx);
+      }
+    }
+  }
 
   return true;
 }
@@ -1321,11 +1335,13 @@ void USDMaterialReader::load_tex_image(const pxr::UsdShadeShader &usd_shader,
   if (color_space == usdtokens::auto_) {
     /* If it's auto, determine whether to apply color correction based
      * on incoming connection (passed in from outer functions). */
-    STRNCPY(image->colorspace_settings.name, extra.is_color_corrected ? "sRGB" : "Non-Color");
+    STRNCPY(image->colorspace_settings.name,
+            IMB_colormanagement_role_colorspace_name_get(
+                extra.is_color_corrected ? COLOR_ROLE_DEFAULT_BYTE : COLOR_ROLE_DATA));
   }
 
   else if (color_space == usdtokens::sRGB) {
-    STRNCPY(image->colorspace_settings.name, "sRGB");
+    STRNCPY(image->colorspace_settings.name, IMB_colormanagement_srgb_colorspace_name_get());
   }
 
   /*
@@ -1334,7 +1350,8 @@ void USDMaterialReader::load_tex_image(const pxr::UsdShadeShader &usd_shader,
    * On write, we are *only* using the correct, lower-case "raw" token.
    */
   else if (ELEM(color_space, usdtokens::RAW, usdtokens::raw)) {
-    STRNCPY(image->colorspace_settings.name, "Non-Color");
+    STRNCPY(image->colorspace_settings.name,
+            IMB_colormanagement_role_colorspace_name_get(COLOR_ROLE_DATA));
   }
 
   NodeTexImage *storage = static_cast<NodeTexImage *>(tex_image->storage);
@@ -1411,6 +1428,73 @@ void USDMaterialReader::convert_usd_primvar_reader_float2(const pxr::UsdShadeSha
 
   /* Connect to destination node input. */
   link_nodes(ntree, uv_map, "UV", dest_node, dest_socket_name);
+}
+
+void USDMaterialReader::convert_usd_primvar_reader_generic(const pxr::UsdShadeShader &usd_shader,
+                                                           const StringRef output_type,
+                                                           bNode *dest_node,
+                                                           const StringRefNull dest_socket_name,
+                                                           bNodeTree *ntree,
+                                                           const int column,
+                                                           NodePlacementContext &ctx) const
+{
+  if (!usd_shader || !dest_node || !ntree) {
+    return;
+  }
+
+  bNode *attribute = ctx.get_cached_node(usd_shader);
+
+  if (attribute == nullptr) {
+    const float2 loc = ctx.compute_node_loc(column);
+
+    /* Create the attribute node. */
+    attribute = add_node(ntree, SH_NODE_ATTRIBUTE, loc);
+
+    /* Cache newly created node. */
+    ctx.cache_node(usd_shader, attribute);
+
+    /* Set the attribute name. */
+    pxr::UsdShadeInput varname_input = usd_shader.GetInput(usdtokens::varname);
+
+    /* First check if the shader's "varname" input is connected to another source,
+     * and use that instead if so. */
+    if (varname_input) {
+      for (const pxr::UsdShadeConnectionSourceInfo &source_info :
+           varname_input.GetConnectedSources())
+      {
+        pxr::UsdShadeShader shader = pxr::UsdShadeShader(source_info.source.GetPrim());
+        pxr::UsdShadeInput secondary_varname_input = shader.GetInput(source_info.sourceName);
+        if (secondary_varname_input) {
+          varname_input = secondary_varname_input;
+          break;
+        }
+      }
+    }
+
+    if (varname_input) {
+      pxr::VtValue varname_val;
+      /* The varname input may be a string or TfToken, so just cast it to a string.
+       * The Cast function is defined to provide an empty result if it fails. */
+      if (varname_input.Get(&varname_val) && varname_val.CanCastToTypeid(typeid(std::string))) {
+        std::string varname = varname_val.Cast<std::string>().Get<std::string>();
+        if (!varname.empty()) {
+          NodeShaderAttribute *storage = (NodeShaderAttribute *)attribute->storage;
+          STRNCPY(storage->name, varname.c_str());
+        }
+      }
+    }
+  }
+
+  /* Connect to destination node input. */
+  if (ELEM(output_type, "float", "int")) {
+    link_nodes(ntree, attribute, "Fac", dest_node, dest_socket_name);
+  }
+  else if (ELEM(output_type, "float3", "float4")) {
+    link_nodes(ntree, attribute, "Color", dest_node, dest_socket_name);
+  }
+  else if (ELEM(output_type, "vector", "normal", "point")) {
+    link_nodes(ntree, attribute, "Vector", dest_node, dest_socket_name);
+  }
 }
 
 void build_material_map(const Main *bmain, blender::Map<std::string, Material *> &r_mat_map)

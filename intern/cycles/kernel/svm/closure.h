@@ -595,7 +595,7 @@ ccl_device
       const Spectrum weight = closure_weight * mix_weight;
       const float3 position = stack_load_float3(stack, data_node.y);
       const float3 direction = stack_load_float3(stack, data_node.z);
-      bsdf_ray_portal_setup(sd, weight, path_flag, position, direction);
+      bsdf_ray_portal_setup(sd, weight, position, direction);
       break;
     }
     case CLOSURE_BSDF_MICROFACET_GGX_ID:
@@ -1053,6 +1053,78 @@ ccl_device
   return offset;
 }
 
+ccl_device_inline void svm_alloc_closure_volume_scatter(ccl_private ShaderData *sd,
+                                                        ccl_private float *stack,
+                                                        Spectrum weight,
+                                                        const uint type,
+                                                        const uint param1_offset,
+                                                        const uint param_extra)
+{
+  switch (type) {
+    case CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID: {
+      ccl_private HenyeyGreensteinVolume *volume = (ccl_private HenyeyGreensteinVolume *)
+          bsdf_alloc(sd, sizeof(HenyeyGreensteinVolume), weight);
+      if (volume) {
+        volume->g = stack_valid(param1_offset) ? stack_load_float(stack, param1_offset) :
+                                                 __uint_as_float(param_extra);
+        sd->flag |= volume_henyey_greenstein_setup(volume);
+      }
+    } break;
+    case CLOSURE_VOLUME_FOURNIER_FORAND_ID: {
+      ccl_private FournierForandVolume *volume = (ccl_private FournierForandVolume *)bsdf_alloc(
+          sd, sizeof(FournierForandVolume), weight);
+      if (volume) {
+        const float IOR = stack_load_float(stack, param1_offset);
+        const float B = stack_load_float(stack, param_extra);
+        sd->flag |= volume_fournier_forand_setup(volume, B, IOR);
+      }
+    } break;
+    case CLOSURE_VOLUME_RAYLEIGH_ID: {
+      ccl_private RayleighVolume *volume = (ccl_private RayleighVolume *)bsdf_alloc(
+          sd, sizeof(RayleighVolume), weight);
+      if (volume) {
+        sd->flag |= volume_rayleigh_setup(volume);
+      }
+      break;
+    }
+    case CLOSURE_VOLUME_DRAINE_ID: {
+      ccl_private DraineVolume *volume = (ccl_private DraineVolume *)bsdf_alloc(
+          sd, sizeof(DraineVolume), weight);
+      if (volume) {
+        volume->g = stack_load_float(stack, param1_offset);
+        volume->alpha = stack_load_float(stack, param_extra);
+        sd->flag |= volume_draine_setup(volume);
+      }
+    } break;
+    case CLOSURE_VOLUME_MIE_ID: {
+      const float d = stack_valid(param1_offset) ? stack_load_float(stack, param1_offset) :
+                                                   __uint_as_float(param_extra);
+      float g_HG;
+      float g_D;
+      float alpha;
+      float mixture;
+      phase_mie_fitted_parameters(d, &g_HG, &g_D, &alpha, &mixture);
+      ccl_private HenyeyGreensteinVolume *hg = (ccl_private HenyeyGreensteinVolume *)bsdf_alloc(
+          sd, sizeof(HenyeyGreensteinVolume), weight * (1.0f - mixture));
+      if (hg) {
+        hg->g = g_HG;
+        sd->flag |= volume_henyey_greenstein_setup(hg);
+      }
+      ccl_private DraineVolume *draine = (ccl_private DraineVolume *)bsdf_alloc(
+          sd, sizeof(DraineVolume), weight * mixture);
+      if (draine) {
+        draine->g = g_D;
+        draine->alpha = alpha;
+        sd->flag |= volume_draine_setup(draine);
+      }
+    } break;
+    default: {
+      kernel_assert(0);
+      break;
+    }
+  }
+}
+
 template<ShaderType shader_type>
 ccl_device_noinline void svm_node_closure_volume(KernelGlobals kg,
                                                  ccl_private ShaderData *sd,
@@ -1093,73 +1165,67 @@ ccl_device_noinline void svm_node_closure_volume(KernelGlobals kg,
 
   /* Add closure for volume scattering. */
   if (CLOSURE_IS_VOLUME_SCATTER(type)) {
-    switch (type) {
-      case CLOSURE_VOLUME_HENYEY_GREENSTEIN_ID: {
-        ccl_private HenyeyGreensteinVolume *volume = (ccl_private HenyeyGreensteinVolume *)
-            bsdf_alloc(sd, sizeof(HenyeyGreensteinVolume), weight);
-        if (volume) {
-          volume->g = stack_valid(param1_offset) ? stack_load_float(stack, param1_offset) :
-                                                   __uint_as_float(node.w);
-          sd->flag |= volume_henyey_greenstein_setup(volume);
-        }
-      } break;
-      case CLOSURE_VOLUME_FOURNIER_FORAND_ID: {
-        ccl_private FournierForandVolume *volume = (ccl_private FournierForandVolume *)bsdf_alloc(
-            sd, sizeof(FournierForandVolume), weight);
-        if (volume) {
-          const float IOR = stack_load_float(stack, param1_offset);
-          const float B = stack_load_float(stack, node.w);
-          sd->flag |= volume_fournier_forand_setup(volume, B, IOR);
-        }
-      } break;
-      case CLOSURE_VOLUME_RAYLEIGH_ID: {
-        ccl_private RayleighVolume *volume = (ccl_private RayleighVolume *)bsdf_alloc(
-            sd, sizeof(RayleighVolume), weight);
-        if (volume) {
-          sd->flag |= volume_rayleigh_setup(volume);
-        }
-        break;
-      }
-      case CLOSURE_VOLUME_DRAINE_ID: {
-        ccl_private DraineVolume *volume = (ccl_private DraineVolume *)bsdf_alloc(
-            sd, sizeof(DraineVolume), weight);
-        if (volume) {
-          volume->g = stack_load_float(stack, param1_offset);
-          volume->alpha = stack_load_float(stack, node.w);
-          sd->flag |= volume_draine_setup(volume);
-        }
-      } break;
-      case CLOSURE_VOLUME_MIE_ID: {
-        const float d = stack_valid(param1_offset) ? stack_load_float(stack, param1_offset) :
-                                                     __uint_as_float(node.w);
-        float g_HG;
-        float g_D;
-        float alpha;
-        float mixture;
-        phase_mie_fitted_parameters(d, &g_HG, &g_D, &alpha, &mixture);
-        ccl_private HenyeyGreensteinVolume *hg = (ccl_private HenyeyGreensteinVolume *)bsdf_alloc(
-            sd, sizeof(HenyeyGreensteinVolume), weight * (1.0f - mixture));
-        if (hg) {
-          hg->g = g_HG;
-          sd->flag |= volume_henyey_greenstein_setup(hg);
-        }
-        ccl_private DraineVolume *draine = (ccl_private DraineVolume *)bsdf_alloc(
-            sd, sizeof(DraineVolume), weight * mixture);
-        if (draine) {
-          draine->g = g_D;
-          draine->alpha = alpha;
-          sd->flag |= volume_draine_setup(draine);
-        }
-      } break;
-      default: {
-        kernel_assert(0);
-        break;
-      }
-    }
+    svm_alloc_closure_volume_scatter(sd, stack, weight, type, param1_offset, node.w);
   }
 
   /* Sum total extinction weight. */
   volume_extinction_setup(sd, weight);
+#endif
+}
+
+template<ShaderType shader_type>
+ccl_device_noinline void svm_node_volume_coefficients(KernelGlobals kg,
+                                                      ccl_private ShaderData *sd,
+                                                      ccl_private float *stack,
+                                                      Spectrum scatter_coeffs,
+                                                      const uint4 node,
+                                                      const uint32_t path_flag)
+{
+#ifdef __VOLUME__
+  /* Only sum extinction for volumes, variable is shared with surface transparency. */
+  if (shader_type != SHADER_TYPE_VOLUME) {
+    return;
+  }
+
+  uint type;
+  uint empty_offset;
+  uint param1_offset;
+  uint mix_weight_offset;
+  svm_unpack_node_uchar4(node.y, &type, &empty_offset, &param1_offset, &mix_weight_offset);
+  const float mix_weight = (stack_valid(mix_weight_offset) ?
+                                stack_load_float(stack, mix_weight_offset) :
+                                1.0f);
+  if (mix_weight == 0.0f) {
+    return;
+  }
+
+  /* Compute scattering coefficient. */
+  const float weight = mix_weight * object_volume_density(kg, sd->object);
+
+  /* Add closure for volume scattering. */
+  if (!is_zero(scatter_coeffs) && CLOSURE_IS_VOLUME_SCATTER(type)) {
+    svm_alloc_closure_volume_scatter(
+        sd, stack, weight * scatter_coeffs, type, param1_offset, node.z);
+  }
+  uint absorption_coeffs_offset;
+  uint emission_coeffs_offset;
+  svm_unpack_node_uchar4(
+      node.w, &absorption_coeffs_offset, &emission_coeffs_offset, &empty_offset, &empty_offset);
+  const float3 absorption_coeffs = stack_load_float3(stack, absorption_coeffs_offset);
+  volume_extinction_setup(sd, weight * (scatter_coeffs + absorption_coeffs));
+
+  const float3 emission_coeffs = stack_load_float3(stack, emission_coeffs_offset);
+  /* Compute emission. */
+  if (path_flag & PATH_RAY_SHADOW) {
+    /* Don't need emission for shadows. */
+    return;
+  }
+
+  if (is_zero(emission_coeffs)) {
+    return;
+  }
+  emission_setup(sd, weight * emission_coeffs);
+
 #endif
 }
 
@@ -1196,10 +1262,11 @@ ccl_device_noinline int svm_node_principled_volume(KernelGlobals kg,
   }
 
   /* Compute density. */
+  const float weight = mix_weight * object_volume_density(kg, sd->object);
   float primitive_density = 1.0f;
   float density = (stack_valid(density_offset)) ? stack_load_float(stack, density_offset) :
                                                   __uint_as_float(value_node.x);
-  density = mix_weight * fmaxf(density, 0.0f) * object_volume_density(kg, sd->object);
+  density = weight * fmaxf(density, 0.0f);
 
   if (density > 0.0f) {
     /* Density and color attribute lookup if available. */
@@ -1262,8 +1329,7 @@ ccl_device_noinline int svm_node_principled_volume(KernelGlobals kg,
 
   if (emission > 0.0f) {
     const float3 emission_color = stack_load_float3(stack, emission_color_offset);
-    emission_setup(
-        sd, rgb_to_spectrum(emission * emission_color * object_volume_density(kg, sd->object)));
+    emission_setup(sd, rgb_to_spectrum(emission * emission_color * weight));
   }
 
   if (blackbody > 0.0f) {
@@ -1287,7 +1353,7 @@ ccl_device_noinline int svm_node_principled_volume(KernelGlobals kg,
       const float3 blackbody_tint = stack_load_float3(stack, node.w);
       const float3 bb = blackbody_tint * intensity *
                         rec709_to_rgb(kg, svm_math_blackbody_color_rec709(T));
-      emission_setup(sd, rgb_to_spectrum(bb * object_volume_density(kg, sd->object)));
+      emission_setup(sd, rgb_to_spectrum(bb * weight));
     }
   }
 #endif
@@ -1366,8 +1432,7 @@ ccl_device_noinline void svm_node_closure_holdout(ccl_private ShaderData *sd,
 
 /* Closure Nodes */
 
-ccl_device void svm_node_closure_set_weight(ccl_private ShaderData *sd,
-                                            ccl_private Spectrum *closure_weight,
+ccl_device void svm_node_closure_set_weight(ccl_private Spectrum *closure_weight,
                                             const uint r,
                                             uint g,
                                             const uint b)
@@ -1376,17 +1441,14 @@ ccl_device void svm_node_closure_set_weight(ccl_private ShaderData *sd,
       make_float3(__uint_as_float(r), __uint_as_float(g), __uint_as_float(b)));
 }
 
-ccl_device void svm_node_closure_weight(ccl_private ShaderData *sd,
-                                        ccl_private float *stack,
+ccl_device void svm_node_closure_weight(ccl_private float *stack,
                                         ccl_private Spectrum *closure_weight,
                                         const uint weight_offset)
 {
   *closure_weight = rgb_to_spectrum(stack_load_float3(stack, weight_offset));
 }
 
-ccl_device_noinline void svm_node_emission_weight(KernelGlobals kg,
-                                                  ccl_private ShaderData *sd,
-                                                  ccl_private float *stack,
+ccl_device_noinline void svm_node_emission_weight(ccl_private float *stack,
                                                   ccl_private Spectrum *closure_weight,
                                                   const uint4 node)
 {
@@ -1397,9 +1459,7 @@ ccl_device_noinline void svm_node_emission_weight(KernelGlobals kg,
   *closure_weight = rgb_to_spectrum(stack_load_float3(stack, color_offset)) * strength;
 }
 
-ccl_device_noinline void svm_node_mix_closure(ccl_private ShaderData *sd,
-                                              ccl_private float *stack,
-                                              const uint4 node)
+ccl_device_noinline void svm_node_mix_closure(ccl_private float *stack, const uint4 node)
 {
   /* fetch weight from blend input, previous mix closures,
    * and write to stack to be used by closure nodes later */
@@ -1427,8 +1487,7 @@ ccl_device_noinline void svm_node_mix_closure(ccl_private ShaderData *sd,
 
 /* (Bump) normal */
 
-ccl_device void svm_node_set_normal(KernelGlobals kg,
-                                    ccl_private ShaderData *sd,
+ccl_device void svm_node_set_normal(ccl_private ShaderData *sd,
                                     ccl_private float *stack,
                                     const uint in_direction,
                                     const uint out_normal)

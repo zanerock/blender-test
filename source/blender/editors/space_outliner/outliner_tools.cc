@@ -855,7 +855,7 @@ static uiBlock *merged_element_search_menu(bContext *C, ARegion *region, void *d
 
   short menu_width = 10 * UI_UNIT_X;
   but = uiDefSearchBut(
-      block, search, 0, ICON_VIEWZOOM, sizeof(search), 10, 10, menu_width, UI_UNIT_Y, "");
+      block, search, 0, ICON_VIEWZOOM, sizeof(search), 0, 0, menu_width, UI_UNIT_Y, "");
   UI_but_func_search_set(but,
                          nullptr,
                          merged_element_search_update_fn,
@@ -867,22 +867,13 @@ static uiBlock *merged_element_search_menu(bContext *C, ARegion *region, void *d
   UI_but_flag_enable(but, UI_BUT_ACTIVATE_ON_INIT);
 
   /* Fake button to hold space for search items */
-  uiDefBut(block,
-           UI_BTYPE_LABEL,
-           0,
-           "",
-           10,
-           10 - UI_searchbox_size_y(),
-           menu_width,
-           UI_searchbox_size_y(),
-           nullptr,
-           0,
-           0,
-           std::nullopt);
+  const int height = UI_searchbox_size_y() - UI_SEARCHBOX_BOUNDS;
+  uiDefBut(
+      block, UI_BTYPE_LABEL, 0, "", 0, -height, menu_width, height, nullptr, 0, 0, std::nullopt);
 
   /* Center the menu on the cursor */
   const int offset[2] = {-(menu_width / 2), 0};
-  UI_block_bounds_set_popup(block, 6, offset);
+  UI_block_bounds_set_popup(block, UI_SEARCHBOX_BOUNDS, offset);
 
   return block;
 }
@@ -2158,7 +2149,7 @@ static void sequence_fn(int event, TreeElement *te, TreeStoreElem * /*tselem*/, 
   Editing *ed = seq::editing_get(scene);
   if (BLI_findindex(ed->seqbasep, strip) != -1) {
     if (event == OL_DOP_SELECT) {
-      vse::select_sequence_single(scene, strip, true);
+      vse::select_strip_single(scene, strip, true);
     }
     else if (event == OL_DOP_DESELECT) {
       strip->flag &= ~SELECT;
@@ -2166,13 +2157,13 @@ static void sequence_fn(int event, TreeElement *te, TreeStoreElem * /*tselem*/, 
     else if (event == OL_DOP_HIDE) {
       if (!(strip->flag & SEQ_MUTE)) {
         strip->flag |= SEQ_MUTE;
-        seq::relations_invalidate_dependent(scene, strip);
+        seq::relations_invalidate_cache(scene, strip);
       }
     }
     else if (event == OL_DOP_UNHIDE) {
       if (strip->flag & SEQ_MUTE) {
         strip->flag &= ~SEQ_MUTE;
-        seq::relations_invalidate_dependent(scene, strip);
+        seq::relations_invalidate_cache(scene, strip);
       }
     }
   }
@@ -3242,7 +3233,7 @@ void OUTLINER_OT_action_set(wmOperatorType *ot)
   ot->idname = "OUTLINER_OT_action_set";
   ot->description = "Change the active action used";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = WM_enum_search_invoke;
   ot->exec = outliner_action_set_exec;
   ot->poll = outliner_operation_tree_element_poll;
@@ -3634,7 +3625,7 @@ static wmOperatorStatus outliner_operator_menu(bContext *C, const char *opname)
   if (WM_operator_poll(C, ot)) {
     uiItemsEnumO(layout, ot->idname, RNA_property_identifier(ot->prop));
 
-    uiItemS(layout);
+    layout->separator();
   }
 
   uiItemMContents(layout, "OUTLINER_MT_context_menu");

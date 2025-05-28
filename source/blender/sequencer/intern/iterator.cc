@@ -78,11 +78,11 @@ void iterator_set_expand(const Scene *scene,
 
 static void query_all_strips_recursive(const ListBase *seqbase, VectorSet<Strip *> &strips)
 {
-  LISTBASE_FOREACH (Strip *, seq, seqbase) {
-    if (seq->type == STRIP_TYPE_META) {
-      query_all_strips_recursive(&seq->seqbase, strips);
+  LISTBASE_FOREACH (Strip *, strip, seqbase) {
+    if (strip->type == STRIP_TYPE_META) {
+      query_all_strips_recursive(&strip->seqbase, strips);
     }
-    strips.add(seq);
+    strips.add(strip);
   }
 }
 
@@ -129,17 +129,17 @@ static VectorSet<Strip *> query_strips_at_frame(const Scene *scene,
 
 static void collection_filter_channel_up_to_incl(VectorSet<Strip *> &strips, const int channel)
 {
-  strips.remove_if([&](Strip *strip) { return strip->machine > channel; });
+  strips.remove_if([&](Strip *strip) { return strip->channel > channel; });
 }
 
-/* Check if seq must be rendered. This depends on whole stack in some cases, not only seq itself.
- * Order of applying these conditions is important. */
+/* Check if strip must be rendered. This depends on whole stack in some cases, not only strip
+ * itself. Order of applying these conditions is important. */
 static bool must_render_strip(const VectorSet<Strip *> &strips, Strip *strip)
 {
   bool strip_have_effect_in_stack = false;
   for (Strip *strip_iter : strips) {
     /* Strips is below another strip with replace blending are not rendered. */
-    if (strip_iter->blend_mode == SEQ_BLEND_REPLACE && strip->machine < strip_iter->machine) {
+    if (strip_iter->blend_mode == SEQ_BLEND_REPLACE && strip->channel < strip_iter->channel) {
       return false;
     }
 
@@ -147,7 +147,7 @@ static bool must_render_strip(const VectorSet<Strip *> &strips, Strip *strip)
         relation_is_effect_of_strip(strip_iter, strip))
     {
       /* Strips in same channel or higher than its effect are rendered. */
-      if (strip->machine >= strip_iter->machine) {
+      if (strip->channel >= strip_iter->channel) {
         return true;
       }
       /* Mark that this strip has effect in stack, that is above the strip. */
@@ -197,11 +197,11 @@ VectorSet<Strip *> query_rendered_strips(const Scene *scene,
 VectorSet<Strip *> query_unselected_strips(ListBase *seqbase)
 {
   VectorSet<Strip *> strips;
-  LISTBASE_FOREACH (Strip *, seq, seqbase) {
-    if ((seq->flag & SELECT) != 0) {
+  LISTBASE_FOREACH (Strip *, strip, seqbase) {
+    if ((strip->flag & SELECT) != 0) {
       continue;
     }
-    strips.add(seq);
+    strips.add(strip);
   }
   return strips;
 }
@@ -219,17 +219,17 @@ void query_strip_effect_chain(const Scene *scene,
 
   /* Find all input strips for `reference_strip`. */
   if (reference_strip->type & STRIP_TYPE_EFFECT) {
-    if (reference_strip->seq1) {
-      query_strip_effect_chain(scene, reference_strip->seq1, seqbase, r_strips);
+    if (reference_strip->input1) {
+      query_strip_effect_chain(scene, reference_strip->input1, seqbase, r_strips);
     }
-    if (reference_strip->seq2) {
-      query_strip_effect_chain(scene, reference_strip->seq2, seqbase, r_strips);
+    if (reference_strip->input2) {
+      query_strip_effect_chain(scene, reference_strip->input2, seqbase, r_strips);
     }
   }
 
   /* Find all effect strips that have `reference_strip` as an input. */
   LISTBASE_FOREACH (Strip *, strip_test, seqbase) {
-    if (strip_test->seq1 == reference_strip || strip_test->seq2 == reference_strip) {
+    if (strip_test->input1 == reference_strip || strip_test->input2 == reference_strip) {
       query_strip_effect_chain(scene, strip_test, seqbase, r_strips);
     }
   }
@@ -253,7 +253,7 @@ void query_strip_connected_and_effect_chain(const Scene *scene,
 
     r_strips.add(current);
 
-    VectorSet<Strip *> connections = get_connected_strips(current);
+    VectorSet<Strip *> connections = connected_strips_get(current);
     for (Strip *connection : connections) {
       if (!r_strips.contains(connection)) {
         pending.append(connection);

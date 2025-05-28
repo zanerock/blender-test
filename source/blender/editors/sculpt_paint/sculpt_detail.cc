@@ -214,11 +214,11 @@ static bool sample_detail_voxel(bContext *C, ViewContext *vc, const int mval[2])
   const bke::AttributeAccessor attributes = mesh.attributes();
   const VArraySpan hide_poly = *attributes.lookup<bool>(".hide_poly", bke::AttrDomain::Face);
 
-  SculptCursorGeometryInfo sgi;
+  CursorGeometryInfo cgi;
 
   /* Update the active vertex. */
   const float mval_fl[2] = {float(mval[0]), float(mval[1])};
-  if (!SCULPT_cursor_geometry_info_update(C, &sgi, mval_fl, false)) {
+  if (!cursor_geometry_info_update(C, &cgi, mval_fl, false)) {
     return false;
   }
   BKE_sculpt_update_object_for_edit(depsgraph, &ob, false);
@@ -259,9 +259,11 @@ static void sample_detail_dyntopo(bContext *C, ViewContext *vc, const int mval[2
 
   SCULPT_stroke_modifiers_check(C, ob, brush);
 
-  const float mval_fl[2] = {float(mval[0]), float(mval[1])};
-  float ray_start[3], ray_end[3], ray_normal[3];
-  float depth = SCULPT_raycast_init(vc, mval_fl, ray_start, ray_end, ray_normal, false);
+  const float2 mval_fl = {float(mval[0]), float(mval[1])};
+  float3 ray_start;
+  float3 ray_end;
+  float3 ray_normal;
+  float depth = raycast_init(vc, mval_fl, ray_start, ray_end, ray_normal, false);
 
   SculptDetailRaycastData srd;
   srd.hit = false;
@@ -855,7 +857,7 @@ static wmOperatorStatus dyntopo_detail_size_edit_invoke(bContext *C,
   ViewContext vc = ED_view3d_viewcontext_init(C, depsgraph);
 
   const Scene *scene = CTX_data_scene(C);
-  cd->brush_radius = sculpt_calc_radius(vc, *brush, *scene, ss.cursor_location);
+  cd->brush_radius = object_space_radius_get(vc, *scene, *brush, ss.cursor_location);
   cd->pixel_radius = BKE_brush_size_get(scene, brush);
 
   /* Generates the matrix to position the gizmo in the surface of the mesh using the same
@@ -867,8 +869,8 @@ static wmOperatorStatus dyntopo_detail_size_edit_invoke(bContext *C,
   translate_m4(cursor_trans, ss.cursor_location[0], ss.cursor_location[1], ss.cursor_location[2]);
 
   float cursor_normal[3];
-  if (!is_zero_v3(ss.cursor_sampled_normal)) {
-    copy_v3_v3(cursor_normal, ss.cursor_sampled_normal);
+  if (ss.cursor_sampled_normal) {
+    copy_v3_v3(cursor_normal, *ss.cursor_sampled_normal);
   }
   else {
     copy_v3_v3(cursor_normal, ss.cursor_normal);
@@ -886,7 +888,7 @@ static wmOperatorStatus dyntopo_detail_size_edit_invoke(bContext *C,
     rotate_v2_v2fl(cd->preview_tri[i], y_axis, DEG2RAD(120.0f * i));
   }
 
-  SCULPT_vertex_random_access_ensure(active_object);
+  vert_random_access_ensure(active_object);
 
   WM_event_add_modal_handler(C, op);
   ED_region_tag_redraw(region);
@@ -910,7 +912,7 @@ void SCULPT_OT_dyntopo_detail_size_edit(wmOperatorType *ot)
   ot->description = "Modify the detail size of dyntopo interactively";
   ot->idname = "SCULPT_OT_dyntopo_detail_size_edit";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = sculpt_and_dynamic_topology_poll;
   ot->invoke = dyntopo_detail_size_edit_invoke;
   ot->modal = dyntopo_detail_size_edit_modal;

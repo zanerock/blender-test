@@ -113,7 +113,7 @@ void VIEW3D_OT_camera_to_view(wmOperatorType *ot)
   ot->description = "Set camera view to active view";
   ot->idname = "VIEW3D_OT_camera_to_view";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view3d_camera_to_view_exec;
   ot->poll = view3d_camera_to_view_poll;
 
@@ -158,7 +158,7 @@ void VIEW3D_OT_camera_to_view_selected(wmOperatorType *ot)
   ot->description = "Move the camera so selected objects are framed";
   ot->idname = "VIEW3D_OT_camera_to_view_selected";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view3d_camera_to_view_selected_exec;
   ot->poll = ED_operator_scene_editable;
 
@@ -296,7 +296,7 @@ void VIEW3D_OT_object_as_camera(wmOperatorType *ot)
   ot->description = "Set the active object as the active camera for this view or scene";
   ot->idname = "VIEW3D_OT_object_as_camera";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view3d_setobjectascamera_exec;
   ot->poll = ED_operator_rv3d_user_region_poll;
 
@@ -395,7 +395,7 @@ void view3d_viewmatrix_set(const Depsgraph *depsgraph,
 {
   if (rv3d->persp == RV3D_CAMOB) { /* obs/camera */
     if (v3d->camera) {
-      Object *ob_camera_eval = DEG_get_evaluated_object(depsgraph, v3d->camera);
+      Object *ob_camera_eval = DEG_get_evaluated(depsgraph, v3d->camera);
       obmat_to_viewmat(rv3d, ob_camera_eval);
     }
     else {
@@ -416,7 +416,7 @@ void view3d_viewmatrix_set(const Depsgraph *depsgraph,
       rv3d->viewmat[3][2] -= rv3d->dist;
     }
     if (v3d->ob_center) {
-      Object *ob_eval = DEG_get_evaluated_object(depsgraph, v3d->ob_center);
+      Object *ob_eval = DEG_get_evaluated(depsgraph, v3d->ob_center);
       float vec[3];
 
       copy_v3_v3(vec, ob_eval->object_to_world().location());
@@ -842,7 +842,7 @@ static bool view3d_localview_init(const Depsgraph *depsgraph,
         base->local_view_bits &= ~local_view_bit;
       }
       FOREACH_BASE_IN_EDIT_MODE_BEGIN (scene, view_layer, v3d, base_iter) {
-        Object *ob_eval = DEG_get_evaluated_object(depsgraph, base_iter->object);
+        Object *ob_eval = DEG_get_evaluated(depsgraph, base_iter->object);
         BKE_object_minmax(ob_eval ? ob_eval : base_iter->object, min, max);
         base_iter->local_view_bits |= local_view_bit;
         changed = true;
@@ -853,7 +853,7 @@ static bool view3d_localview_init(const Depsgraph *depsgraph,
       BKE_view_layer_synced_ensure(scene, view_layer);
       LISTBASE_FOREACH (Base *, base, BKE_view_layer_object_bases_get(view_layer)) {
         if (BASE_SELECTED(v3d, base)) {
-          Object *ob_eval = DEG_get_evaluated_object(depsgraph, base->object);
+          Object *ob_eval = DEG_get_evaluated(depsgraph, base->object);
           BKE_object_minmax(ob_eval ? ob_eval : base->object, min, max);
           base->local_view_bits |= local_view_bit;
           changed = true;
@@ -921,7 +921,8 @@ static bool view3d_localview_init(const Depsgraph *depsgraph,
 
           if (rv3d->persp == RV3D_PERSP) {
             /* Don't zoom closer than the near clipping plane. */
-            dist_new = max_ff(dist_new, v3d->clip_start * 1.5f);
+            const float dist_min = ED_view3d_dist_soft_min_get(v3d, true);
+            CLAMP_MIN(dist_new, dist_min);
           }
         }
 
@@ -1111,7 +1112,7 @@ void VIEW3D_OT_localview(wmOperatorType *ot)
   ot->description = "Toggle display of selected object(s) separately and centered in view";
   ot->idname = "VIEW3D_OT_localview";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = localview_exec;
   /* Use undo because local-view changes object layer bit-flags. */
   ot->flag = OPTYPE_UNDO;
@@ -1187,7 +1188,7 @@ void VIEW3D_OT_localview_remove_from(wmOperatorType *ot)
   ot->description = "Move selected objects out of local view";
   ot->idname = "VIEW3D_OT_localview_remove_from";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = localview_remove_from_exec;
   ot->poll = localview_remove_from_poll;
   ot->flag = OPTYPE_UNDO;
@@ -1288,7 +1289,7 @@ bool ED_view3d_local_collections_set(const Main *bmain, View3D *v3d)
 void ED_view3d_local_collections_reset(const bContext *C, const bool reset_all)
 {
   Main *bmain = CTX_data_main(C);
-  uint local_view_bit = ~(0);
+  uint local_view_bit = ~0;
   bool do_reset = false;
 
   /* Reset only the ones that are not in use. */
@@ -1313,10 +1314,10 @@ void ED_view3d_local_collections_reset(const bContext *C, const bool reset_all)
   if (do_reset) {
     view3d_local_collections_reset(bmain, local_view_bit);
   }
-  else if (reset_all && (do_reset || (local_view_bit != ~(0)))) {
-    view3d_local_collections_reset(bmain, ~(0));
+  else if (reset_all && (do_reset || (local_view_bit != ~0))) {
+    view3d_local_collections_reset(bmain, ~0);
     View3D v3d = {};
-    v3d.local_collections_uid = ~(0);
+    v3d.local_collections_uid = ~0;
     BKE_layer_collection_local_sync(CTX_data_scene(C), CTX_data_view_layer(C), &v3d);
     DEG_id_tag_update(&CTX_data_scene(C)->id, ID_RECALC_BASE_FLAGS);
   }

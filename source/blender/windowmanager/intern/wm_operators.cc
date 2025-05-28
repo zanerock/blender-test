@@ -135,7 +135,7 @@ size_t WM_operator_py_idname(char *dst, const char *src)
   if (sep) {
     const size_t sep_offset = size_t(sep - src);
 
-    /* NOTE: we use ascii `tolower` instead of system `tolower`, because the
+    /* NOTE: we use ASCII `tolower` instead of system `tolower`, because the
      * latter depends on the locale, and can lead to `idname` mismatch. */
     memcpy(dst, src, sep_offset);
     BLI_str_tolower_ascii(dst, sep_offset);
@@ -1150,8 +1150,8 @@ static uiBlock *wm_enum_search_menu(bContext *C, ARegion *region, void *arg)
            UI_BTYPE_LABEL,
            0,
            WM_operatortype_name(op->type, op->ptr),
-           10,
-           10,
+           0,
+           0,
            UI_searchbox_size_x(),
            UI_UNIT_Y,
            nullptr,
@@ -1166,28 +1166,17 @@ static uiBlock *wm_enum_search_menu(bContext *C, ARegion *region, void *arg)
                                    0,
                                    ICON_VIEWZOOM,
                                    sizeof(search),
-                                   10,
-                                   10,
+                                   0,
+                                   0,
                                    width,
                                    UI_UNIT_Y,
                                    "");
 
   /* Fake button, it holds space for search items. */
-  uiDefBut(block,
-           UI_BTYPE_LABEL,
-           0,
-           "",
-           10,
-           10 - UI_searchbox_size_y(),
-           width,
-           height,
-           nullptr,
-           0,
-           0,
-           std::nullopt);
+  uiDefBut(block, UI_BTYPE_LABEL, 0, "", 0, -height, width, height, nullptr, 0, 0, std::nullopt);
 
   /* Move it downwards, mouse over button. */
-  UI_block_bounds_set_popup(block, 0.3f * U.widget_unit, blender::int2{0, -UI_UNIT_Y});
+  UI_block_bounds_set_popup(block, UI_SEARCHBOX_BOUNDS, blender::int2{0, -UI_UNIT_Y});
 
   UI_but_focus_on_enter_event(win, but);
 
@@ -1452,8 +1441,8 @@ static uiBlock *wm_block_create_redo(bContext *C, ARegion *region, void *arg_op)
   }
 
   uiItemL_ex(layout, WM_operatortype_name(op->type, op->ptr), ICON_NONE, true, false);
-  uiItemS_ex(layout, 0.2f, LayoutSeparatorType::Line);
-  uiItemS_ex(layout, 0.5f);
+  layout->separator(0.2f, LayoutSeparatorType::Line);
+  layout->separator(0.5f);
 
   uiLayout *col = &layout->column(false);
   uiTemplateOperatorPropertyButs(C, col, op, UI_BUT_LABEL_ALIGN_NONE, 0);
@@ -1582,7 +1571,7 @@ static uiBlock *wm_block_dialog_create(bContext *C, ARegion *region, void *user_
 
     /* Line under the title if there are properties but no message body. */
     if (data->include_properties && message_lines.size() == 0) {
-      uiItemS_ex(layout, 0.2f, LayoutSeparatorType::Line);
+      layout->separator(0.2f, LayoutSeparatorType::Line);
     };
   }
 
@@ -1590,18 +1579,18 @@ static uiBlock *wm_block_dialog_create(bContext *C, ARegion *region, void *user_
   if (message_lines.size() > 0) {
     uiLayout *lines = &layout->column(false);
     uiLayoutSetScaleY(lines, 0.65f);
-    uiItemS_ex(lines, 0.1f);
+    lines->separator(0.1f);
     for (auto &st : message_lines) {
-      uiItemL(lines, st, ICON_NONE);
+      lines->label(st, ICON_NONE);
     }
   }
 
   if (data->include_properties) {
-    uiItemS_ex(layout, 0.5f);
+    layout->separator(0.5f);
     uiTemplateOperatorPropertyButs(C, layout, op, UI_BUT_LABEL_ALIGN_SPLIT_COLUMN, 0);
   }
 
-  uiItemS_ex(layout, small ? 0.1f : 1.8f);
+  layout->separator(small ? 0.1f : 1.8f);
 
   /* Clear so the OK button is left alone. */
   UI_block_func_set(block, nullptr, nullptr, nullptr);
@@ -1621,7 +1610,7 @@ static uiBlock *wm_block_dialog_create(bContext *C, ARegion *region, void *user_
     uiBut *confirm_but;
     uiBut *cancel_but;
 
-    col = uiLayoutSplit(col, 0.0f, true);
+    col = &col->split(0.0f, true);
     uiLayoutSetScaleY(col, small ? 1.0f : 1.2f);
 
     if (windows_layout) {
@@ -2009,8 +1998,8 @@ static uiBlock *wm_block_search_menu(bContext *C, ARegion *region, void *userdat
                               0,
                               ICON_VIEWZOOM,
                               sizeof(g_search_text),
-                              10,
-                              10,
+                              0,
+                              0,
                               init_data->size[0],
                               UI_UNIT_Y,
                               "");
@@ -2032,21 +2021,22 @@ static uiBlock *wm_block_search_menu(bContext *C, ARegion *region, void *userdat
   UI_but_flag_enable(but, UI_BUT_ACTIVATE_ON_INIT);
 
   /* Fake button, it holds space for search items. */
+  const int height = init_data->size[1] - UI_SEARCHBOX_BOUNDS;
   uiDefBut(block,
            UI_BTYPE_LABEL,
            0,
            "",
-           10,
-           10 - init_data->size[1],
+           0,
+           -height,
            init_data->size[0],
-           init_data->size[1],
+           height,
            nullptr,
            0,
            0,
            std::nullopt);
 
   /* Move it downwards, mouse over button. */
-  UI_block_bounds_set_popup(block, 0.3f * U.widget_unit, blender::int2{0, -UI_UNIT_Y});
+  UI_block_bounds_set_popup(block, UI_SEARCHBOX_BOUNDS, blender::int2{0, -UI_UNIT_Y});
 
   return block;
 }
@@ -2306,7 +2296,7 @@ static void WM_OT_call_asset_shelf_popover(wmOperatorType *ot)
   ot->idname = "WM_OT_call_asset_shelf_popover";
   ot->description = "Open a predefined asset shelf in a popup";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = asset_shelf_popover_invoke;
 
   ot->flag = OPTYPE_INTERNAL;
@@ -2766,8 +2756,10 @@ static void radial_control_paint_curve(uint pos, Brush *br, float radius, int li
   immEnd();
 }
 
-static void radial_control_paint_cursor(
-    bContext * /*C*/, int x, int y, float /*x_tilt*/, float /*y_tilt*/, void *customdata)
+static void radial_control_paint_cursor(bContext * /*C*/,
+                                        const blender::int2 & /*xy*/,
+                                        const blender::float2 & /*tilt*/,
+                                        void *customdata)
 {
   RadialControl *rc = static_cast<RadialControl *>(customdata);
   const uiStyle *style = UI_style_get();
@@ -2822,6 +2814,7 @@ static void radial_control_paint_cursor(
       break;
   }
 
+  int x, y;
   if (rc->subtype == PROP_ANGLE) {
     /* Use the initial mouse position to draw the rotation preview. This avoids starting the
      * rotation in a random direction. */

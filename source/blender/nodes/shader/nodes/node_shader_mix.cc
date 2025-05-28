@@ -50,6 +50,8 @@ static void sh_node_mix_declare(NodeDeclarationBuilder &b)
       .compositor_domain_priority(2);
   b.add_input<decl::Vector>("Factor", "Factor_Vector")
       .default_value(float3(0.5f))
+      .min(0.0f)
+      .max(1.0f)
       .subtype(PROP_FACTOR)
       .no_muted_links()
       .description("Amount of mixing between the A and B vector inputs")
@@ -108,23 +110,23 @@ static void sh_node_mix_declare(NodeDeclarationBuilder &b)
 static void sh_node_mix_layout(uiLayout *layout, bContext * /*C*/, PointerRNA *ptr)
 {
   const NodeShaderMix &data = node_storage(*static_cast<const bNode *>(ptr->data));
-  uiItemR(layout, ptr, "data_type", UI_ITEM_NONE, "", ICON_NONE);
+  layout->prop(ptr, "data_type", UI_ITEM_NONE, "", ICON_NONE);
   switch (data.data_type) {
     case SOCK_FLOAT:
       break;
     case SOCK_VECTOR:
-      uiItemR(layout, ptr, "factor_mode", UI_ITEM_NONE, "", ICON_NONE);
+      layout->prop(ptr, "factor_mode", UI_ITEM_NONE, "", ICON_NONE);
       break;
     case SOCK_RGBA:
-      uiItemR(layout, ptr, "blend_type", UI_ITEM_NONE, "", ICON_NONE);
-      uiItemR(layout, ptr, "clamp_result", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+      layout->prop(ptr, "blend_type", UI_ITEM_NONE, "", ICON_NONE);
+      layout->prop(ptr, "clamp_result", UI_ITEM_NONE, std::nullopt, ICON_NONE);
       break;
     case SOCK_ROTATION:
       break;
     default:
       BLI_assert_unreachable();
   }
-  uiItemR(layout, ptr, "clamp_factor", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(ptr, "clamp_factor", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 }
 
 static void sh_node_mix_label(const bNodeTree * /*ntree*/,

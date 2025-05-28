@@ -16,6 +16,7 @@
 #include "BLI_subprocess.hh"
 #include "BLI_utility_mixins.hh"
 
+#include "GPU_capabilities.hh"
 #include "gpu_shader_create_info.hh"
 #include "gpu_shader_private.hh"
 
@@ -80,6 +81,8 @@ class GLShader : public Shader {
     GLuint frag_shader = 0;
     GLuint compute_shader = 0;
 
+    std::mutex compilation_mutex;
+
     GLProgram() {}
     GLProgram(GLProgram &&other)
     {
@@ -95,16 +98,18 @@ class GLShader : public Shader {
       other.compute_shader = 0;
     }
     ~GLProgram();
+
+    void program_link(StringRefNull shader_name);
   };
 
   using GLProgramCacheKey = Vector<shader::SpecializationConstant::Value>;
+  /** Contains all specialized shader variants. */
   Map<GLProgramCacheKey, GLProgram> program_cache_;
 
-  /**
-   * Points to the active program. When binding a shader the active program is
-   * setup.
-   */
-  GLProgram *program_active_ = nullptr;
+  std::mutex program_cache_mutex_;
+
+  /** Main program instance. This is the default specialized variant that is first compiled. */
+  GLProgram *main_program_ = nullptr;
 
   /* When true, the shader generates its GLSources but it's not compiled.
    * (Used for batch compilation) */
@@ -122,29 +127,13 @@ class GLShader : public Shader {
 
   Vector<const char *> specialization_constant_names_;
 
-  /**
-   * Initialize an this instance.
-   *
-   * - Ensures that program_cache at least has a default GLProgram.
-   * - Ensures that active program is set.
-   * - Active GLProgram has a shader_program (at least in creation state).
-   * - Does nothing when instance was already initialized.
-   */
-  void init_program();
-
   void update_program_and_sources(GLSources &stage_sources, MutableSpan<StringRefNull> sources);
 
   /**
-   * Link the active program.
-   */
-  void program_link();
-  bool check_link_status();
-
-  /**
-   * Return a GLProgram program id that reflects the current state of shader.constants.values.
+   * Return a GLProgram that reflects the given `constants_state`.
    * The returned program_id is in linked state, or an error happened during linking.
    */
-  GLuint program_get();
+  GLShader::GLProgram &program_get(const shader::SpecializationConstants *constants_state);
 
   /** True if any shader failed to compile. */
   bool compilation_failed_ = false;
@@ -156,6 +145,7 @@ class GLShader : public Shader {
   ~GLShader();
 
   void init(const shader::ShaderCreateInfo &info, bool is_batch_compilation) override;
+  void init() override;
 
   /** Return true on success. */
   void vertex_shader_from_glsl(MutableSpan<StringRefNull> sources) override;
@@ -167,14 +157,14 @@ class GLShader : public Shader {
   void warm_cache(int /*limit*/) override{};
 
   std::string resources_declare(const shader::ShaderCreateInfo &info) const override;
-  std::string constants_declare() const;
+  std::string constants_declare(const shader::SpecializationConstants &constants_state) const;
   std::string vertex_interface_declare(const shader::ShaderCreateInfo &info) const override;
   std::string fragment_interface_declare(const shader::ShaderCreateInfo &info) const override;
   std::string geometry_interface_declare(const shader::ShaderCreateInfo &info) const override;
   std::string geometry_layout_declare(const shader::ShaderCreateInfo &info) const override;
   std::string compute_layout_declare(const shader::ShaderCreateInfo &info) const override;
 
-  void bind() override;
+  void bind(const shader::SpecializationConstants *constants_state) override;
   void unbind() override;
 
   void uniform_float(int location, int comp_len, int array_size, const float *data) override;
@@ -188,7 +178,7 @@ class GLShader : public Shader {
     if (!compute_sources_.is_empty()) {
       return true;
     }
-    return program_active_->compute_shader != 0;
+    return main_program_->compute_shader != 0;
   }
 
   GLSourcesBaked get_sources();
@@ -196,10 +186,16 @@ class GLShader : public Shader {
  private:
   StringRefNull glsl_patch_get(GLenum gl_stage);
 
+  bool has_specialization_constants() const
+  {
+    return constants->types.is_empty() == false;
+  }
+
   /** Create, compile and attach the shader stage to the shader program. */
   GLuint create_shader_stage(GLenum gl_stage,
                              MutableSpan<StringRefNull> sources,
-                             GLSources &gl_sources);
+                             GLSources &gl_sources,
+                             const shader::SpecializationConstants &constants_state);
 
   /**
    * \brief features available on newer implementation such as native barycentric coordinates
@@ -233,14 +229,14 @@ class GLCompilerWorker {
     /* The worker is not currently in use and can be acquired. */
     AVAILABLE
   };
-  eState state_ = AVAILABLE;
+  std::atomic<eState> state_ = AVAILABLE;
   double compilation_start = 0;
 
   GLCompilerWorker();
   ~GLCompilerWorker();
 
   void compile(const GLSourcesBaked &sources);
-  bool is_ready();
+  void block_until_ready();
   bool load_program_binary(GLint program);
   void release();
 
@@ -250,77 +246,26 @@ class GLCompilerWorker {
 
 class GLShaderCompiler : public ShaderCompiler {
  private:
-  std::mutex mutex_;
   Vector<GLCompilerWorker *> workers_;
-
-  struct CompilationWork {
-    const shader::ShaderCreateInfo *info = nullptr;
-    GLShader *shader = nullptr;
-    GLSourcesBaked sources;
-
-    GLCompilerWorker *worker = nullptr;
-    bool do_async_compilation = false;
-    bool is_ready = false;
-  };
-
-  struct Batch {
-    Vector<CompilationWork> items;
-    bool is_ready = false;
-  };
-
-  Map<BatchHandle, Batch> batches;
-
-  struct SpecializationRequest {
-    BatchHandle handle;
-    Vector<ShaderSpecialization> specializations;
-  };
-
-  Vector<SpecializationRequest> specialization_queue;
-
-  struct SpecializationWork {
-    GLShader *shader = nullptr;
-    Vector<shader::SpecializationConstant> constants;
-    GLSourcesBaked sources;
-
-    GLShader::GLProgram *program_get();
-
-    GLCompilerWorker *worker = nullptr;
-    bool do_async_compilation = false;
-    bool is_ready = false;
-  };
-
-  struct SpecializationBatch {
-    SpecializationBatchHandle handle = 0;
-    Vector<SpecializationWork> items;
-    bool is_ready = true;
-  };
-
-  SpecializationBatch current_specialization_batch;
-  void prepare_next_specialization_batch();
-
-  /* Shared across regular and specialization batches,
-   * to prevent the use of a wrong handle type. */
-  int64_t next_batch_handle = 1;
+  std::mutex workers_mutex_;
 
   GLCompilerWorker *get_compiler_worker(const GLSourcesBaked &sources);
-  bool worker_is_lost(GLCompilerWorker *&worker);
+  bool check_worker_is_lost(GLCompilerWorker *&worker);
+
+  GLShader::GLProgram *specialization_program_get(ShaderSpecialization &specialization);
 
  public:
+  GLShaderCompiler()
+      : ShaderCompiler(GPU_max_parallel_compilations(), GPUWorker::ContextType::PerThread, true){};
   virtual ~GLShaderCompiler() override;
 
-  virtual BatchHandle batch_compile(Span<const shader::ShaderCreateInfo *> &infos) override;
-  virtual bool batch_is_ready(BatchHandle handle) override;
-  virtual Vector<Shader *> batch_finalize(BatchHandle &handle) override;
-
-  virtual SpecializationBatchHandle precompile_specializations(
-      Span<ShaderSpecialization> specializations) override;
-
-  virtual bool specialization_batch_is_ready(SpecializationBatchHandle &handle) override;
+  virtual Shader *compile_shader(const shader::ShaderCreateInfo &info) override;
+  virtual void specialize_shader(ShaderSpecialization &specialization) override;
 };
 
 #else
 
-class GLShaderCompiler : public ShaderCompilerGeneric {};
+class GLShaderCompiler : public ShaderCompiler {};
 
 #endif
 

@@ -8,6 +8,7 @@
 
 #include <cerrno>
 #include <fcntl.h>
+#include <mutex>
 #include <sys/types.h>
 
 #ifndef WIN32
@@ -306,7 +307,7 @@ void CLIP_OT_open(wmOperatorType *ot)
   ot->description = "Load a sequence of frames or a movie file";
   ot->idname = "CLIP_OT_open";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = open_exec;
   ot->invoke = open_invoke;
   ot->cancel = open_cancel;
@@ -353,7 +354,7 @@ void CLIP_OT_reload(wmOperatorType *ot)
   ot->description = "Reload clip";
   ot->idname = "CLIP_OT_reload";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = reload_exec;
 }
 
@@ -511,7 +512,7 @@ void CLIP_OT_view_pan(wmOperatorType *ot)
   ot->idname = "CLIP_OT_view_pan";
   ot->description = "Pan the view";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_pan_exec;
   ot->invoke = view_pan_invoke;
   ot->modal = view_pan_modal;
@@ -720,7 +721,7 @@ void CLIP_OT_view_zoom(wmOperatorType *ot)
   ot->idname = "CLIP_OT_view_zoom";
   ot->description = "Zoom in/out the view";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_zoom_exec;
   ot->invoke = view_zoom_invoke;
   ot->modal = view_zoom_modal;
@@ -786,7 +787,7 @@ void CLIP_OT_view_zoom_in(wmOperatorType *ot)
   ot->idname = "CLIP_OT_view_zoom_in";
   ot->description = "Zoom in the view";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_zoom_in_exec;
   ot->invoke = view_zoom_in_invoke;
   ot->poll = ED_space_clip_view_clip_poll;
@@ -843,7 +844,7 @@ void CLIP_OT_view_zoom_out(wmOperatorType *ot)
   ot->idname = "CLIP_OT_view_zoom_out";
   ot->description = "Zoom out the view";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_zoom_out_exec;
   ot->invoke = view_zoom_out_invoke;
   ot->poll = ED_space_clip_view_clip_poll;
@@ -893,7 +894,7 @@ void CLIP_OT_view_zoom_ratio(wmOperatorType *ot)
   ot->idname = "CLIP_OT_view_zoom_ratio";
   ot->description = "Set the zoom ratio (based on clip size)";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_zoom_ratio_exec;
   ot->poll = ED_space_clip_view_clip_poll;
 
@@ -978,7 +979,7 @@ void CLIP_OT_view_all(wmOperatorType *ot)
   ot->idname = "CLIP_OT_view_all";
   ot->description = "View whole image with markers";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_all_exec;
   ot->poll = ED_space_clip_view_clip_poll;
 
@@ -1015,7 +1016,7 @@ void CLIP_OT_view_center_cursor(wmOperatorType *ot)
   ot->description = "Center the view so that the cursor is in the middle of the view";
   ot->idname = "CLIP_OT_view_center_cursor";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_center_cursor_exec;
   ot->poll = ED_space_clip_maskedit_poll;
 }
@@ -1047,7 +1048,7 @@ void CLIP_OT_view_selected(wmOperatorType *ot)
   ot->idname = "CLIP_OT_view_selected";
   ot->description = "View all selected elements";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_selected_exec;
   ot->poll = ED_space_clip_view_clip_poll;
 
@@ -1166,7 +1167,7 @@ void CLIP_OT_change_frame(wmOperatorType *ot)
   ot->idname = "CLIP_OT_change_frame";
   ot->description = "Interactively change the current frame number";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = change_frame_exec;
   ot->invoke = change_frame_invoke;
   ot->modal = change_frame_modal;
@@ -1299,7 +1300,7 @@ struct ProxyQueue {
   int cfra;
   int sfra;
   int efra;
-  SpinLock spin;
+  std::mutex mutex;
 
   const bool *stop;
   bool *do_update;
@@ -1320,7 +1321,7 @@ static uchar *proxy_thread_next_frame(ProxyQueue *queue,
 {
   uchar *mem = nullptr;
 
-  BLI_spin_lock(&queue->spin);
+  std::lock_guard lock(queue->mutex);
   if (!*queue->stop && queue->cfra <= queue->efra) {
     MovieClipUser user = *DNA_struct_default_get(MovieClipUser);
     char filepath[FILE_MAX];
@@ -1332,14 +1333,12 @@ static uchar *proxy_thread_next_frame(ProxyQueue *queue,
 
     file = BLI_open(filepath, O_BINARY | O_RDONLY, 0);
     if (file < 0) {
-      BLI_spin_unlock(&queue->spin);
       return nullptr;
     }
 
     const size_t size = BLI_file_descriptor_size(file);
     if (UNLIKELY(ELEM(size, 0, size_t(-1)))) {
       close(file);
-      BLI_spin_unlock(&queue->spin);
       return nullptr;
     }
 
@@ -1347,7 +1346,6 @@ static uchar *proxy_thread_next_frame(ProxyQueue *queue,
 
     if (BLI_read(file, mem, size) != size) {
       close(file);
-      BLI_spin_unlock(&queue->spin);
       MEM_freeN(mem);
       return nullptr;
     }
@@ -1361,8 +1359,6 @@ static uchar *proxy_thread_next_frame(ProxyQueue *queue,
     *queue->do_update = true;
     *queue->progress = float(queue->cfra - queue->sfra) / (queue->efra - queue->sfra);
   }
-  BLI_spin_unlock(&queue->spin);
-
   return mem;
 }
 
@@ -1425,8 +1421,6 @@ static void do_sequence_proxy(void *pjv,
   }
 
   ProxyQueue queue;
-  BLI_spin_init(&queue.spin);
-
   queue.cfra = sfra;
   queue.sfra = sfra;
   queue.efra = efra;
@@ -1464,7 +1458,6 @@ static void do_sequence_proxy(void *pjv,
     }
   }
 
-  BLI_spin_end(&queue.spin);
   MEM_freeN(handles);
 }
 
@@ -1583,7 +1576,7 @@ void CLIP_OT_rebuild_proxy(wmOperatorType *ot)
   ot->idname = "CLIP_OT_rebuild_proxy";
   ot->description = "Rebuild all selected proxies and timecode indices in the background";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = clip_rebuild_proxy_exec;
   ot->poll = ED_space_clip_poll;
 
@@ -1621,7 +1614,7 @@ void CLIP_OT_mode_set(wmOperatorType *ot)
   ot->description = "Set the clip interaction mode";
   ot->idname = "CLIP_OT_mode_set";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = mode_set_exec;
 
   ot->poll = ED_space_clip_poll;
@@ -1682,7 +1675,7 @@ void CLIP_OT_view_ndof(wmOperatorType *ot)
   ot->idname = "CLIP_OT_view_ndof";
   ot->description = "Use a 3D mouse device to pan/zoom the view";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = clip_view_ndof_invoke;
   ot->poll = ED_space_clip_view_clip_poll;
 
@@ -1736,7 +1729,7 @@ void CLIP_OT_prefetch(wmOperatorType *ot)
   ot->idname = "CLIP_OT_prefetch";
   ot->description = "Prefetch frames from disk for faster playback/tracking";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = ED_space_clip_view_clip_poll;
   ot->invoke = clip_prefetch_invoke;
   ot->modal = clip_prefetch_modal;
@@ -1777,7 +1770,7 @@ void CLIP_OT_set_scene_frames(wmOperatorType *ot)
   ot->idname = "CLIP_OT_set_scene_frames";
   ot->description = "Set scene's start and end frame to match clip's start frame and length";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = ED_space_clip_view_clip_poll;
   ot->exec = clip_set_scene_frames_exec;
 }
@@ -1829,7 +1822,7 @@ void CLIP_OT_cursor_set(wmOperatorType *ot)
   ot->description = "Set 2D cursor location";
   ot->idname = "CLIP_OT_cursor_set";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = clip_set_2d_cursor_exec;
   ot->invoke = clip_set_2d_cursor_invoke;
   ot->poll = ED_space_clip_poll;
@@ -1879,7 +1872,7 @@ void CLIP_OT_lock_selection_toggle(wmOperatorType *ot)
   ot->description = "Toggle Lock Selection option of the current clip editor";
   ot->idname = "CLIP_OT_lock_selection_toggle";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->poll = ED_space_clip_poll;
   ot->exec = lock_selection_toggle_exec;
 

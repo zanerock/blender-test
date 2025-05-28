@@ -61,7 +61,7 @@ enum class MaterialMode : int8_t {
 };
 
 struct EyedropperGreasePencil {
-  ColorManagedDisplay *display = nullptr;
+  const ColorManagedDisplay *display = nullptr;
 
   bool accum_start = false; /* has mouse been pressed */
   float3 accum_col = {};
@@ -480,7 +480,7 @@ void UI_OT_eyedropper_grease_pencil_color(wmOperatorType *ot)
   ot->idname = "UI_OT_eyedropper_grease_pencil_color";
   ot->description = "Sample a color from the Blender Window and create Grease Pencil material";
 
-  /* Api callbacks. */
+  /* API callbacks. */
   ot->invoke = eyedropper_grease_pencil_invoke;
   ot->modal = eyedropper_grease_pencil_modal;
   ot->cancel = eyedropper_grease_pencil_cancel;

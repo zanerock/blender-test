@@ -88,12 +88,12 @@ static void set_modifier_expand_flag(const bContext * /*C*/, Panel *panel, short
 /** \name Modifier Panel Layouts
  * \{ */
 
-void modifier_panel_end(uiLayout *layout, PointerRNA *ptr)
+void modifier_error_message_draw(uiLayout *layout, PointerRNA *ptr)
 {
   ModifierData *md = static_cast<ModifierData *>(ptr->data);
   if (md->error) {
     uiLayout *row = &layout->row(false);
-    uiItemL(row, RPT_(md->error), ICON_ERROR);
+    row->label(RPT_(md->error), ICON_ERROR);
   }
 }
 
@@ -137,7 +137,7 @@ void modifier_vgroup_ui(uiLayout *layout,
     uiLayout *sub = &row->row(true);
     uiLayoutSetActive(sub, has_vertex_group);
     uiLayoutSetPropDecorate(sub, false);
-    uiItemR(sub, ptr, *invert_vgroup_prop, UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
+    sub->prop(ptr, *invert_vgroup_prop, UI_ITEM_NONE, "", ICON_ARROW_LEFTRIGHT);
   }
 }
 
@@ -147,7 +147,7 @@ void modifier_grease_pencil_curve_header_draw(const bContext * /*C*/, Panel *pan
 
   PointerRNA *ptr = modifier_panel_get_property_pointers(panel, nullptr);
 
-  uiItemR(layout, ptr, "use_custom_curve", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(ptr, "use_custom_curve", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 }
 
 void modifier_grease_pencil_curve_panel_draw(const bContext * /*C*/, Panel *panel)
@@ -222,44 +222,36 @@ static void modifier_ops_extra_draw(bContext *C, uiLayout *layout, void *md_v)
 
   /* Apply. */
   if (ob->type == OB_GREASE_PENCIL) {
-    uiItemO(layout,
-            CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply (Active Keyframe)"),
-            ICON_CHECKMARK,
-            "OBJECT_OT_modifier_apply");
+    layout->op("OBJECT_OT_modifier_apply",
+               CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply (Active Keyframe)"),
+               ICON_CHECKMARK);
 
-    uiItemFullO(layout,
-                "OBJECT_OT_modifier_apply",
-                IFACE_("Apply (All Keyframes)"),
-                ICON_KEYFRAME,
-                nullptr,
-                WM_OP_INVOKE_DEFAULT,
-                UI_ITEM_NONE,
-                &op_ptr);
+    op_ptr = layout->op("OBJECT_OT_modifier_apply",
+                        IFACE_("Apply (All Keyframes)"),
+                        ICON_KEYFRAME,
+                        WM_OP_INVOKE_DEFAULT,
+                        UI_ITEM_NONE);
     RNA_boolean_set(&op_ptr, "all_keyframes", true);
   }
   else {
-    uiItemO(layout,
-            CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply"),
-            ICON_CHECKMARK,
-            "OBJECT_OT_modifier_apply");
+    layout->op("OBJECT_OT_modifier_apply",
+               CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply"),
+               ICON_CHECKMARK);
   }
 
   /* Apply as shapekey. */
   if (BKE_modifier_is_same_topology(md) && !BKE_modifier_is_non_geometrical(md)) {
-    uiItemBooleanO(layout,
-                   CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply as Shape Key"),
-                   ICON_SHAPEKEY_DATA,
-                   "OBJECT_OT_modifier_apply_as_shapekey",
-                   "keep_modifier",
-                   false);
+    PointerRNA op_ptr = layout->op(
+        "OBJECT_OT_modifier_apply_as_shapekey",
+        CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Apply as Shape Key"),
+        ICON_SHAPEKEY_DATA);
+    RNA_boolean_set(&op_ptr, "keep_modifier", false);
 
-    uiItemBooleanO(layout,
-                   CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Save as Shape Key"),
-                   ICON_NONE,
-                   "OBJECT_OT_modifier_apply_as_shapekey",
-                   "keep_modifier",
-                   true);
-    uiItemS(layout);
+    op_ptr = layout->op("OBJECT_OT_modifier_apply_as_shapekey",
+                        CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Save as Shape Key"),
+                        ICON_NONE);
+    RNA_boolean_set(&op_ptr, "keep_modifier", true);
+    layout->separator();
   }
 
   /* Duplicate. */
@@ -270,56 +262,45 @@ static void modifier_ops_extra_draw(bContext *C, uiLayout *layout, void *md_v)
             eModifierType_Cloth,
             eModifierType_Fluid))
   {
-    uiItemO(layout,
-            CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Duplicate"),
-            ICON_DUPLICATE,
-            "OBJECT_OT_modifier_copy");
+    layout->op("OBJECT_OT_modifier_copy",
+               CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Duplicate"),
+               ICON_DUPLICATE);
   }
 
-  uiItemO(layout,
-          CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy to Selected"),
-          0,
-          "OBJECT_OT_modifier_copy_to_selected");
+  layout->op("OBJECT_OT_modifier_copy_to_selected",
+             CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, "Copy to Selected"),
+             0);
 
-  uiItemS(layout);
+  layout->separator();
 
   /* Move to first. */
-  uiItemFullO(layout,
-              "OBJECT_OT_modifier_move_to_index",
-              IFACE_("Move to First"),
-              ICON_TRIA_UP,
-              nullptr,
-              WM_OP_INVOKE_DEFAULT,
-              UI_ITEM_NONE,
-              &op_ptr);
+  op_ptr = layout->op("OBJECT_OT_modifier_move_to_index",
+                      IFACE_("Move to First"),
+                      ICON_TRIA_UP,
+                      WM_OP_INVOKE_DEFAULT,
+                      UI_ITEM_NONE);
   RNA_int_set(&op_ptr, "index", 0);
 
   /* Move to last. */
-  uiItemFullO(layout,
-              "OBJECT_OT_modifier_move_to_index",
-              IFACE_("Move to Last"),
-              ICON_TRIA_DOWN,
-              nullptr,
-              WM_OP_INVOKE_DEFAULT,
-              UI_ITEM_NONE,
-              &op_ptr);
+  op_ptr = layout->op("OBJECT_OT_modifier_move_to_index",
+                      IFACE_("Move to Last"),
+                      ICON_TRIA_DOWN,
+                      WM_OP_INVOKE_DEFAULT,
+                      UI_ITEM_NONE);
   RNA_int_set(&op_ptr, "index", BLI_listbase_count(&ob->modifiers) - 1);
 
-  uiItemS(layout);
+  layout->separator();
 
-  uiItemR(layout, &ptr, "use_pin_to_last", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(&ptr, "use_pin_to_last", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 
   if (md->type == eModifierType_Nodes) {
-    uiItemS(layout);
-    uiItemFullO(layout,
-                "OBJECT_OT_geometry_nodes_move_to_nodes",
-                std::nullopt,
-                ICON_NONE,
-                nullptr,
-                WM_OP_INVOKE_DEFAULT,
-                UI_ITEM_NONE,
-                &op_ptr);
-    uiItemR(layout, &ptr, "show_group_selector", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+    layout->separator();
+    op_ptr = layout->op("OBJECT_OT_geometry_nodes_move_to_nodes",
+                        std::nullopt,
+                        ICON_NONE,
+                        WM_OP_INVOKE_DEFAULT,
+                        UI_ITEM_NONE);
+    layout->prop(&ptr, "show_group_selector", UI_ITEM_NONE, std::nullopt, ICON_NONE);
   }
 }
 
@@ -368,7 +349,7 @@ static void modifier_panel_header(const bContext *C, Panel *panel)
       if (index < cage_index || !BKE_modifier_couldbe_cage(scene, md)) {
         uiLayoutSetActive(sub, false);
       }
-      uiItemR(sub, ptr, "show_on_cage", UI_ITEM_NONE, "", ICON_NONE);
+      sub->prop(ptr, "show_on_cage", UI_ITEM_NONE, "", ICON_NONE);
       buttons_number++;
     }
   } /* Tessellation point for curve-typed objects. */
@@ -422,7 +403,7 @@ static void modifier_panel_header(const bContext *C, Panel *panel)
     }
     else if (mti->type != ModifierTypeType::Constructive) {
       /* Constructive modifiers tessellates curve before applying. */
-      uiItemR(row, ptr, "use_apply_on_spline", UI_ITEM_NONE, "", ICON_NONE);
+      row->prop(ptr, "use_apply_on_spline", UI_ITEM_NONE, "", ICON_NONE);
       buttons_number++;
     }
   }
@@ -431,22 +412,22 @@ static void modifier_panel_header(const bContext *C, Panel *panel)
     if (mti->flags & eModifierTypeFlag_SupportsEditmode) {
       sub = &row->row(true);
       uiLayoutSetActive(sub, (md->mode & eModifierMode_Realtime));
-      uiItemR(sub, ptr, "show_in_editmode", UI_ITEM_NONE, "", ICON_NONE);
+      sub->prop(ptr, "show_in_editmode", UI_ITEM_NONE, "", ICON_NONE);
       buttons_number++;
     }
-    uiItemR(row, ptr, "show_viewport", UI_ITEM_NONE, "", ICON_NONE);
-    uiItemR(row, ptr, "show_render", UI_ITEM_NONE, "", ICON_NONE);
+    row->prop(ptr, "show_viewport", UI_ITEM_NONE, "", ICON_NONE);
+    row->prop(ptr, "show_render", UI_ITEM_NONE, "", ICON_NONE);
     buttons_number += 2;
   }
 
   /* Extra operators menu. */
-  uiItemMenuF(row, "", ICON_DOWNARROW_HLT, modifier_ops_extra_draw, md);
+  row->menu_fn("", ICON_DOWNARROW_HLT, modifier_ops_extra_draw, md);
 
   /* Delete button. */
   if (modifier_can_delete(md) && !modifier_is_simulation(md)) {
     sub = &row->row(false);
     uiLayoutSetEmboss(sub, blender::ui::EmbossType::None);
-    uiItemO(sub, "", ICON_X, "OBJECT_OT_modifier_remove");
+    sub->op("OBJECT_OT_modifier_remove", "", ICON_X);
     buttons_number++;
   }
 
@@ -464,14 +445,14 @@ static void modifier_panel_header(const bContext *C, Panel *panel)
 
   bool display_name = (panel->sizex / UI_UNIT_X - buttons_number > 5) || (panel->sizex == 0);
   if (display_name) {
-    uiItemR(name_row, ptr, "name", UI_ITEM_NONE, "", ICON_NONE);
+    name_row->prop(ptr, "name", UI_ITEM_NONE, "", ICON_NONE);
   }
   else {
     uiLayoutSetAlignment(row, UI_LAYOUT_ALIGN_RIGHT);
   }
 
   /* Extra padding for delete button. */
-  uiItemS(layout);
+  layout->separator();
 }
 
 /** \} */

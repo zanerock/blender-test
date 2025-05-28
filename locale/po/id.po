@@ -1,18 +1,18 @@
 
 msgid ""
 msgstr ""
-"Project-Id-Version: Blender 4.5.0 Alpha (b'b6372b3af3f7')\n"
+"Project-Id-Version: Blender 4.5.0 Alpha (b'ba454989554a')\n"
 "Report-Msgid-Bugs-To: \n"
-"POT-Creation-Date: 2025-04-21 07:54+0000\n"
-"PO-Revision-Date: 2025-04-14 08:25+0000\n"
-"Last-Translator: Muhammad Jayadi Anwar <muhajayaanwar@gmail.com>\n"
+"POT-Creation-Date: 2025-05-26 07:36+0000\n"
+"PO-Revision-Date: 2025-05-01 10:56+0000\n"
+"Last-Translator: \"Adriel Y.\" <mixnblend@users.noreply.translate.blender.org>\n"
 "Language-Team: Indonesian <https://translate.blender.org/projects/blender-ui/ui/id/>\n"
 "Language: id\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n!=1);\n"
-"X-Generator: Weblate 5.10.1\n"
+"X-Generator: Weblate 5.11\n"
 "X-Poedit-SourceCharset: utf-8\n"
 "X-Poedit-Bookmarks: -1,-1,-1,-1,-1,-1,-1,-1,-1,4"
 
@@ -85,8 +85,20 @@ msgid "Groupings of F-Curves for display purposes, in e.g. the dopesheet and gra
 msgstr "Pengelompokan Kurva-F bertujuan untuk penampilan, di e.g. dopesheet dan editor grafik"
 
 
+msgid "Slot"
+msgstr "Slot"
+
+
+msgid "The Slot that the Channelbag's animation data is for"
+msgstr "Slot yang merupakan tempat data animasi Tas Saluran digunakan"
+
+
 msgid "Collection of F-Curves for a specific action slot, on a specific strip"
 msgstr "Koleksi Kurva-F untuk slot aksi spesifik, di strip spesifik"
+
+
+msgid "Collection of f-curve groups"
+msgstr "Koleksi kelompok-kelompok kurva-f"
 
 
 msgid "Animation Channels for Slots"
@@ -99,6 +111,10 @@ msgstr "Untuk setiap slot aksi, ada daftar saluran animasi yang dimaksudkan untu
 
 msgid "Action F-Curves"
 msgstr "Aksi F-Kurva"
+
+
+msgid "Collection of action F-Curves. Note that this is a legacy API that is unaware of action slots, and will only consider the F-Curves for this action's first slot"
+msgstr "Koleksi Kurva-F aksi. Catatan bahwa ini merupakan API legacy yang tidak sadar akan slot-slot aksi, dan akan mempertimbangkan Kurva-F untuk slot pertama aksi ini"
 
 
 msgid "Action Group"
@@ -277,12 +293,24 @@ msgid "Collection of action groups"
 msgstr "Koleksi kelompok aksi"
 
 
+msgid "Action Layer"
+msgstr "Lapisan Aksi"
+
+
 msgid "Strips"
 msgstr "Strip"
 
 
 msgid "The list of strips that are on this animation layer"
 msgstr "Daftar strip-strip yang ada di lapisan animasi ini"
+
+
+msgid "Action Layers"
+msgstr "Lapisan-lapisan Aksi"
+
+
+msgid "Collection of animation layers"
+msgstr "Koleksi lapisan-lapisan animasi"
 
 
 msgid "Action Pose Markers"
@@ -313,6 +341,10 @@ msgid "Action slot"
 msgstr "Slot aksi"
 
 
+msgid "Identifier for a set of channels in this Action, that can be used by a data-block to specify what it gets animated by"
+msgstr "Pengenal untuk sebuah set saluran-saluran dalam Aksi ini, yang dapat digunakan oleh data-blok untuk menentukan apa yang akan dianimasikan olehnya"
+
+
 msgid "Active"
 msgstr "Aktif"
 
@@ -323,6 +355,34 @@ msgstr "Entah ini adalah slot aksi, dapat ditetapkan dengan menugaskan ke action
 
 msgid "Slot Handle"
 msgstr "Pegangan Slot"
+
+
+msgid ""
+"Number specific to this Slot, unique within the Action.\n"
+"This is used, for example, on a ActionKeyframeStrip to look up the ActionChannelbag for this Slot"
+msgstr ""
+"Angka spesifik untuk Slot ini, unik di dalam Aksi\n"
+"Ini digunakan, misalnya, untuk sebuah StripBingkaiKunciAksi untuk melihat TasSaluranAksi untuk Slot ini"
+
+
+msgid "Slot Identifier"
+msgstr "Pengenal Slot"
+
+
+msgid "Used when connecting an Action to a data-block, to find the correct slot handle. This is the display name, prefixed by two characters determined by the slot's ID type"
+msgstr "Digunakan saat menghubungkan sebuah Aksi ke data-blok, untuk mencari pegangan slot yang benar. Ini merupakan nama tampilan, diawali dengan dua karakter yang ditentukan oleh tipe ID slot"
+
+
+msgid "Slot Display Name"
+msgstr "Nama Tampilan Slot"
+
+
+msgid "Name of the slot, for display in the user interface. This name combined with the slot's data-block type is unique within its Action"
+msgstr "Nama slot, untuk ditampilkan di antarmuka pengguna. Nama ini digabung dengan tipe data-blok slot yang unik di dalam Aksinya"
+
+
+msgid "Selection state of the slot"
+msgstr "Keadaan seleksi slot"
 
 
 msgid "Show Expanded"
@@ -336,6 +396,10 @@ msgstr "Keadaan slot yang diperluas"
 msgctxt "ID"
 msgid "Target ID Type"
 msgstr "Tipe ID Sasaran"
+
+
+msgid "Type of data-block that this slot is intended to animate; can be set when 'UNSPECIFIED' but is otherwise read-only"
+msgstr "Tipe data-blok yang slot ini dimaksudkan untuk dianimasi; dapat diatur ketika 'TIDAK DITENTUKAN' tetapi sebaliknya hanya-dibaca"
 
 
 msgctxt "ID"
@@ -542,8 +606,28 @@ msgid "Not yet specified. When this slot is first assigned to a data-block, this
 msgstr "Belum ditentukan. Saat slot ini ditetapkan untuk pertama kalinya ke data-blok, ini akan diset ke tipe data-blok tersebut"
 
 
+msgid "Action Slots"
+msgstr "Slot-slot Aksi"
+
+
+msgid "Collection of action slots"
+msgstr "Koleksi slot-slot aksi"
+
+
+msgid "Active Slot"
+msgstr "Slot Aktif"
+
+
+msgid "Active slot for this action"
+msgstr "Slot aktif untuk aksi ini"
+
+
+msgid "Action Strip"
+msgstr "Strip Aksi"
+
+
 msgid "Keyframe"
-msgstr "Frame Kunci"
+msgstr "Bingkai Kunci"
 
 
 msgid "Strip with a set of F-Curves for each action slot"
@@ -552,6 +636,14 @@ msgstr "Strip dengan set Kurva-F untuk setiap slot aksi"
 
 msgid "Keyframe Animation Strip"
 msgstr "Strip Animasi Bingkai Kunci"
+
+
+msgid "Action Strips"
+msgstr "Strip-strip Aksi"
+
+
+msgid "Collection of animation strips"
+msgstr "Koleksi strip-strip animasi"
 
 
 msgid "Add-on"
@@ -648,6 +740,14 @@ msgstr "Distribusikan memori antar perangkat"
 
 msgid "Make more room for large scenes to fit by distributing memory across interconnected devices (e.g. via NVLink) rather than duplicating it"
 msgstr "Buat spasi lebih banyak untuk adegan besar supaya cukup dengan mendistribusikan memori antar perangkat yang terkoneksi (e.g via NVLink) daripada menduplikasikannya"
+
+
+msgid "HIP RT"
+msgstr "HIP RT"
+
+
+msgid "HIP RT enables AMD hardware ray tracing on RDNA2 and above"
+msgstr "HIP RT mengaktifkan penelusuran sinar perangkat lunak AMD di RDNA2 dan diatasnya"
 
 
 msgid "Embree on GPU"
@@ -768,6 +868,10 @@ msgstr "Memperluas kotak ini ke sebuah daftar semua penanda penamaan untuk penga
 
 msgid "Fribidi Library"
 msgstr "Perpustakaan Fribidi"
+
+
+msgid "The FriBidi C compiled library (.so under Linux, .dll under windows...), you’ll likely have to edit it if you’re under Windows, e.g. using the one included in Blender libraries repository"
+msgstr "Perpustakaan FriBidi C yang tersusun (.so pada Linux, .dll pada windows...), kemungkinan besar Anda perlu mengeditnya jika Anda menggunakan Windows, misal jika menggunakan yang terdapat di repositori pustaka Blender"
 
 
 msgid "Translation Root"
@@ -930,8 +1034,20 @@ msgid "Amount the Active Action contributes to the result of the NLA stack"
 msgstr "Jumlah Aksi Aktif berkontribusi ke hasil stack NLA"
 
 
+msgid "Action Slot"
+msgstr "Slot Aksi"
+
+
+msgid "The slot identifies which sub-set of the Action is considered to be for this data-block, and its name is used to find the right slot when assigning an Action"
+msgstr "Slot mengidentifikasi sub-set Aksi yang dianggap untuk data-blok ini, dan namanya digunakan untuk mencari slot yang benar saat menugaskan sebuah Aksi"
+
+
 msgid "Action Slot Handle"
 msgstr "Pegangan Slot Aksi"
+
+
+msgid "A number that identifies which sub-set of the Action is considered to be for this data-block"
+msgstr "Angka yang mengindentifikasi sub-set Aksi yang dianggap untuk data-blok ini"
 
 
 msgid "Slots"
@@ -960,6 +1076,10 @@ msgstr "Driver/Ekspresi untuk data-blok ini"
 
 msgid "Last Action Slot Identifier"
 msgstr "Pengenal Slot Aksi Terakhir"
+
+
+msgid "The identifier of the most recently assigned action slot. The slot identifies which sub-set of the Action is considered to be for this data-block, and its identifier is used to find the right slot when assigning an Action."
+msgstr "Pengenal slot aksi yang terakhir ditetapkan. Slot mengidentifikasi sub-set Aksi yang dianggap untuk data-blok ini, dan pengenalnya digunakan untuk mencari slot yang benar saat menugaskan sebuah Aksi."
 
 
 msgid "NLA Tracks"
@@ -1186,6 +1306,10 @@ msgid "Bake to active Camera"
 msgstr "Panggang ke Kamera aktif"
 
 
+msgid "Motion path points will be baked into the camera space of the active camera. This means they will only look right when looking through that camera. Switching cameras using markers is not supported."
+msgstr "Titik jalur gerak akan dipanggang ke dalam ruang kamera pada kamera aktif. Artinya titik tersebut hanya akan terlihat benar apabila melihat melalui kamera tersebut. Beralih ke kamera berbeda menggunakan penanda tidak didukung."
+
+
 msgid "Any Type"
 msgstr "Tipe Apa Saja"
 
@@ -1243,7 +1367,7 @@ msgstr "Kosong"
 
 
 msgid "3D Viewport"
-msgstr "Tampilan 3D"
+msgstr "Jendela Tampilan 3D"
 
 
 msgid "Manipulate objects in a 3D environment"
@@ -1514,6 +1638,10 @@ msgid "Catalog UUID"
 msgstr "UUID Katalog"
 
 
+msgid "Identifier for the asset's catalog, used by Blender to look up the asset's catalog path. Must be a UUID according to RFC4122."
+msgstr "Pengenal untuk katalog aset, digunakan Blender untuk melihat jalur katalog aset. Harus berupa UUID menurut RFC4122."
+
+
 msgid "Catalog Simple Name"
 msgstr "Nama Sederhana Katalog"
 
@@ -1526,6 +1654,10 @@ msgid "Copyright"
 msgstr "Hak Cipta"
 
 
+msgid "Copyright notice for this asset. An empty copyright notice does not necessarily indicate that this is copyright-free. Contact the author if any clarification is needed."
+msgstr "Pemberitahuan hak cipta untuk aset ini. Pemberitahuan hak cipta yang kosong tidak selalu menunjukkan bahwa aset ini bebas dari hak cipta. Hubungi pembuat jika ada klarifikasi yang diperlukan."
+
+
 msgid "Description"
 msgstr "Deskripsi"
 
@@ -1536,6 +1668,10 @@ msgstr "Deskripsi aset untuk ditampilkan untuk pengguna"
 
 msgid "License"
 msgstr "Lisensi"
+
+
+msgid "The type of license this asset is distributed under. An empty license name does not necessarily indicate that this is free of licensing terms. Contact the author if any clarification is needed."
+msgstr "Jenis lisensi yang digunakan untuk mendistribusikan aset ini. Nama lisensi yang kosong tidak selalu menunjukkan bahwa aset ini bebas dari ketentuan lisensi. Hubungi pembuat jika ada klarifikasi yang diperlukan."
 
 
 msgid "Tags"
@@ -1675,6 +1811,10 @@ msgid "No Asset Dragging"
 msgstr "Tidak Ada Penyeretan Aset"
 
 
+msgid "Disable the default asset dragging on drag events. Useful for implementing custom dragging via custom key-map items."
+msgstr "Menonaktifkan penyeretan aset default saat acara-acara seret. Berguna untuk mengimplementasikan penyeretan kustom lewat item kunci-peta kustom."
+
+
 msgid "Visible by Default"
 msgstr "Terlihat secara Default"
 
@@ -1717,6 +1857,10 @@ msgstr "Menyaring aset berdasarkan nama"
 
 msgid "Show Names"
 msgstr "Tampilkan Nama"
+
+
+msgid "Show the asset name together with the preview. Otherwise only the preview will be visible."
+msgstr "Menampilkan nama aset bersama dengan pratinjau. Selain itu hanya pratinjau yang akan terlihat."
 
 
 msgid "Asset Tag"
@@ -1825,6 +1969,14 @@ msgstr "Integer 8-Bit"
 
 msgid "Smaller integer with a range from -128 to 127"
 msgstr "Integer lebih kecil dengan jarak dari -128 ke 127"
+
+
+msgid "2D 16-Bit Integer Vector"
+msgstr "Vektor Integer 16-Bit 2D"
+
+
+msgid "16-bit signed integer vector"
+msgstr "Vektor Integer Signed 16-Bit"
 
 
 msgid "2D Integer Vector"
@@ -2023,6 +2175,10 @@ msgid "Geometry attribute that stores rotation"
 msgstr "Atribut geometri yang menyimpan rotasi"
 
 
+msgid "2D 16-Bit Integer Vector Attribute"
+msgstr "Atribut Vektor Integer 16-Bit 2D"
+
+
 msgid "String Attribute"
 msgstr "Atribut String"
 
@@ -2107,6 +2263,10 @@ msgid "Cage Extrusion"
 msgstr "Ekstrusi Kandang"
 
 
+msgid "Inflate the active object by the specified distance for baking. This helps matching to points nearer to the outside of the selected object meshes."
+msgstr "Mengembangkan benda aktif dengan jarak yang ditentukan untuk dipanggang. Ini membantu mencocokkan ke titik yang lebih dekat ke bagian luar mesh benda yang dipilih."
+
+
 msgid "Cage Object"
 msgstr "Benda Kandang"
 
@@ -2165,6 +2325,10 @@ msgstr "Perpanjang garis luar pixel keluar"
 
 msgid "Max Ray Distance"
 msgstr "Jarak Maks Sinar"
+
+
+msgid "The maximum ray distance for matching points between the active and selected objects. If zero, there is no limit."
+msgstr "Jarak sinar maksimal untuk titik sesuai diantara obyek aktif dan yang terseleksi. Jika nol, tidak ada batasan."
 
 
 msgid "Normal Space"
@@ -2947,6 +3111,10 @@ msgid "Main Grease Pencils"
 msgstr "Pensil Grease Utama"
 
 
+msgid "Collection of Grease Pencils"
+msgstr "Koleksi Pensil-Pensil Grease"
+
+
 msgid "Main Hair Curves"
 msgstr "Kurva Rambut Utama"
 
@@ -3120,7 +3288,7 @@ msgstr "Pengeras Suara Utama"
 
 
 msgid "Collection of speakers"
-msgstr "Koleksi pengeras utama"
+msgstr "Koleksi pengeras suara"
 
 
 msgid "Main Texts"
@@ -3171,8 +3339,16 @@ msgid "Collection of worlds"
 msgstr "Koleksi dunia"
 
 
+msgid "Blendfile Import Context"
+msgstr "Konteks Impor Dokumenblend"
+
+
 msgid "Only link data, instead of appending it"
 msgstr "Hanya menghubungkan data, bukan menambahkannya"
+
+
+msgid "Set fake user on appended IDs"
+msgstr "Set pengguna palsu di ID yang ditambahkan"
 
 
 msgid "Automatically select imported objects"
@@ -3195,9 +3371,17 @@ msgid "ID has been kept linked"
 msgstr "ID telah tetap terhubung"
 
 
+msgid "Imported ID"
+msgstr "ID yang Diimpor"
+
+
 msgctxt "ID"
 msgid "ID Type"
 msgstr "Tipe ID"
+
+
+msgid "ID type of the item"
+msgstr "Tipe ID item"
 
 
 msgid "Import Info"
@@ -3918,6 +4102,26 @@ msgid "Bone Collections that contain this bone"
 msgstr "Koleksi Tulang yang mengandung tulang ini"
 
 
+msgid "Display Type"
+msgstr "Tipe Tampilan"
+
+
+msgid "Stick"
+msgstr "Batang"
+
+
+msgid "B-Bone"
+msgstr "Tulang"
+
+
+msgid "Envelope"
+msgstr "Amplop"
+
+
+msgid "Wire"
+msgstr "Kabel"
+
+
 msgid "Envelope Deform Distance"
 msgstr "Jarak Deformasi Amplop"
 
@@ -4051,7 +4255,7 @@ msgstr "Kabel Tampilan"
 
 
 msgid "Bone is always displayed in wireframe regardless of viewport shading mode (useful for non-obstructive custom bone shapes)"
-msgstr "Tulang selalu ditampilkan dalam wireframe, apa pun mode bayangan viewport (berguna untuk bentuk tulang khusus yang tidak menghalangi)"
+msgstr "Tulang selalu ditampilkan dalam wireframe, apa pun mode bayangan jendela tampilan (berguna untuk bentuk tulang khusus yang tidak menghalangi)"
 
 
 msgid "Tail"
@@ -5101,7 +5305,7 @@ msgstr "Kuas mempengaruhi rotasi titik OV"
 
 
 msgid "Limit to Viewport"
-msgstr "Batasi ke Viewport"
+msgstr "Batasi ke Jendela Tampilan"
 
 
 msgid "Keep Caps"
@@ -5421,7 +5625,7 @@ msgstr "Tampilkan Di Latar Depan"
 
 
 msgid "Show this image in front of objects in viewport"
-msgstr "Tampilkan gambar ini di depan objek di viewport"
+msgstr "Tampilkan gambar ini di depan objek di jendela tampilan"
 
 
 msgid "Background Source"
@@ -7450,6 +7654,10 @@ msgid "Stop vertices from projecting to a face on the target when facing towards
 msgstr "Hentikan sudut dari proyeksi ke muka di target saat menghadap ke depan/luar"
 
 
+msgid "No culling"
+msgstr "Tidak ada culling"
+
+
 msgid "Front"
 msgstr "Depan"
 
@@ -8122,7 +8330,7 @@ msgstr "Mode Evaluasi"
 
 
 msgid "Viewport"
-msgstr "Tampilan layar"
+msgstr "Jendela Tampilan"
 
 
 msgid "Render"
@@ -8411,6 +8619,10 @@ msgstr "Muat NLA yang Hilang"
 
 msgid "Include animation data-blocks with no NLA data (NLA editor only)"
 msgstr "Muatkan animasi data-blok dengan tidak ada data NLA (editor NLA saja)"
+
+
+msgid "Display Modifier Data"
+msgstr "Tampilkan Data Pengubah"
 
 
 msgid "Display Movie Clips"
@@ -9406,6 +9618,14 @@ msgid "F-Modifier"
 msgstr "Pengubah-F"
 
 
+msgid "Modifier for values of F-Curve"
+msgstr "Pengubah untuk nilai-nilai Kurva-F"
+
+
+msgid "F-Curve modifier will show settings in the editor"
+msgstr "Pengubah Kurva-F akan menampilkan pengaturan di editor"
+
+
 msgid "Disabled"
 msgstr "Dinonaktifkan"
 
@@ -10380,10 +10600,6 @@ msgid "Tracer"
 msgstr "Pelacak"
 
 
-msgid "Display Type"
-msgstr "Tipe Tampilan"
-
-
 msgid "Needle"
 msgstr "Jarum"
 
@@ -10732,6 +10948,10 @@ msgid "Sphere Radius"
 msgstr "Radius Bola"
 
 
+msgid "Culling"
+msgstr "Culling"
+
+
 msgid "Material Boundaries"
 msgstr "Batas-batas Bahan"
 
@@ -10960,6 +11180,23 @@ msgid "Coordinates"
 msgstr "Koordinat"
 
 
+msgctxt "Operator"
+msgid "Gizmo"
+msgstr "Gizmo"
+
+
+msgid "Collection of gizmos"
+msgstr "Koleksi gizmo-gizmo"
+
+
+msgid "Gizmo group this gizmo is a member of"
+msgstr "Kelompok gizmo dimana gizmo ini merupakan anggota dari"
+
+
+msgid "Ignore the key-map for this gizmo"
+msgstr "Abaikan peta-kunci untuk gizmo ini"
+
+
 msgid "Hide Select"
 msgstr "Sembunyikan Pilih"
 
@@ -10968,12 +11205,29 @@ msgid "Highlight"
 msgstr "Sorot"
 
 
+msgid "Use tooltips when hovering over this gizmo"
+msgstr "Gunakan keterangan alat saat mengarahkan kursor di gizmo ini"
+
+
+msgctxt "Operator"
+msgid "GizmoGroup"
+msgstr "KelompokGizmo"
+
+
 msgid "Depth 3D"
 msgstr "Kedalaman 3D"
 
 
 msgid "Persistent"
 msgstr "Persisten"
+
+
+msgid "Add fallback tools keymap to this gizmo type"
+msgstr "Tambah petakunci alat-alat pemunduran ke tipe gizmo ini"
+
+
+msgid "The gizmos are made for use with virtual reality sessions and require special redraw management"
+msgstr "Gizmo-gizmo dibuat untuk dipakai di sesi realita maya dan memerlukan management gambar ulang khusus"
 
 
 msgid "Window"
@@ -11014,6 +11268,30 @@ msgstr "Header Alat"
 
 msgid "XR"
 msgstr "XR"
+
+
+msgid "Gizmos"
+msgstr "Gizmo-gizmo"
+
+
+msgid "List of gizmos in the Gizmo Map"
+msgstr "Daftar gizmo-gizmo di Peta Gizmo"
+
+
+msgid "Gizmo Group Properties"
+msgstr "Properti Kelompok Gizmo"
+
+
+msgid "Input properties of a Gizmo Group"
+msgstr "Masukkan properti Kelompok Gizmo"
+
+
+msgid "Gizmo Properties"
+msgstr "Properti Gizmo"
+
+
+msgid "Input properties of a Gizmo"
+msgstr "Memasukkan properti-properti sebuah Gizmo"
 
 
 msgid "Dash"
@@ -11280,22 +11558,6 @@ msgid "Feature Set"
 msgstr "Warna Standar"
 
 
-msgid "Stick"
-msgstr "Batang"
-
-
-msgid "B-Bone"
-msgstr "Tulang"
-
-
-msgid "Envelope"
-msgstr "Amplop"
-
-
-msgid "Wire"
-msgstr "Kabel"
-
-
 msgid "Edit Bones"
 msgstr "Edit Tulang-Tulang"
 
@@ -11497,6 +11759,11 @@ msgstr "Pengait Ular"
 msgctxt "Curves"
 msgid "Pinch"
 msgstr "Cubit"
+
+
+msgctxt "Curves"
+msgid "Puff"
+msgstr "Puff"
 
 
 msgctxt "Curves"
@@ -11731,16 +11998,6 @@ msgstr "Gumpalan"
 
 
 msgctxt "Brush"
-msgid "Flatten"
-msgstr "Meratakan"
-
-
-msgctxt "Brush"
-msgid "Scrape"
-msgstr "Mengikis"
-
-
-msgctxt "Brush"
 msgid "Pinch"
 msgstr "Cubit"
 
@@ -11810,7 +12067,7 @@ msgstr "Oklusi"
 
 
 msgid "Show cursor in viewport"
-msgstr "Tampilkan kursor di viewport"
+msgstr "Tampilkan kursor di jendela tampilan"
 
 
 msgid "Custom Icon"
@@ -11838,7 +12095,7 @@ msgstr "Gunakan Cat"
 
 
 msgid "Show texture in viewport"
-msgstr "Tampilkan tekstur di viewport"
+msgstr "Tampilkan tekstur di jendela tampilan"
 
 
 msgid "Forward"
@@ -12420,6 +12677,10 @@ msgid "Light color"
 msgstr "Warna Standar"
 
 
+msgid "Normalize"
+msgstr "Normalisasi"
+
+
 msgctxt "Light"
 msgid "Type"
 msgstr "Tipe"
@@ -12529,6 +12790,14 @@ msgid "Surface Render Method"
 msgstr "Metode Render Permukaan"
 
 
+msgid "Light Probe Volume Backface Culling"
+msgstr "Culling Wajah Belakang Volume Probe Cahaya"
+
+
+msgid "Shadow Backface Culling"
+msgstr "Bayangan Culling Wajah Belakang"
+
+
 msgid "Subsurface Translucency"
 msgstr "Tembusan Subpermukaan"
 
@@ -12619,6 +12888,10 @@ msgstr "Titik jala"
 
 msgid "Render Size"
 msgstr "Ukurang"
+
+
+msgid "Viewport Size"
+msgstr "Ukuran Jendela Tampilan"
 
 
 msgid "Update"
@@ -12838,7 +13111,7 @@ msgstr "Percontoh Tampilan"
 
 
 msgid "Make instancer visible in the viewport"
-msgstr "Buat percontoh terlihat di tampilan"
+msgstr "Buat percontoh terlihat di jendela tampilan"
 
 
 msgid "Type of object"
@@ -13104,7 +13377,7 @@ msgstr "Penyunting NLA"
 
 
 msgid "Property Editors"
-msgstr "Penyunting Teks"
+msgstr "Editor-editor Properti"
 
 
 msgid "Top-Left 3D Editor"
@@ -15231,6 +15504,10 @@ msgid "Sample"
 msgstr "Sampel"
 
 
+msgid "Gizmo"
+msgstr "Gizmo"
+
+
 msgid "Instances"
 msgstr "Contoh-contoh"
 
@@ -15925,6 +16202,10 @@ msgstr "Pindai Berlebihan (Overscan)"
 
 msgid "Source Type"
 msgstr "Tipe Sumber"
+
+
+msgid "Back Face Culling"
+msgstr "Culling Wajah Belakang"
 
 
 msgid "Boundaries"
@@ -16947,10 +17228,6 @@ msgid "Use Mask"
 msgstr "Gunakan Masker"
 
 
-msgid "Normalize"
-msgstr "Normalisasi"
-
-
 msgid "Normalize light intensities while tracking (slower)"
 msgstr "Normalisasi intensitas cahaya saat pelacakan (lebih lambat"
 
@@ -17261,7 +17538,7 @@ msgstr "Tampilkan Tekstur"
 
 
 msgid "Display node in viewport textured shading mode"
-msgstr "Menampilkan simpul di mode bayangan bertekstur tampilan"
+msgstr "Menampilkan simpul di mode bayangan bertekstur jendela tampilan"
 
 
 msgid "Use custom color for the node"
@@ -17378,20 +17655,12 @@ msgid "Extend bounds of the input image to fully fit blurred image"
 msgstr "Memperpanjang batas gambar masukan ke gambar buram yang cukup secara penuh"
 
 
-msgid "Apply filter on gamma corrected values"
-msgstr "Menerapkan filter pada nilai yang dikoreksi gamma"
-
-
 msgid "Use relative (percent) values to define blur radius"
 msgstr "Gunakan nilai relatif (persen) ke definisi radius buram"
 
 
 msgid "Variable Size"
 msgstr "Ukurang"
-
-
-msgid "Support variable blur per pixel when using an image for size input"
-msgstr "Mendukung variabel buram per pixel saat menggunakan gambar untuk masukan ukuran"
 
 
 msgid "Bokeh Blur"
@@ -17406,10 +17675,6 @@ msgid "Max Blur"
 msgstr "Buram Maks"
 
 
-msgid "Blur limit, maximum CoC radius"
-msgstr "Batas buram, maksimum radius CoC"
-
-
 msgid "Bokeh Image"
 msgstr "Gambar Bokeh"
 
@@ -17420,10 +17685,6 @@ msgstr "Mengenerasi gambar dengan bentuk bokeh untuk digunakan dengan simpul fil
 
 msgid "Box Mask"
 msgstr "Masker Kotak"
-
-
-msgid "Height of the box"
-msgstr "Tinggi kotak"
 
 
 msgid "Mask Type"
@@ -17466,20 +17727,12 @@ msgid "Low"
 msgstr "Rendah"
 
 
-msgid "Values lower than this setting are 100% keyed"
-msgstr "Nilai lebih rendah dari pengaturan ini dikuncikan 100%"
-
-
 msgid "Chroma Key"
 msgstr "Kunci Chroma"
 
 
 msgid "Acceptance"
 msgstr "Penerimaan"
-
-
-msgid "Tolerance for a color to be considered a keying color"
-msgstr "Toleransi untuk warna untuk dipertimbangkan warna penguncian"
 
 
 msgid "Color Balance"
@@ -17490,24 +17743,8 @@ msgid "Correction Formula"
 msgstr "Rumus Koreksi"
 
 
-msgid "Correction for highlights"
-msgstr "Koreksi untuk highlight"
-
-
-msgid "Correction for midtones"
-msgstr "Koreksi untuk nada tengah"
-
-
 msgid "Input Tint"
 msgstr "Kehalusan Masukan"
-
-
-msgid "Color tint of the input's white point (the default of 10 matches daylight)"
-msgstr "Kehalusan wanra titik putih masukan (standarnya 10 cocok dengan cahaya hari)"
-
-
-msgid "Correction for shadows"
-msgstr "Koreksi untuk bayangan"
 
 
 msgid "Basis"
@@ -17518,10 +17755,6 @@ msgid "Output Tint"
 msgstr "Kehalusan Keluaran"
 
 
-msgid "Color tint of the output's white point (the default of 10 matches daylight)"
-msgstr "Kehalusan warna titik putih keluaran (standarnya 10 cocok dengan cahaya hari)"
-
-
 msgid "The color which gets white gets mapped to (automatically converted to/from temperature and tint)"
 msgstr "Warna dimana dapat putih dapat dipetakan ke (otomatis diubah ke/dari temperatur dan kehalusan)"
 
@@ -17530,51 +17763,23 @@ msgid "Color Correction"
 msgstr "Koreksi Warna"
 
 
-msgid "Blue channel active"
-msgstr "Saluran biru aktif"
-
-
-msgid "Green channel active"
-msgstr "Saluran hijau aktif"
-
-
 msgid "Highlights Contrast"
 msgstr "Kontras Highlight"
-
-
-msgid "Highlights contrast"
-msgstr "Kontras highlight"
 
 
 msgid "Highlights Gain"
 msgstr "Perolehan Highlight"
 
 
-msgid "Highlights gain"
-msgstr "Perolehan highlight"
-
-
 msgid "Highlights Gamma"
 msgstr "Gamma Highlight"
-
-
-msgid "Highlights gamma"
-msgstr "Gamma highlight"
 
 
 msgid "Highlights Lift"
 msgstr "Angkat Highlight"
 
 
-msgid "Highlights lift"
-msgstr "Angkat highlight"
-
-
 msgid "Highlights Saturation"
-msgstr "Saturasi Highlight"
-
-
-msgid "Highlights saturation"
 msgstr "Saturasi Highlight"
 
 
@@ -17582,156 +17787,72 @@ msgid "Master Contrast"
 msgstr "Kontras Master"
 
 
-msgid "Master contrast"
-msgstr "Kontras master"
-
-
 msgid "Master Gain"
 msgstr "Perolehan Master"
-
-
-msgid "Master gain"
-msgstr "Perolehan master"
 
 
 msgid "Master Gamma"
 msgstr "Gamma Master"
 
 
-msgid "Master gamma"
-msgstr "Gamma master"
-
-
 msgid "Master Lift"
 msgstr "Angkat Master"
-
-
-msgid "Master lift"
-msgstr "Angkat master"
 
 
 msgid "Master Saturation"
 msgstr "Master Saturasi"
 
 
-msgid "Master saturation"
-msgstr "Master saturasi"
-
-
 msgid "Midtones Contrast"
 msgstr "Kontras Nada Tengah"
-
-
-msgid "Midtones contrast"
-msgstr "Kontras nada tengah"
 
 
 msgid "Midtones End"
 msgstr "Berakhir Nada Tengah"
 
 
-msgid "End of midtones"
-msgstr "Akhir nada tengah"
-
-
 msgid "Midtones Gain"
 msgstr "Perolehan Nada Tengah"
-
-
-msgid "Midtones gain"
-msgstr "Perolehan nada tengah"
 
 
 msgid "Midtones Gamma"
 msgstr "Gamma Nada Tengah"
 
 
-msgid "Midtones gamma"
-msgstr "Gamma nada tengah"
-
-
 msgid "Midtones Lift"
 msgstr "Angkat Nada Tengah"
-
-
-msgid "Midtones lift"
-msgstr "Angkat nada tengah"
 
 
 msgid "Midtones Saturation"
 msgstr "Saturasi Nada Tengah"
 
 
-msgid "Midtones saturation"
-msgstr "Saturasi nada tengah"
-
-
 msgid "Midtones Start"
 msgstr "Mulai Nada Tengah"
-
-
-msgid "Start of midtones"
-msgstr "Awal nada tengah"
-
-
-msgid "Red channel active"
-msgstr "Aktif saluran merah"
 
 
 msgid "Shadows Contrast"
 msgstr "Kontras Bayangan"
 
 
-msgid "Shadows contrast"
-msgstr "Kontras bayangan"
-
-
 msgid "Shadows Gain"
 msgstr "Perolehan Bayangan"
-
-
-msgid "Shadows gain"
-msgstr "Perolehan bayangan"
 
 
 msgid "Shadows Gamma"
 msgstr "Gamma Bayangan"
 
 
-msgid "Shadows gamma"
-msgstr "Gamma bayangan"
-
-
 msgid "Shadows Lift"
 msgstr "Angkat Bayangan"
-
-
-msgid "Shadows lift"
-msgstr "Angkat bayangan"
 
 
 msgid "Shadows Saturation"
 msgstr "Saturasi Bayangan"
 
 
-msgid "Shadows saturation"
-msgstr "Saturasi bayangan"
-
-
 msgid "Color Key"
 msgstr "Kunci Warna"
-
-
-msgid "Hue tolerance for colors to be considered a keying color"
-msgstr "Toleransi hue untuk warna untuk dipertimbangkan warna penguncian"
-
-
-msgid "Saturation tolerance for the color"
-msgstr "Toleransi saturasi untuk warna"
-
-
-msgid "Value tolerance for the color"
-msgstr "Toleransi nilai untuk warna"
 
 
 msgid "Limit by red"
@@ -17752,10 +17873,6 @@ msgstr "Algoritma batas sederhana"
 
 msgid "Average limit algorithm"
 msgstr "Algoritma batas rata-rata"
-
-
-msgid "Scale limit by value"
-msgstr "Skalakan batas oleh nilai"
 
 
 msgid "Mode of color processing"
@@ -17922,6 +18039,10 @@ msgid "Bokeh shape rotation offset"
 msgstr "Offset rotasi bentuk bokeh"
 
 
+msgid "Blur limit, maximum CoC radius"
+msgstr "Batas buram, maksimum radius CoC"
+
+
 msgid "Bokeh Type"
 msgstr "Tipe Bokeh"
 
@@ -17978,20 +18099,8 @@ msgid "Scene from which to select the active camera (render scene if undefined)"
 msgstr "Adegan dimana untuk menyeleksi kamera aktif (render adegan jika tidak terdefinisikan)"
 
 
-msgid "CoC radius threshold, prevents background bleed on in-focus midground, 0 is disabled"
-msgstr "Batas radius CoC, mencegah pendarahan latar belakang pada latar tengah saat dalam fokus, 0 untuk nonaktif"
-
-
 msgid "Gamma Correction"
 msgstr "Koreksi Gamma"
-
-
-msgid "Enable gamma correction before and after main process"
-msgstr "Mengaktifkan koreksi gamma sebelum dan setelah proses utama"
-
-
-msgid "Enable low quality mode, useful for preview"
-msgstr "Mengaktifkan mode kualitas render, berguna untuk pratinjau"
 
 
 msgid "Use Z-Buffer"
@@ -18054,6 +18163,10 @@ msgid "Flip X & Y"
 msgstr "Balik X & Y"
 
 
+msgid "Glare"
+msgstr "Kesilauan"
+
+
 msgid "Angle Offset"
 msgstr "Offset Sudut"
 
@@ -18082,16 +18195,8 @@ msgid "Post Blur"
 msgstr "Setelah Buram"
 
 
-msgid "Matte blur size which applies after clipping and dilate/eroding"
-msgstr "Ukuran buram matte yang diaplikasikan setelah memotong dan melebarkan/mengikis"
-
-
 msgid "Pre Blur"
 msgstr "Sebelum Buram"
-
-
-msgid "Chroma pre-blur size which applies before running keyer"
-msgstr "Ukuran sebelum-buram chroma yang diaplikasikan sebelum menjalani pengunci"
 
 
 msgid "Clip Black"
@@ -18106,10 +18211,6 @@ msgid "Feather Distance"
 msgstr "Jarak Bulu"
 
 
-msgid "Distance to grow/shrink the feather"
-msgstr "Jarak ke perbesar/perkecil bulu"
-
-
 msgctxt "Curve"
 msgid "Feather Falloff"
 msgstr "Jatuhan Bulu"
@@ -18117,10 +18218,6 @@ msgstr "Jatuhan Bulu"
 
 msgid "Screen Balance"
 msgstr "Kesimbangan Layar"
-
-
-msgid "Balance between two non-primary channels primary channel is comparing against"
-msgstr "Seimbangkan antara dua saluran non-utama saluran utama memperbandingkan terhadap"
 
 
 msgid "Keying Screen"
@@ -18157,6 +18254,10 @@ msgstr "Saluran Hijau"
 
 msgid "Blue Channel"
 msgstr "Saluran Biru"
+
+
+msgid "Values lower than this setting are 100% keyed"
+msgstr "Nilai lebih rendah dari pengaturan ini dikuncikan 100%"
 
 
 msgid "Map Value"
@@ -18322,18 +18423,6 @@ msgstr "Slot Dokumen"
 
 msgid "EXR Layer Slots"
 msgstr "Slot Layer EXR"
-
-
-msgid "Number of motion blur samples"
-msgstr "Jumlah sampel buram gerakan"
-
-
-msgid "Exposure for motion blur as a factor of FPS"
-msgstr "Pencahayaan untuk buram gerakan sebagai faktor FPS"
-
-
-msgid "Use multi-sampled motion blur of the mask"
-msgstr "Menggunakan buram gerakan multi-sampel pada masker"
 
 
 msgid "To Straight"
@@ -18540,12 +18629,36 @@ msgid "Geometry to Instance"
 msgstr "Geometri ke Contoh"
 
 
+msgid "Dial Gizmo"
+msgstr "Gizmo Dial"
+
+
+msgid "Show a dial gizmo in the viewport for a value"
+msgstr "Tampilkan sebuah gizmo dial di jendela tampilan untuk sebuah nilai"
+
+
 msgid "Primary"
 msgstr "Primer"
 
 
 msgid "Secondary"
 msgstr "Sekunder"
+
+
+msgid "Linear Gizmo"
+msgstr "Gizmo Linear"
+
+
+msgid "Show a linear gizmo in the viewport for a value"
+msgstr "Tampilkan sebuah gizmo linear di jendela tampilan untuk sebuah nilai"
+
+
+msgid "Transform Gizmo"
+msgstr "Gizmo Transformasi"
+
+
+msgid "Show a transform gizmo in the viewport"
+msgstr "Tampilkan sebuah gizmo transformasi di jendela tampilan"
 
 
 msgctxt "Image"
@@ -18582,7 +18695,7 @@ msgstr "Contoh-contoh ke Titik-titik"
 
 
 msgid "Is Viewport"
-msgstr "Adalah Viewport"
+msgstr "Adalah Jendela Tampilan"
 
 
 msgid "Merge vertices or points within a given distance"
@@ -18881,6 +18994,14 @@ msgid "Is Output"
 msgstr "A dalah Keluaran"
 
 
+msgid "Pin Gizmo"
+msgstr "Gizmo Pin"
+
+
+msgid "Keep gizmo visible even when the node is not selected"
+msgstr "Membuat gizmo tetap terlihat bahkan ketika simpul tidak dipilih"
+
+
 msgid "Data type"
 msgstr "Tipe Data"
 
@@ -19117,6 +19238,15 @@ msgid "Lightmap Pack"
 msgstr "Kamera"
 
 
+msgid "Set the current transform gizmo"
+msgstr "Set gizmo transformasi yang sekarang"
+
+
+msgctxt "Operator"
+msgid "Transform Gizmo Set"
+msgstr "Set Gizmo Transformasi"
+
+
 msgid "Scale a float context value"
 msgstr "Skalakan nilai konteks float"
 
@@ -19183,17 +19313,17 @@ msgstr "Kamera"
 
 msgctxt "Operator"
 msgid "Add Property"
-msgstr "Nama Properti"
+msgstr "Tambah Properti"
 
 
 msgctxt "Operator"
 msgid "Edit Property"
-msgstr "Modus Sunting"
+msgstr "Edit Properti"
 
 
 msgctxt "Operator"
 msgid "Remove Property"
-msgstr "Induk"
+msgstr "Hapus Properti"
 
 
 msgctxt "Operator"
@@ -20417,6 +20547,24 @@ msgstr "Nama atribut baru"
 
 msgid "Name of new color attribute"
 msgstr "Nama atribut warna baru"
+
+
+msgctxt "Operator"
+msgid "Gizmo Select"
+msgstr "Pilih Gizmo"
+
+
+msgid "Select the currently highlighted gizmo"
+msgstr "Pilih gizmo yang sekarang sedang disorot"
+
+
+msgctxt "Operator"
+msgid "Gizmo Tweak"
+msgstr "Penyesuaian Gizmo"
+
+
+msgid "Tweak the active gizmo"
+msgstr "Menyesuaikan gizmo aktif"
 
 
 msgid "Segment"
@@ -22997,6 +23145,10 @@ msgid "Select Constraint Target"
 msgstr "Seleksi"
 
 
+msgid "Parents"
+msgstr "Induk"
+
+
 msgctxt "Operator"
 msgid "Select Connected"
 msgstr "Warna Standar"
@@ -23500,10 +23652,6 @@ msgid "Set Render Size"
 msgstr "Set Ukuran Render"
 
 
-msgid "Set render size and aspect from active sequence"
-msgstr "Set ukuran render dan aspek dari sequence aktif"
-
-
 msgid "Use mouse to sample color in current frame"
 msgstr "Gunakan mouse ke warna sampel di frame sekarang"
 
@@ -23580,6 +23728,10 @@ msgstr "Saluran Sama"
 msgctxt "Operator"
 msgid "Select Handles"
 msgstr "Seleksi"
+
+
+msgid "Select gizmo handles on the sides of the selected strip"
+msgstr "Pilih pegang-pegangan gizmo di sisi-sisi strip yang terpilih"
 
 
 msgid "Left Neighbor"
@@ -23986,6 +24138,11 @@ msgstr "Hanya Garis"
 
 msgid "Snap to vertices"
 msgstr "Jepret ke simpul"
+
+
+msgctxt "Operator"
+msgid "Transform from Gizmo"
+msgstr "Gizmo dari Transformasi"
 
 
 msgctxt "Operator"
@@ -24782,10 +24939,6 @@ msgid "Remove"
 msgstr "Hapus"
 
 
-msgid "Save a Collada file"
-msgstr "Situs Blender"
-
-
 msgid "Key Type"
 msgstr "Tipe Kunci"
 
@@ -25330,10 +25483,6 @@ msgid "Snapping"
 msgstr "Gertakan"
 
 
-msgid "Wire Color"
-msgstr "Warna Kabel"
-
-
 msgid "Custom Shape"
 msgstr "Bentuk Kustom"
 
@@ -25620,6 +25769,10 @@ msgid "Collection Colors"
 msgstr "Koleksi Warna"
 
 
+msgid "Axis & Gizmo Colors"
+msgstr "Warna-warna Axis & Gizmo"
+
+
 msgid "Icon Colors"
 msgstr "Warna Icon"
 
@@ -25696,6 +25849,11 @@ msgstr "Panjang"
 
 
 msgctxt "Operator"
+msgid "Puff"
+msgstr "Puff"
+
+
+msgctxt "Operator"
 msgid "Weight"
 msgstr "Berat"
 
@@ -25713,6 +25871,18 @@ msgstr "Kurva"
 msgctxt "Operator"
 msgid "Trim"
 msgstr "Potong"
+
+
+msgid "Puff Mode"
+msgstr "Mode Puff"
+
+
+msgid "Make hairs more puffy"
+msgstr "Membuat rambut-rambut lebih berbulu"
+
+
+msgid "Puff Volume"
+msgstr "Volume Puff"
 
 
 msgid "Particle Instance Object Weight"
@@ -25799,6 +25969,22 @@ msgid "Open the temporary editor in a new window"
 msgstr "Buka editor sementara di jendela baru"
 
 
+msgid "Gizmo Size"
+msgstr "Ukuran Gizmo"
+
+
+msgid "Diameter of the gizmo"
+msgstr "Diameter gizmo"
+
+
+msgid "Navigate Gizmo Size"
+msgstr "Navigasi Ukuran Gizmo"
+
+
+msgid "The Navigate Gizmo size"
+msgstr "Ukuran Gizmo Navigasi"
+
+
 msgid "Keep User Interface"
 msgstr "Tetapkan Antarmuka Pengguna"
 
@@ -25809,6 +25995,10 @@ msgstr "Gambar dirender tanpa mengubah antarmuka pengguna"
 
 msgid "Images are rendered in a new window"
 msgstr "Gambar akan render di jendela baru"
+
+
+msgid "Use transform gizmos by default"
+msgstr "Gunakan gizmo-gizmo transformasi secara default"
 
 
 msgid "Method for making user interface text render sharp"
@@ -25876,7 +26066,7 @@ msgstr "Ukurang"
 
 
 msgid "Approximate diffuse indirect light with background tinted ambient occlusion. This provides fast alternative to full global illumination, for interactive viewport rendering or final renders with reduced quality"
-msgstr "Perkiraan cahaya tidak langsung yang menyebar dengan oklusi ambien halus latar belakang. Ini memberikan alternatif cepat untuk pencahayaan global penuh, untuk render tampilan (viewport) interaktif atau render akhir dengan kualitas yang dikurangi"
+msgstr "Perkiraan cahaya tidak langsung yang menyebar dengan oklusi ambien halus latar belakang. Ini memberikan alternatif cepat untuk pencahayaan global penuh, untuk render jendela tampilan interaktif atau render akhir dengan kualitas yang dikurangi"
 
 
 msgid "Surface Guiding"
@@ -25937,6 +26127,10 @@ msgstr "Miringkan X"
 
 msgid "Tilt Y"
 msgstr "Miringkan Y"
+
+
+msgid "Tiny Prim Culling"
+msgstr "Culling Prim Kecil"
 
 
 msgid "object_color"
@@ -26018,10 +26212,6 @@ msgstr "Ukuran pixel otomatis, tergantung skala antarmuka pengguna"
 
 msgid "Display method used in the sequencer view"
 msgstr "Tampilkan metode yang digunakan di view sequencer"
-
-
-msgid "Display the object as wire edges"
-msgstr "Tampilkan objek sebagai tepi kabel"
 
 
 msgid "Display modifiers"
@@ -26206,10 +26396,6 @@ msgstr "Suffix Dokumen"
 
 msgid "Show Cache"
 msgstr "Tampilkan Cache"
-
-
-msgid "Composite Images"
-msgstr "Gabungkan Gambar"
 
 
 msgid "Final Images"
@@ -26492,6 +26678,22 @@ msgid "Show Blue Channel"
 msgstr "Saluran"
 
 
+msgid "Show Gizmo"
+msgstr "Tampilkan Gizmo"
+
+
+msgid "Show gizmos of all types"
+msgstr "Tampilkan semua tipe gizmo-gizmo"
+
+
+msgid "Navigate Gizmo"
+msgstr "Menavigasi Gizmo"
+
+
+msgid "Viewport navigation gizmo"
+msgstr "Tampilan navigasi gizmo"
+
+
 msgid "Show Green Channel"
 msgstr "Saluran"
 
@@ -26572,12 +26774,68 @@ msgid "Show reference frame only"
 msgstr "Saluran"
 
 
-msgid "Columns"
-msgstr "Kolum"
+msgid "Context Gizmo"
+msgstr "Gizmo Konteks"
+
+
+msgid "Context sensitive gizmos for the active item"
+msgstr "Gizmo yang peka terhadap konteks untuk item aktif"
+
+
+msgid "Tool Gizmo"
+msgstr "Gizmo Alat"
+
+
+msgid "Active tool gizmo"
+msgstr "Gizmo alat aktif"
 
 
 msgid "Show 3D Marker Names"
 msgstr "Nama"
+
+
+msgid "Gizmo to adjust camera focus distance (depends on limits display)"
+msgstr "Gizmo untuk menyesuaikan jarak fokus kamera (tergantung tampilan batas-batas)"
+
+
+msgid "Gizmo to adjust camera focal length or orthographic scale"
+msgstr "Gizmo untuk menyesuaikan panjang fokal kamera atau skala ortografi"
+
+
+msgid "Gizmo to adjust the force field"
+msgstr "Gizmo untuk menyesuaikan medan gaya"
+
+
+msgid "Gizmo to adjust image size and position"
+msgstr "Gizmo untuk menyesuaikan ukuran gambar dan posisi"
+
+
+msgid "Gizmo to adjust the direction of the light"
+msgstr "Gizmo untuk menyesuaikan arah cahaya"
+
+
+msgid "Gizmo to adjust spot and area size"
+msgstr "Gizmo untuk menyesuaikan ukuran tempat dan ruang"
+
+
+msgid "Modifier Gizmo"
+msgstr "Gizmo Pengubah"
+
+
+msgid "Gizmos for the active modifier"
+msgstr "Gizmo-gizmo untuk pengubah aktif"
+
+
+msgid "Gizmo to adjust rotation"
+msgstr "Gizmo untuk menyesuaikan rotasi"
+
+
+msgid "Gizmo to adjust scale"
+msgstr "Gizmo untuk menyesuaikan skala"
+
+
+msgid "Gizmo to adjust location"
+msgstr "Gizmo untuk menyesuaikan lokasi"
 
 
 msgid "Show surfaces"
@@ -26594,6 +26852,10 @@ msgstr "Nilai Warna"
 
 msgid "Vector Value"
 msgstr "Nilai Vektor"
+
+
+msgid "Columns"
+msgstr "Kolum"
 
 
 msgid "Blend Opacity"
@@ -26752,6 +27014,14 @@ msgid "Clock"
 msgstr "Jam"
 
 
+msgid "Correction for midtones"
+msgstr "Koreksi untuk nada tengah"
+
+
+msgid "Correction for highlights"
+msgstr "Koreksi untuk highlight"
+
+
 msgid "Mask Input Type"
 msgstr "Grup"
 
@@ -26856,6 +27126,10 @@ msgid "Node Selected"
 msgstr "Modus Sunting"
 
 
+msgid "Wire Color"
+msgstr "Warna Kabel"
+
+
 msgid "Wire Select"
 msgstr "Pilih Kabel"
 
@@ -26882,6 +27156,34 @@ msgstr "Antarmuka Pengguna Tema"
 
 msgid "Theme settings for user interface elements"
 msgstr "Pengaturan tema untuk elemen antarmuka pengguna"
+
+
+msgid "Editor Border"
+msgstr "Perbatasan Editor"
+
+
+msgid "Gizmo A"
+msgstr "Gizmo A"
+
+
+msgid "Gizmo B"
+msgstr "Gizmo B"
+
+
+msgid "Gizmo Highlight"
+msgstr "Sorotan Gizmo"
+
+
+msgid "Gizmo Primary"
+msgstr "Primer Gizmo"
+
+
+msgid "Gizmo Secondary"
+msgstr "Sekunder Gizmo"
+
+
+msgid "Gizmo View Align"
+msgstr "Sejajar Tampilan Gizmo"
 
 
 msgid "Menu Shadow Strength"
@@ -27064,6 +27366,10 @@ msgid "Active index in vertex group array"
 msgstr "Indeks aktif di larik kelompok vertex"
 
 
+msgid "Grid Color"
+msgstr "Warna Grid"
+
+
 msgid "Grid Scale"
 msgstr "Skala Grid"
 
@@ -27080,17 +27386,20 @@ msgid "Display Grid"
 msgstr "Tampilkan Grid"
 
 
+msgid "Display overlays like gizmos and outlines"
+msgstr "Tampilkan hampar-hamparan seperti gizmo dan garis luar"
+
+
 msgid "Show Wire"
 msgstr "Tunjukkan Kabel"
 
 
+msgid "Freeze view culling bounds"
+msgstr "Membekukan batas-batas culling tampilan"
+
+
 msgid "Opacity for edit vertices"
 msgstr "Opasitas untuk mengedit simpul"
-
-
-msgctxt "View3D"
-msgid "Viewport"
-msgstr "Ruang Tampilan"
 
 
 msgid "Blur the studiolight in the background"
@@ -27154,8 +27463,29 @@ msgid "Allow VR headsets to affect the location in virtual space, in addition to
 msgstr "Memperbolehkan headset VR untuk mempengaruhi lokasi di spasi virtual, ditambahkan dengan rotasi"
 
 
+msgctxt "View3D"
+msgid "Activate Gizmo"
+msgstr "Aktifkan Gizmo"
+
+
+msgid "Activation event for gizmos that support drag motion"
+msgstr "Acara aktivasi untuk gizmo-gizmo yang mendukung gerakan seret"
+
+
 msgid "Search"
 msgstr "Cari"
+
+
+msgid ""
+"Hold Alt to use the active tool when the gizmo would normally be required\n"
+"Incompatible with the input preference \"Emulate 3 Button Mouse\" when the \"Alt\" key is used"
+msgstr ""
+"Tahan Alt untuk menggunakan alat aktif ketika gizmo biasanya diperlukan\n"
+"Tidak cocok dengan preferensi masukan \"Emulate 3 Button Mouse\" ketika tombol \"Alt\" digunakan"
+
+
+msgid "Control transform gizmos"
+msgstr "Kontrol gizmo-gizmo transformasi"
 
 
 msgctxt "WindowManager"
@@ -27478,6 +27808,36 @@ msgid "Gesture Box"
 msgstr "Kotak Gestur"
 
 
+msgctxt "WindowManager"
+msgid "Generic Gizmo"
+msgstr "Gizmo Generik"
+
+
+msgctxt "WindowManager"
+msgid "Generic Gizmo Drag"
+msgstr "Seret Gizmo Generik"
+
+
+msgctxt "WindowManager"
+msgid "Generic Gizmo Click Drag"
+msgstr "Seret Klik Gizmo Generik"
+
+
+msgctxt "WindowManager"
+msgid "Generic Gizmo Maybe Drag"
+msgstr "Seret Mungkin Gizmo Generik"
+
+
+msgctxt "WindowManager"
+msgid "Generic Gizmo Select"
+msgstr "Pilihan Gizmo Generik"
+
+
+msgctxt "WindowManager"
+msgid "Generic Gizmo Tweak Modal Map"
+msgstr "Peta Modal Tweak Gizmo Generik"
+
+
 msgid "Multiple add-ons with the same name found!"
 msgstr "Ditemukan banyak add-on dengan nama yang sama!"
 
@@ -27550,6 +27910,10 @@ msgstr "Homogen"
 
 msgid "Texture Limit"
 msgstr "Batas Tekstur"
+
+
+msgid "Distance Culling"
+msgstr "Culling Jarak"
 
 
 msgid "Min Samples"
@@ -27691,6 +28055,10 @@ msgstr "API yang Terdefinisi"
 
 msgid "3D View"
 msgstr "Tampilan 3D"
+
+
+msgid "Activate Gizmo Event"
+msgstr "Aktivasi Acara Gizmo"
 
 
 msgid "No active bone to copy from"
@@ -28663,7 +29031,7 @@ msgstr "Setelah"
 
 msgctxt "Operator"
 msgid "Set Viewport Background"
-msgstr "Set Latar Belakang Viewport"
+msgstr "Set Latar Belakang Jendela Tampilan"
 
 
 msgctxt "Operator"
@@ -28672,7 +29040,7 @@ msgstr "Set Lantai"
 
 
 msgid "Viewport Gizmos"
-msgstr "Gizmos Viewport"
+msgstr "Gizmos Jendela Tampilan"
 
 
 msgid "3D Markers"
@@ -29225,12 +29593,12 @@ msgstr "Sembunyikan Semua di Dalam"
 
 msgctxt "Operator"
 msgid "Enable in Viewports"
-msgstr "Aktifkan di Viewport"
+msgstr "Aktifkan di Jendela-Jendela Tampilan"
 
 
 msgctxt "Operator"
 msgid "Disable in Viewports"
-msgstr "Nonaktifkan di Viewport"
+msgstr "Nonaktifkan di Jendela-Jendela Tampilan"
 
 
 msgctxt "Operator"
@@ -29442,6 +29810,10 @@ msgid "Duplicate Marker"
 msgstr "Hapus"
 
 
+msgid "Gizmos:"
+msgstr "Gizmo-gizmo:"
+
+
 msgid "Intersections"
 msgstr "Persilangan"
 
@@ -29630,12 +30002,12 @@ msgstr "Perspektif/Ortografik"
 
 msgctxt "Operator"
 msgid "Viewport Render Image"
-msgstr "Viewport Render Gambar"
+msgstr "Jendela Tampilan Render Gambar"
 
 
 msgctxt "Operator"
 msgid "Viewport Render Keyframes"
-msgstr "Viewport Render Keyframe"
+msgstr "Jendela Tampilan Render Keyframe"
 
 
 msgctxt "Operator"
@@ -29892,8 +30264,16 @@ msgid "View Selected"
 msgstr "Seleksi"
 
 
+msgid "Show Gizmos"
+msgstr "Tampilkan Gizmo-gizmo"
+
+
+msgid "Object Gizmos"
+msgstr "Gizmo-gizmo Benda"
+
+
 msgid "Viewport Overlays"
-msgstr "Overlay Viewport"
+msgstr "Overlay Jendela Tampilan"
 
 
 msgid "Statistics"
@@ -30062,10 +30442,6 @@ msgid "Object Location"
 msgstr "Lokasi Benda"
 
 
-msgid "Parents"
-msgstr "Induk"
-
-
 msgctxt "Operator"
 msgid "Quick Edit"
 msgstr "Sunting Cepat"
@@ -30205,11 +30581,11 @@ msgstr "Induk"
 
 
 msgid "Cannot add property to built in keying set"
-msgstr "Induk"
+msgstr "Tidak dapat menambah properti untuk set penguncian yang dibangun di dalam"
 
 
 msgid "Cannot remove property from built in keying set"
-msgstr "Induk"
+msgstr "Tidak dapat menghapus properti dari set penguncian yang dibangun di dalam"
 
 
 msgid "Delete selected bones?"
@@ -30603,10 +30979,6 @@ msgid "Samples Transform"
 msgstr "Transformasi Sampel"
 
 
-msgid "Close"
-msgstr "Tutup"
-
-
 msgid "Use Schema"
 msgstr "Gunakan Skema"
 
@@ -30756,6 +31128,10 @@ msgid "No intersections found"
 msgstr "Persimpangan tidak ditemukan"
 
 
+msgid "Close"
+msgstr "Tutup"
+
+
 msgid "Selected faces required"
 msgstr "Wajah yang terseleksi diperlukan"
 
@@ -30826,10 +31202,6 @@ msgstr "Penyunting Teks"
 
 msgid "Active object is not a selected mesh"
 msgstr "Modus Sunting"
-
-
-msgid "Selected meshes must have equal numbers of vertices"
-msgstr "Partikel"
 
 
 msgid "Joining results in %d vertices, limit is %ld"
@@ -31261,6 +31633,14 @@ msgid "• Instances: {}"
 msgstr "• Contoh-contoh: {}"
 
 
+msgid "gizmos"
+msgstr "gizmo-gizmo"
+
+
+msgid "no gizmos"
+msgstr "tidak ada gizmo-gizmo"
+
+
 msgid "Supported: "
 msgstr "Didukung: "
 
@@ -31395,6 +31775,10 @@ msgstr " (Penampil)"
 
 msgid "Create object instance from object-data"
 msgstr "Buat contoh benda dari benda-data"
+
+
+msgid "Gizmos hidden in this view"
+msgstr "Gizmo-gizmo tidak terlihat di tampilan ini"
 
 
 msgid "Cannot fly an object with constraints"
@@ -31644,6 +32028,50 @@ msgid "No active window in context!"
 msgstr "Tidak ada jendela aktif dalam konteks!"
 
 
+msgid "Gizmo group type '%s' not found!"
+msgstr "Tipe kelompok gizmo '%s' tidak ditemukan!"
+
+
+msgid "Gizmo group '%s' has 'PERSISTENT' option set!"
+msgstr "Kelompok gizmo '%s' mempunyai opsi 'PERSISTENT' yang di set!"
+
+
+msgid "GizmoType '%s' not known"
+msgstr "TipeGizmo '%s' tidak diketahui"
+
+
+msgid "GizmoType '%s' is for a 3D gizmo-group. The 'draw_select' callback is set where only 'test_select' will be used."
+msgstr "TipeGizmo '%s' untuk sebuah kelompok-gizmo 3D. Panggilan balik 'draw_select' diatur ketika 'test_select' hanya akan digunakan."
+
+
+msgid "%s area type does not support gizmos"
+msgstr "Tipe area %s tidak mendukung gizmo-gizmo"
+
+
+msgid "Gizmo target property '%s.%s' not found"
+msgstr "Properti sasaran gizmo '%s.%s' tidak ditemukan"
+
+
+msgid "Gizmo target '%s.%s' expects '%s', '%s.%s' is '%s'"
+msgstr "Sasaran gizmo '%s.%s' mengharapkan '%s', '%s.%s' is '%s'"
+
+
+msgid "Gizmo target property '%s.%s' expects an array of length %d, found %d"
+msgstr "Properti sasaran gizmo '%s.%s' mengharapkan jarak array %d, %d ditemukan"
+
+
+msgid "Gizmo target property '%s.%s' expects an array of length %d"
+msgstr "Properti sasaran gizmo '%s.%s' mengharapkan array jarak %d"
+
+
+msgid "Gizmo target property '%s.%s', index %d must be below %d"
+msgstr "Properti sasaran gizmo '%s.%s', indeks %d harus di bawah %d"
+
+
+msgid "Gizmo group '%s' not found!"
+msgstr "Kelompok gizmo '%s' tidak ditemukan!"
+
+
 msgid "Curve Object"
 msgstr "Objek Kurva"
 
@@ -31658,6 +32086,10 @@ msgstr "Simpul berubah dari %d ke %d"
 
 msgid "Material Borders"
 msgstr "Border Material"
+
+
+msgid "Force Backface Culling"
+msgstr "Paksa Culling Wajah Belakang"
 
 
 msgid "Filter Source"
@@ -31761,16 +32193,24 @@ msgid "Despill Channel:"
 msgstr "Saluran Despill:"
 
 
+msgid "Correction for shadows"
+msgstr "Koreksi untuk bayangan"
+
+
+msgid "Color tint of the input's white point (the default of 10 matches daylight)"
+msgstr "Kehalusan wanra titik putih masukan (standarnya 10 cocok dengan cahaya hari)"
+
+
+msgid "Color tint of the output's white point (the default of 10 matches daylight)"
+msgstr "Kehalusan warna titik putih keluaran (standarnya 10 cocok dengan cahaya hari)"
+
+
 msgid "Bokeh Type:"
 msgstr "Tipe Bokeh:"
 
 
 msgid "Prefilter:"
 msgstr "Prafilter:"
-
-
-msgid "Center:"
-msgstr "Tengah:"
 
 
 msgid "Buffer Edge:"
@@ -31793,12 +32233,20 @@ msgid "Format:"
 msgstr "Format:"
 
 
-msgid "Glare"
-msgstr "Kesilauan"
-
-
 msgid "Use feather information from the mask"
 msgstr "Gunakan informasi bulu dari masker"
+
+
+msgid "Use multi-sampled motion blur of the mask"
+msgstr "Menggunakan buram gerakan multi-sampel pada masker"
+
+
+msgid "Number of motion blur samples"
+msgstr "Jumlah sampel buram gerakan"
+
+
+msgid "Exposure for motion blur as a factor of FPS"
+msgstr "Pencahayaan untuk buram gerakan sebagai faktor FPS"
 
 
 msgid "Dot"
@@ -31831,6 +32279,30 @@ msgstr "Indeks Titik"
 
 msgid "Start Vertices"
 msgstr "Memulai Simpul"
+
+
+msgid "Input Fields"
+msgstr "Fields Masukan"
+
+
+msgid "Main Geometry"
+msgstr "Geometri Utama"
+
+
+msgid "Generated Geometry"
+msgstr "Geometri yang Dihasilkan"
+
+
+msgid "Missing Geometry"
+msgstr "Geometri yang Hilang"
+
+
+msgid "If true, the gizmo is displayed in screen space. Otherwise it's in object space"
+msgstr "Jika benar, gizmo ditampilkan di ruang layar. Jika tidak, ini berada dalam ruang benda"
+
+
+msgid "Local rotation of the gizmo. Only used if the local transforms are used in the 3D view"
+msgstr "Rotasi lokal gizmo. Hanya digunakan jika transformasi lokal digunakan di tampilan 3D"
 
 
 msgid "Edge Vertices Field"

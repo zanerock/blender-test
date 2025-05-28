@@ -2,6 +2,7 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 
+import bpy
 from bpy.types import Menu
 from bl_ui import node_add_menu
 from bpy.app.translations import (
@@ -30,17 +31,14 @@ class NODE_MT_geometry_node_GEO_COLOR(Menu):
     bl_idname = "NODE_MT_geometry_node_GEO_COLOR"
     bl_label = "Color"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
         node_add_menu.add_node_type(layout, "ShaderNodeBlackbody")
         node_add_menu.add_node_type(layout, "ShaderNodeValToRGB")
         node_add_menu.add_node_type(layout, "ShaderNodeRGBCurve")
         layout.separator()
         node_add_menu.add_node_type(layout, "FunctionNodeCombineColor")
-        props = node_add_menu.add_node_type(layout, "ShaderNodeMix", label=iface_("Mix Color"))
-        ops = props.settings.add()
-        ops.name = "data_type"
-        ops.value = "'RGBA'"
+        node_add_menu.add_color_mix_node(context, layout)
         node_add_menu.add_node_type(layout, "FunctionNodeSeparateColor")
         node_add_menu.draw_assets_for_catalog(layout, "Utilities/Color")
 
@@ -174,6 +172,7 @@ class NODE_MT_geometry_node_grease_pencil_write(Menu):
         layout = self.layout
         node_add_menu.add_node_type(layout, "GeometryNodeSetGreasePencilColor")
         node_add_menu.add_node_type(layout, "GeometryNodeSetGreasePencilDepth")
+        node_add_menu.add_node_type(layout, "GeometryNodeSetGreasePencilSoftness")
         node_add_menu.draw_assets_for_catalog(layout, "Grease Pencil/Write")
 
 
@@ -340,17 +339,32 @@ class NODE_MT_geometry_node_GEO_INPUT_SCENE(Menu):
         if context.space_data.geometry_nodes_type == 'TOOL':
             node_add_menu.add_node_type(layout, "GeometryNodeTool3DCursor")
         node_add_menu.add_node_type(layout, "GeometryNodeInputActiveCamera")
-        node_add_menu.add_node_type(layout, "GeometryNodeCameraInfo")
+        node_add_menu.add_node_type_with_outputs(context,
+                                                 layout,
+                                                 "GeometryNodeCameraInfo",
+                                                 ["Projection Matrix",
+                                                  "Focal Length",
+                                                  "Sensor",
+                                                  "Shift",
+                                                  "Clip Start",
+                                                  "Clip End",
+                                                  "Focus Distance",
+                                                  "Is Orthographic",
+                                                  "Orthographic Scale"])
         node_add_menu.add_node_type(layout, "GeometryNodeCollectionInfo")
         node_add_menu.add_node_type(layout, "GeometryNodeImageInfo")
         node_add_menu.add_node_type(layout, "GeometryNodeIsViewport")
         if context.space_data.geometry_nodes_type == 'TOOL':
-            node_add_menu.add_node_type(layout, "GeometryNodeToolMousePosition")
+            node_add_menu.add_node_type_with_outputs(
+                context, layout, "GeometryNodeToolMousePosition", [
+                    "Mouse X", "Mouse Y", "Region Width", "Region Height"])
         node_add_menu.add_node_type(layout, "GeometryNodeObjectInfo")
-        node_add_menu.add_node_type(layout, "GeometryNodeInputSceneTime")
+        node_add_menu.add_node_type_with_outputs(context, layout, "GeometryNodeInputSceneTime", ["Frame", "Seconds"])
         node_add_menu.add_node_type(layout, "GeometryNodeSelfObject")
         if context.space_data.geometry_nodes_type == 'TOOL':
-            node_add_menu.add_node_type(layout, "GeometryNodeViewportTransform")
+            node_add_menu.add_node_type_with_outputs(
+                context, layout, "GeometryNodeViewportTransform", [
+                    "Projection", "View", "Is Orthographic"])
         node_add_menu.draw_assets_for_catalog(layout, "Input/Scene")
 
 
@@ -363,7 +377,7 @@ class NODE_MT_geometry_node_GEO_INPUT_GIZMO(Menu):
         node_add_menu.add_node_type(layout, "GeometryNodeGizmoDial")
         node_add_menu.add_node_type(layout, "GeometryNodeGizmoLinear")
         node_add_menu.add_node_type(layout, "GeometryNodeGizmoTransform")
-        node_add_menu.draw_assets_for_catalog(layout, self.bl_label)
+        node_add_menu.draw_assets_for_catalog(layout, "Input/Gizmo")
 
 
 class NODE_MT_geometry_node_GEO_INSTANCE(Menu):
@@ -524,6 +538,7 @@ class NODE_MT_category_import(Menu):
         node_add_menu.add_node_type(layout, "GeometryNodeImportPLY", label="Stanford PLY (.ply)")
         node_add_menu.add_node_type(layout, "GeometryNodeImportSTL", label="STL (.stl)")
         node_add_menu.add_node_type(layout, "GeometryNodeImportText", label="Text (.txt)")
+        node_add_menu.add_node_type(layout, "GeometryNodeImportVDB", label="OpenVDB (.vdb)")
         node_add_menu.draw_assets_for_catalog(layout, "Input/Import")
 
 
@@ -548,11 +563,11 @@ class NODE_MT_category_GEO_OUTPUT(Menu):
     bl_idname = "NODE_MT_category_GEO_OUTPUT"
     bl_label = "Output"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
         node_add_menu.add_node_type(layout, "NodeGroupOutput")
         node_add_menu.add_node_type(layout, "GeometryNodeViewer")
-        node_add_menu.add_node_type(layout, "GeometryNodeWarning")
+        node_add_menu.add_node_type_with_searchable_enum(context, layout, "GeometryNodeWarning", "warning_type")
         node_add_menu.draw_assets_for_catalog(layout, self.bl_label)
 
 
@@ -728,17 +743,19 @@ class NODE_MT_category_GEO_UTILITIES_MATH(Menu):
     bl_idname = "NODE_MT_category_GEO_UTILITIES_MATH"
     bl_label = "Math"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
-        node_add_menu.add_node_type(layout, "FunctionNodeBooleanMath")
-        node_add_menu.add_node_type(layout, "FunctionNodeIntegerMath")
+        node_add_menu.add_node_type_with_searchable_enum(
+            context, layout, "FunctionNodeBitMath", "operation", search_weight=-1.0)
+        node_add_menu.add_node_type_with_searchable_enum(context, layout, "FunctionNodeBooleanMath", "operation")
+        node_add_menu.add_node_type_with_searchable_enum(context, layout, "FunctionNodeIntegerMath", "operation")
         node_add_menu.add_node_type(layout, "ShaderNodeClamp")
         node_add_menu.add_node_type(layout, "FunctionNodeCompare")
         node_add_menu.add_node_type(layout, "ShaderNodeFloatCurve")
         node_add_menu.add_node_type(layout, "FunctionNodeFloatToInt")
         node_add_menu.add_node_type(layout, "FunctionNodeHashValue")
         node_add_menu.add_node_type(layout, "ShaderNodeMapRange")
-        node_add_menu.add_node_type(layout, "ShaderNodeMath")
+        node_add_menu.add_node_type_with_searchable_enum(context, layout, "ShaderNodeMath", "operation")
         node_add_menu.add_node_type(layout, "ShaderNodeMix")
         node_add_menu.draw_assets_for_catalog(layout, "Utilities/Math")
 
@@ -758,10 +775,10 @@ class NODE_MT_category_GEO_VECTOR(Menu):
     bl_idname = "NODE_MT_category_GEO_VECTOR"
     bl_label = "Vector"
 
-    def draw(self, _context):
+    def draw(self, context):
         layout = self.layout
         node_add_menu.add_node_type(layout, "ShaderNodeVectorCurve")
-        node_add_menu.add_node_type(layout, "ShaderNodeVectorMath")
+        node_add_menu.add_node_type_with_searchable_enum(context, layout, "ShaderNodeVectorMath", "operation")
         node_add_menu.add_node_type(layout, "ShaderNodeVectorRotate")
         layout.separator()
         node_add_menu.add_node_type(layout, "ShaderNodeCombineXYZ")
@@ -797,6 +814,7 @@ class NODE_MT_geometry_node_GEO_VOLUME_READ(Menu):
     def draw(self, context):
         layout = self.layout
         node_add_menu.add_node_type(layout, "GeometryNodeGetNamedGrid")
+        node_add_menu.add_node_type(layout, "GeometryNodeGridInfo")
         node_add_menu.draw_assets_for_catalog(layout, "Volume/Read")
 
 

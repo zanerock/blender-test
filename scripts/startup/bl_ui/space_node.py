@@ -463,6 +463,7 @@ class NODE_PT_geometry_node_tool_object_types(Panel):
         types = [
             ("is_type_mesh", "Mesh", 'MESH_DATA'),
             ("is_type_curve", "Hair Curves", 'CURVES_DATA'),
+            ("is_type_grease_pencil", "Grease Pencil", 'OUTLINER_OB_GREASEPENCIL'),
             ("is_type_pointcloud", "Point Cloud", 'POINTCLOUD_DATA'),
         ]
 
@@ -498,6 +499,11 @@ class NODE_PT_geometry_node_tool_mode(Panel):
             row = col.row(align=True)
             row.label(text=name, icon=icon)
             row.prop(group, prop, text="")
+
+        if group.is_type_grease_pencil:
+            row = col.row(align=True)
+            row.label(text="Draw Mode", icon='GREASEPENCIL')
+            row.prop(group, "is_mode_paint", text="")
 
 
 class NODE_PT_geometry_node_tool_options(Panel):
@@ -947,6 +953,7 @@ class NODE_PT_node_tree_interface(Panel):
         split.template_node_tree_interface(tree.interface)
 
         ops_col = split.column(align=True)
+        ops_col.enabled = tree.library is None
         ops_col.operator_menu_enum("node.interface_item_new", "item_type", icon='ADD', text="")
         ops_col.operator("node.interface_item_remove", icon='REMOVE', text="")
         ops_col.separator()

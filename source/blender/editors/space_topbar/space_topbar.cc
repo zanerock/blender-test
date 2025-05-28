@@ -189,11 +189,11 @@ static void recent_files_menu_draw(const bContext * /*C*/, Menu *menu)
   uiLayout *layout = menu->layout;
   uiLayoutSetOperatorContext(layout, WM_OP_INVOKE_DEFAULT);
   if (uiTemplateRecentFiles(layout, U.recent_files) != 0) {
-    uiItemS(layout);
-    uiItemO(layout, IFACE_("Clear Recent Files List..."), ICON_TRASH, "WM_OT_clear_recent_files");
+    layout->separator();
+    layout->op("WM_OT_clear_recent_files", IFACE_("Clear Recent Files List..."), ICON_TRASH);
   }
   else {
-    uiItemL(layout, IFACE_("No Recent Files"), ICON_NONE);
+    layout->label(IFACE_("No Recent Files"), ICON_NONE);
   }
 }
 
@@ -226,7 +226,7 @@ static void undo_history_draw_menu(const bContext *C, Menu *menu)
     undo_step_count += 1;
   }
 
-  uiLayout *split = uiLayoutSplit(menu->layout, 0.0f, false);
+  uiLayout *split = &menu->layout->split(0.0f, false);
   uiLayout *column = nullptr;
 
   const int col_size = 20 + (undo_step_count / 12);
@@ -246,12 +246,10 @@ static void undo_history_draw_menu(const bContext *C, Menu *menu)
     const bool is_active = (us == wm->undo_stack->step_active);
     uiLayout *row = &column->row(false);
     uiLayoutSetEnabled(row, !is_active);
-    uiItemIntO(row,
-               CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, us->name),
-               is_active ? ICON_LAYER_ACTIVE : ICON_NONE,
-               "ED_OT_undo_history",
-               "item",
-               i);
+    PointerRNA op_ptr = row->op("ED_OT_undo_history",
+                                CTX_IFACE_(BLT_I18NCONTEXT_OPERATOR_DEFAULT, us->name),
+                                is_active ? ICON_LAYER_ACTIVE : ICON_NONE);
+    RNA_int_set(&op_ptr, "item", i);
     undo_step_count += 1;
   }
 }

@@ -72,7 +72,7 @@ void init_transform(bContext *C, Object &ob, const float mval_fl[2], const char 
 
   ss.pivot_rot[3] = 1.0f;
 
-  SCULPT_vertex_random_access_ensure(ob);
+  vert_random_access_ensure(ob);
 
   filter::cache_init(C, ob, sd, undo::Type::Position, mval_fl, 5.0, 1.0f);
 
@@ -541,7 +541,7 @@ void update_modal_transform(bContext *C, Object &ob)
   SculptSession &ss = *ob.sculpt;
   Depsgraph *depsgraph = CTX_data_depsgraph_pointer(C);
 
-  SCULPT_vertex_random_access_ensure(ob);
+  vert_random_access_ensure(ob);
   BKE_sculpt_update_object_for_edit(depsgraph, &ob, false);
 
   switch (sd.transform_mode) {
@@ -943,7 +943,7 @@ static wmOperatorStatus set_pivot_position_exec(bContext *C, wmOperator *op)
         RNA_float_get(op->ptr, "mouse_x"),
         RNA_float_get(op->ptr, "mouse_y"),
     };
-    if (SCULPT_stroke_get_location(C, stroke_location, mval, false)) {
+    if (stroke_get_location_bvh(C, stroke_location, mval, false)) {
       copy_v3_v3(ss.pivot_pos, stroke_location);
     }
   }

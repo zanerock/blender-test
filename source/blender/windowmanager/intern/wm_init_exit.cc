@@ -105,7 +105,7 @@
 
 #include "GPU_context.hh"
 #include "GPU_init_exit.hh"
-#include "GPU_material.hh"
+#include "GPU_shader.hh"
 
 #include "COM_compositor.hh"
 
@@ -160,8 +160,6 @@ void WM_init_gpu()
   DRW_gpu_context_create();
 
   GPU_init();
-
-  GPU_pass_cache_init();
 
   if (G.debug & G_DEBUG_GPU_COMPILE_SHADERS) {
     GPU_shader_compile_static();
@@ -524,7 +522,7 @@ void WM_exit_ex(bContext *C, const bool do_python_exit, const bool do_user_exit_
    * Which can happen when the GPU backend fails to initialize.
    */
   if (C && CTX_py_init_get(C)) {
-    /* Calls `addon_utils.disable_all()` as well as unregistering all "startup" modules.  */
+    /* Calls `addon_utils.disable_all()` as well as unregistering all "startup" modules. */
     const char *imports[] = {"bpy", "bpy.utils", nullptr};
     BPY_run_string_eval(C, imports, "bpy.utils._on_exit()");
   }
@@ -645,7 +643,6 @@ void WM_exit_ex(bContext *C, const bool do_python_exit, const bool do_user_exit_
   if (gpu_is_init) {
     DRW_gpu_context_enable_ex(false);
     UI_exit();
-    GPU_pass_cache_free();
     GPU_shader_cache_dir_clear_old();
     GPU_exit();
     DRW_gpu_context_disable_ex(false);
@@ -672,7 +669,7 @@ void WM_exit_ex(bContext *C, const bool do_python_exit, const bool do_user_exit_
 
   /* No need to call this early, rather do it late so that other
    * pieces of Blender using sound may exit cleanly, see also #50676. */
-  BKE_sound_exit();
+  BKE_sound_exit_once();
 
   BKE_appdir_exit();
 

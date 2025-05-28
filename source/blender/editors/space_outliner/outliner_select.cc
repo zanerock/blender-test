@@ -63,6 +63,7 @@
 #include "RNA_define.hh"
 #include "RNA_prototypes.hh"
 
+#include "ANIM_armature.hh"
 #include "ANIM_bone_collections.hh"
 
 #include "outliner_intern.hh"
@@ -576,7 +577,7 @@ static void tree_element_posechannel_activate(bContext *C,
     pchan->bone->flag &= ~BONE_SELECTED;
   }
   else {
-    if (ANIM_bone_is_visible(arm, pchan->bone)) {
+    if (blender::animrig::bone_is_visible(arm, pchan->bone)) {
       pchan->bone->flag |= BONE_SELECTED;
     }
     arm->act_bone = pchan->bone;
@@ -620,7 +621,7 @@ static void tree_element_bone_activate(bContext *C,
     bone->flag &= ~BONE_SELECTED;
   }
   else {
-    if (ANIM_bone_is_visible(arm, bone) && ((bone->flag & BONE_UNSELECTABLE) == 0)) {
+    if (blender::animrig::bone_is_visible(arm, bone) && ((bone->flag & BONE_UNSELECTABLE) == 0)) {
       bone->flag |= BONE_SELECTED;
     }
     arm->act_bone = bone;
@@ -1019,7 +1020,7 @@ static eOLDrawState tree_element_strip_state_get(const Scene *scene, const TreeE
   const Strip *strip = &te_strip->get_strip();
   const Editing *ed = scene->ed;
 
-  if (ed && ed->act_seq == strip && strip->flag & SELECT) {
+  if (ed && ed->act_strip == strip && strip->flag & SELECT) {
     return OL_DRAWSEL_NORMAL;
   }
   return OL_DRAWSEL_NONE;
@@ -2015,7 +2016,7 @@ void OUTLINER_OT_select_box(wmOperatorType *ot)
   ot->idname = "OUTLINER_OT_select_box";
   ot->description = "Use box selection to select tree elements";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = outliner_box_select_invoke;
   ot->exec = outliner_box_select_exec;
   ot->modal = WM_gesture_box_modal;
@@ -2252,7 +2253,7 @@ void OUTLINER_OT_select_walk(wmOperatorType *ot)
   ot->idname = "OUTLINER_OT_select_walk";
   ot->description = "Use walk navigation to select tree elements";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = outliner_walk_select_invoke;
   ot->poll = ED_operator_outliner_active;
 

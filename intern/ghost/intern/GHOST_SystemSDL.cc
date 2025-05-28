@@ -68,7 +68,7 @@ GHOST_IWindow *GHOST_SystemSDL::createWindow(const char *title,
       SDL_Window *sdl_win = window->getSDLWindow();
       SDL_DisplayMode mode;
 
-      static_cast<GHOST_DisplayManagerSDL *>(m_displayManager)->getCurrentDisplayModeSDL(mode);
+      memset(&mode, 0, sizeof(mode));
 
       SDL_SetWindowDisplayMode(sdl_win, &mode);
       SDL_ShowWindow(sdl_win);
@@ -92,11 +92,7 @@ GHOST_TSuccess GHOST_SystemSDL::init()
   GHOST_TSuccess success = GHOST_System::init();
 
   if (success) {
-    m_displayManager = new GHOST_DisplayManagerSDL(this);
-
-    if (m_displayManager) {
-      return GHOST_kSuccess;
-    }
+    return GHOST_kSuccess;
   }
 
   return GHOST_kFailure;
@@ -609,7 +605,14 @@ void GHOST_SystemSDL::processEvent(SDL_Event *sdl_event)
       GHOST_WindowSDL *window = findGhostWindow(
           SDL_GetWindowFromID_fallback(sdl_sub_evt.windowID));
       assert(window != nullptr);
-      g_event = new GHOST_EventWheel(event_ms, window, sdl_sub_evt.y);
+      if (sdl_sub_evt.x != 0) {
+        g_event = new GHOST_EventWheel(
+            event_ms, window, GHOST_kEventWheelAxisHorizontal, sdl_sub_evt.x);
+      }
+      else if (sdl_sub_evt.y != 0) {
+        g_event = new GHOST_EventWheel(
+            event_ms, window, GHOST_kEventWheelAxisVertical, sdl_sub_evt.y);
+      }
       break;
     }
     case SDL_KEYDOWN:

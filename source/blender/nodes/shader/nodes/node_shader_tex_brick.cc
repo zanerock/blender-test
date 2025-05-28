@@ -23,7 +23,7 @@ static void sh_node_tex_brick_declare(NodeDeclarationBuilder &b)
 {
   b.is_function_node();
   b.add_input<decl::Vector>("Vector").min(-10000.0f).max(10000.0f).implicit_field(
-      implicit_field_inputs::position);
+      NODE_DEFAULT_INPUT_POSITION_FIELD);
   b.add_input<decl::Color>("Color1")
       .default_value({0.8f, 0.8f, 0.8f, 1.0f})
       .description("Color of the first reference brick");
@@ -81,19 +81,13 @@ static void node_shader_buts_tex_brick(uiLayout *layout, bContext * /*C*/, Point
   uiLayout *col;
 
   col = &layout->column(true);
-  uiItemR(col,
-          ptr,
-          "offset",
-          UI_ITEM_R_SPLIT_EMPTY_NAME | UI_ITEM_R_SLIDER,
-          IFACE_("Offset"),
-          ICON_NONE);
-  uiItemR(
-      col, ptr, "offset_frequency", UI_ITEM_R_SPLIT_EMPTY_NAME, IFACE_("Frequency"), ICON_NONE);
+  col->prop(
+      ptr, "offset", UI_ITEM_R_SPLIT_EMPTY_NAME | UI_ITEM_R_SLIDER, IFACE_("Offset"), ICON_NONE);
+  col->prop(ptr, "offset_frequency", UI_ITEM_R_SPLIT_EMPTY_NAME, IFACE_("Frequency"), ICON_NONE);
 
   col = &layout->column(true);
-  uiItemR(col, ptr, "squash", UI_ITEM_R_SPLIT_EMPTY_NAME, IFACE_("Squash"), ICON_NONE);
-  uiItemR(
-      col, ptr, "squash_frequency", UI_ITEM_R_SPLIT_EMPTY_NAME, IFACE_("Frequency"), ICON_NONE);
+  col->prop(ptr, "squash", UI_ITEM_R_SPLIT_EMPTY_NAME, IFACE_("Squash"), ICON_NONE);
+  col->prop(ptr, "squash_frequency", UI_ITEM_R_SPLIT_EMPTY_NAME, IFACE_("Frequency"), ICON_NONE);
 }
 
 static void node_shader_init_tex_brick(bNodeTree * /*ntree*/, bNode *node)

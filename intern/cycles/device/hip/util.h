@@ -77,14 +77,6 @@ static inline bool hipIsRDNA2OrNewer(const int hipDevId)
   return (major > 10 || (major == 10 && minor >= 3));
 }
 
-static inline bool hipIsRDNA4OrNewer(const int hipDevId)
-{
-  int major;
-  hipDeviceGetAttribute(&major, hipDeviceAttributeComputeCapabilityMajor, hipDevId);
-
-  return (major >= 12);
-}
-
 static inline bool hipNeedPreciseMath(const std::string &arch)
 {
 #  ifdef _WIN32
@@ -101,7 +93,8 @@ static inline bool hipSupportsDeviceOIDN(const int hipDevId)
 {
   /* Matches HIPDevice::getArch in HIP. */
   const std::string arch = hipDeviceArch(hipDevId);
-  return (arch == "gfx1030" || arch == "gfx1100" || arch == "gfx1101" || arch == "gfx1102");
+  return (arch == "gfx1030" || arch == "gfx1100" || arch == "gfx1101" || arch == "gfx1102" ||
+          arch == "gfx1200" || arch == "gfx1201");
 }
 
 CCL_NAMESPACE_END

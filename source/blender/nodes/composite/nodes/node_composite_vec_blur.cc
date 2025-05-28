@@ -39,6 +39,7 @@ static void cmp_node_vec_blur_declare(NodeDeclarationBuilder &b)
       .compositor_domain_priority(0);
   b.add_input<decl::Float>("Z").default_value(0.0f).min(0.0f).compositor_domain_priority(2);
   b.add_input<decl::Vector>("Speed")
+      .dimensions(4)
       .default_value({0.0f, 0.0f, 0.0f})
       .min(0.0f)
       .max(1.0f)
@@ -689,7 +690,7 @@ static NodeOperation *get_compositor_operation(Context &context, DNode node)
 
 }  // namespace blender::nodes::node_composite_vec_blur_cc
 
-void register_node_type_cmp_vecblur()
+static void register_node_type_cmp_vecblur()
 {
   namespace file_ns = blender::nodes::node_composite_vec_blur_cc;
 
@@ -708,3 +709,4 @@ void register_node_type_cmp_vecblur()
 
   blender::bke::node_register_type(ntype);
 }
+NOD_REGISTER_NODE(register_node_type_cmp_vecblur)

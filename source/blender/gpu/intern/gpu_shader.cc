@@ -59,6 +59,8 @@ Shader::Shader(const char *sh_name)
 
 Shader::~Shader()
 {
+  BLI_assert_msg(Context::get() == nullptr || Context::get()->shader != this,
+                 "Shader must be unbound from context before being freed");
   delete interface;
 }
 
@@ -130,6 +132,10 @@ GPUShader *GPU_shader_create_ex(const std::optional<StringRefNull> vertcode,
               computecode.has_value()));
 
   Shader *shader = GPUBackend::get()->shader_alloc(shname.c_str());
+  /* Needs to be called before init as GL uses the default specialization constants state to insert
+   * default shader inside a map. */
+  shader->constants = std::make_unique<const shader::SpecializationConstants>();
+  shader->init();
 
   if (vertcode) {
     Vector<StringRefNull> sources;
@@ -266,7 +272,7 @@ GPUShader *GPU_shader_create_from_info(const GPUShaderCreateInfo *_info)
 {
   using namespace blender::gpu::shader;
   const ShaderCreateInfo &info = *reinterpret_cast<const ShaderCreateInfo *>(_info);
-  return wrap(Context::get()->get_compiler()->compile(info, false));
+  return wrap(GPUBackend::get()->get_compiler()->compile(info, false));
 }
 
 std::string GPU_shader_preprocess_source(StringRefNull original)
@@ -294,7 +300,7 @@ GPUShader *GPU_shader_create_from_info_python(const GPUShaderCreateInfo *_info)
   info.geometry_source_generated = GPU_shader_preprocess_source(info.geometry_source_generated);
   info.compute_source_generated = GPU_shader_preprocess_source(info.compute_source_generated);
 
-  GPUShader *result = wrap(Context::get()->get_compiler()->compile(info, false));
+  GPUShader *result = wrap(GPUBackend::get()->get_compiler()->compile(info, false));
 
   info.vertex_source_generated = vertex_source_original;
   info.fragment_source_generated = fragment_source_original;
@@ -366,18 +372,28 @@ BatchHandle GPU_shader_batch_create_from_infos(Span<const GPUShaderCreateInfo *>
   using namespace blender::gpu::shader;
   Span<const ShaderCreateInfo *> &infos_ = reinterpret_cast<Span<const ShaderCreateInfo *> &>(
       infos);
-  return Context::get()->get_compiler()->batch_compile(infos_);
+  return GPUBackend::get()->get_compiler()->batch_compile(infos_);
 }
 
 bool GPU_shader_batch_is_ready(BatchHandle handle)
 {
-  return Context::get()->get_compiler()->batch_is_ready(handle);
+  return GPUBackend::get()->get_compiler()->batch_is_ready(handle);
 }
 
 Vector<GPUShader *> GPU_shader_batch_finalize(BatchHandle &handle)
 {
-  Vector<Shader *> result = Context::get()->get_compiler()->batch_finalize(handle);
+  Vector<Shader *> result = GPUBackend::get()->get_compiler()->batch_finalize(handle);
   return reinterpret_cast<Vector<GPUShader *> &>(result);
+}
+
+void GPU_shader_batch_cancel(BatchHandle &handle)
+{
+  GPUBackend::get()->get_compiler()->batch_cancel(handle);
+}
+
+void GPU_shader_batch_wait_for_all()
+{
+  GPUBackend::get()->get_compiler()->wait_for_all();
 }
 
 void GPU_shader_compile_static()
@@ -397,26 +413,27 @@ void GPU_shader_cache_dir_clear_old()
 /** \name Binding
  * \{ */
 
-void GPU_shader_bind(GPUShader *gpu_shader)
+void GPU_shader_bind(GPUShader *gpu_shader, const shader::SpecializationConstants *constants_state)
 {
   Shader *shader = unwrap(gpu_shader);
+
+  BLI_assert_msg(constants_state != nullptr || shader->constants->is_empty(),
+                 "Shader requires specialization constants but none was passed");
 
   Context *ctx = Context::get();
 
   if (ctx->shader != shader) {
     ctx->shader = shader;
-    shader->bind();
+    shader->bind(constants_state);
     GPU_matrix_bind(gpu_shader);
-    Shader::set_srgb_uniform(gpu_shader);
-    shader->constants.is_dirty = false;
+    Shader::set_srgb_uniform(ctx, gpu_shader);
   }
   else {
-    if (shader->constants.is_dirty) {
-      shader->bind();
-      shader->constants.is_dirty = false;
+    if (constants_state) {
+      shader->bind(constants_state);
     }
-    if (Shader::srgb_uniform_dirty_get()) {
-      Shader::set_srgb_uniform(gpu_shader);
+    if (ctx->shader_builtin_srgb_is_dirty) {
+      Shader::set_srgb_uniform(ctx, gpu_shader);
     }
     if (GPU_matrix_dirty_get()) {
       GPU_matrix_bind(gpu_shader);
@@ -431,13 +448,16 @@ void GPU_shader_bind(GPUShader *gpu_shader)
 
 void GPU_shader_unbind()
 {
-#ifndef NDEBUG
   Context *ctx = Context::get();
+  if (ctx == nullptr) {
+    return;
+  }
+#ifndef NDEBUG
   if (ctx->shader) {
     ctx->shader->unbind();
   }
-  ctx->shader = nullptr;
 #endif
+  ctx->shader = nullptr;
 }
 
 GPUShader *GPU_shader_get_bound()
@@ -488,68 +508,36 @@ void GPU_shader_warm_cache(GPUShader *shader, int limit)
 /** \name Assign specialization constants.
  * \{ */
 
+const shader::SpecializationConstants &GPU_shader_get_default_constant_state(GPUShader *sh)
+{
+  return *unwrap(sh)->constants;
+}
+
 void Shader::specialization_constants_init(const shader::ShaderCreateInfo &info)
 {
   using namespace shader;
+  shader::SpecializationConstants constants_tmp;
   for (const SpecializationConstant &sc : info.specialization_constants_) {
-    constants.types.append(sc.type);
-    constants.values.append(sc.value);
+    constants_tmp.types.append(sc.type);
+    constants_tmp.values.append(sc.value);
   }
-  constants.is_dirty = true;
-}
-
-void GPU_shader_constant_int_ex(GPUShader *sh, int location, int value)
-{
-  Shader &shader = *unwrap(sh);
-  BLI_assert(shader.constants.types[location] == gpu::shader::Type::int_t);
-  shader.constants.is_dirty |= assign_if_different(shader.constants.values[location].i, value);
-}
-void GPU_shader_constant_uint_ex(GPUShader *sh, int location, uint value)
-{
-  Shader &shader = *unwrap(sh);
-  BLI_assert(shader.constants.types[location] == gpu::shader::Type::uint_t);
-  shader.constants.is_dirty |= assign_if_different(shader.constants.values[location].u, value);
-}
-void GPU_shader_constant_float_ex(GPUShader *sh, int location, float value)
-{
-  Shader &shader = *unwrap(sh);
-  BLI_assert(shader.constants.types[location] == gpu::shader::Type::float_t);
-  shader.constants.is_dirty |= assign_if_different(shader.constants.values[location].f, value);
-}
-void GPU_shader_constant_bool_ex(GPUShader *sh, int location, bool value)
-{
-  Shader &shader = *unwrap(sh);
-  BLI_assert(shader.constants.types[location] == gpu::shader::Type::bool_t);
-  shader.constants.is_dirty |= assign_if_different(shader.constants.values[location].u,
-                                                   uint32_t(value));
-}
-
-void GPU_shader_constant_int(GPUShader *sh, const char *name, int value)
-{
-  GPU_shader_constant_int_ex(sh, unwrap(sh)->interface->constant_get(name)->location, value);
-}
-void GPU_shader_constant_uint(GPUShader *sh, const char *name, uint value)
-{
-  GPU_shader_constant_uint_ex(sh, unwrap(sh)->interface->constant_get(name)->location, value);
-}
-void GPU_shader_constant_float(GPUShader *sh, const char *name, float value)
-{
-  GPU_shader_constant_float_ex(sh, unwrap(sh)->interface->constant_get(name)->location, value);
-}
-void GPU_shader_constant_bool(GPUShader *sh, const char *name, bool value)
-{
-  GPU_shader_constant_bool_ex(sh, unwrap(sh)->interface->constant_get(name)->location, value);
+  constants = std::make_unique<const shader::SpecializationConstants>(std::move(constants_tmp));
 }
 
 SpecializationBatchHandle GPU_shader_batch_specializations(
     blender::Span<ShaderSpecialization> specializations)
 {
-  return Context::get()->get_compiler()->precompile_specializations(specializations);
+  return GPUBackend::get()->get_compiler()->precompile_specializations(specializations);
 }
 
 bool GPU_shader_batch_specializations_is_ready(SpecializationBatchHandle &handle)
 {
-  return Context::get()->get_compiler()->specialization_batch_is_ready(handle);
+  return GPUBackend::get()->get_compiler()->specialization_batch_is_ready(handle);
+}
+
+void GPU_shader_batch_specializations_cancel(SpecializationBatchHandle &handle)
+{
+  GPUBackend::get()->get_compiler()->batch_cancel(handle);
 }
 
 /** \} */
@@ -790,28 +778,21 @@ namespace blender::gpu {
  * frame-buffer color-space.
  * \{ */
 
-static int g_shader_builtin_srgb_transform = 0;
-static bool g_shader_builtin_srgb_is_dirty = false;
-
-bool Shader::srgb_uniform_dirty_get()
-{
-  return g_shader_builtin_srgb_is_dirty;
-}
-
-void Shader::set_srgb_uniform(GPUShader *shader)
+void Shader::set_srgb_uniform(Context *ctx, GPUShader *shader)
 {
   int32_t loc = GPU_shader_get_builtin_uniform(shader, GPU_UNIFORM_SRGB_TRANSFORM);
   if (loc != -1) {
-    GPU_shader_uniform_int_ex(shader, loc, 1, 1, &g_shader_builtin_srgb_transform);
+    GPU_shader_uniform_int_ex(shader, loc, 1, 1, &ctx->shader_builtin_srgb_transform);
   }
-  g_shader_builtin_srgb_is_dirty = false;
+  ctx->shader_builtin_srgb_is_dirty = false;
 }
 
 void Shader::set_framebuffer_srgb_target(int use_srgb_to_linear)
 {
-  if (g_shader_builtin_srgb_transform != use_srgb_to_linear) {
-    g_shader_builtin_srgb_transform = use_srgb_to_linear;
-    g_shader_builtin_srgb_is_dirty = true;
+  Context *ctx = Context::get();
+  if (ctx->shader_builtin_srgb_transform != use_srgb_to_linear) {
+    ctx->shader_builtin_srgb_transform = use_srgb_to_linear;
+    ctx->shader_builtin_srgb_is_dirty = true;
   }
 }
 
@@ -826,7 +807,11 @@ Shader *ShaderCompiler::compile(const shader::ShaderCreateInfo &info, bool is_ba
   using namespace blender::gpu::shader;
   const_cast<ShaderCreateInfo &>(info).finalize();
 
-  GPU_debug_group_begin(GPU_DEBUG_SHADER_COMPILATION_GROUP);
+  if (Context::get()) {
+    /* Context can be null in Vulkan compilation threads. */
+    GPU_debug_group_begin(GPU_DEBUG_SHADER_COMPILATION_GROUP);
+    GPU_debug_group_begin(info.name_.c_str());
+  }
 
   const std::string error = info.check_error();
   if (!error.empty()) {
@@ -835,8 +820,10 @@ Shader *ShaderCompiler::compile(const shader::ShaderCreateInfo &info, bool is_ba
   }
 
   Shader *shader = GPUBackend::get()->shader_alloc(info.name_.c_str());
-  shader->init(info, is_batch_compilation);
+  /* Needs to be called before init as GL uses the default specialization constants state to insert
+   * default shader inside a map. */
   shader->specialization_constants_init(info);
+  shader->init(info, is_batch_compilation);
 
   shader->fragment_output_bits = 0;
   for (const shader::ShaderCreateInfo::FragOut &frag_out : info.fragment_outputs_) {
@@ -940,103 +927,221 @@ Shader *ShaderCompiler::compile(const shader::ShaderCreateInfo &info, bool is_ba
 
   if (!shader->finalize(&info)) {
     delete shader;
-    GPU_debug_group_end();
-    return nullptr;
+    shader = nullptr;
   }
 
-  GPU_debug_group_end();
+  if (Context::get()) {
+    /* Context can be null in Vulkan compilation threads. */
+    GPU_debug_group_end();
+    GPU_debug_group_end();
+  }
+
   return shader;
 }
 
-/** \} */
-
-/* -------------------------------------------------------------------- */
-/** \name ShaderCompilerGeneric
- * \{ */
-
-ShaderCompilerGeneric::ShaderCompilerGeneric()
+ShaderCompiler::ShaderCompiler(uint32_t threads_count,
+                               GPUWorker::ContextType context_type,
+                               bool support_specializations)
 {
+  support_specializations_ = support_specializations;
+
   if (!GPU_use_main_context_workaround()) {
-    compilation_thread_ = std::make_unique<GPUWorker>(1, true, [this]() { this->run_thread(); });
+    compilation_worker_ = std::make_unique<GPUWorker>(
+        threads_count, context_type, [this]() { this->run_thread(); });
   }
 }
 
-ShaderCompilerGeneric::~ShaderCompilerGeneric()
+ShaderCompiler::~ShaderCompiler()
 {
-  compilation_thread_.reset();
+  compilation_worker_.reset();
 
   /* Ensure all the requested batches have been retrieved. */
   BLI_assert(batches_.is_empty());
 }
 
-BatchHandle ShaderCompilerGeneric::batch_compile(Span<const shader::ShaderCreateInfo *> &infos)
+Shader *ShaderCompiler::compile_shader(const shader::ShaderCreateInfo &info)
+{
+  return compile(info, false);
+}
+
+BatchHandle ShaderCompiler::batch_compile(Span<const shader::ShaderCreateInfo *> &infos)
 {
   std::unique_lock lock(mutex_);
 
-  BatchHandle handle = next_batch_handle_++;
-  batches_.add(handle, std::make_unique<Batch>());
-  Batch *batch = batches_.lookup(handle).get();
+  Batch *batch = MEM_new<Batch>(__func__);
   batch->infos = infos;
   batch->shaders.reserve(infos.size());
 
-  if (compilation_thread_) {
-    compilation_queue_.push_back(batch);
-    lock.unlock();
-    compilation_thread_->wake_up();
+  BatchHandle handle = next_batch_handle_++;
+  batches_.add(handle, batch);
+
+  if (compilation_worker_) {
+    batch->shaders.resize(infos.size(), nullptr);
+    batch->pending_compilations = infos.size();
+    for (int i : infos.index_range()) {
+      compilation_queue_.push_back({batch, i});
+      compilation_worker_->wake_up();
+    }
   }
   else {
     for (const shader::ShaderCreateInfo *info : infos) {
       batch->shaders.append(compile(*info, false));
     }
-    batch->is_ready = true;
   }
 
   return handle;
 }
 
-bool ShaderCompilerGeneric::batch_is_ready(BatchHandle handle)
+void ShaderCompiler::batch_cancel(BatchHandle &handle)
+{
+  std::unique_lock lock(mutex_);
+
+  Batch *batch = batches_.pop(handle);
+
+  for (ParallelWork &work : compilation_queue_) {
+    if (work.batch == batch) {
+      work = {};
+      batch->pending_compilations--;
+    }
+  }
+
+  compilation_queue_.erase(std::remove_if(compilation_queue_.begin(),
+                                          compilation_queue_.end(),
+                                          [](const ParallelWork &work) { return !work.batch; }),
+                           compilation_queue_.end());
+
+  if (batch->is_specialization_batch()) {
+    /* For specialization batches, we block until ready, since base shader compilation may be
+     * cancelled afterwards, leaving the specialization with a deleted base shader. */
+    compilation_finished_notification_.wait(lock, [&]() { return batch->is_ready(); });
+  }
+
+  if (batch->is_ready()) {
+    batch->free_shaders();
+    MEM_delete(batch);
+  }
+  else {
+    /* If it's currently compiling, the compilation thread makes the cleanup. */
+    batch->is_cancelled = true;
+  }
+
+  handle = 0;
+}
+
+bool ShaderCompiler::batch_is_ready(BatchHandle handle)
 {
   std::lock_guard lock(mutex_);
 
-  bool is_ready = batches_.lookup(handle)->is_ready;
-  return is_ready;
+  return batches_.lookup(handle)->is_ready();
 }
 
-Vector<Shader *> ShaderCompilerGeneric::batch_finalize(BatchHandle &handle)
+Vector<Shader *> ShaderCompiler::batch_finalize(BatchHandle &handle)
 {
-  while (!batch_is_ready(handle)) {
-    BLI_time_sleep_ms(1);
+  std::unique_lock lock(mutex_);
+  /* TODO: Move to be first on the queue. */
+  compilation_finished_notification_.wait(lock,
+                                          [&]() { return batches_.lookup(handle)->is_ready(); });
+
+  Batch *batch = batches_.pop(handle);
+  Vector<Shader *> shaders = std::move(batch->shaders);
+  MEM_delete(batch);
+  handle = 0;
+
+  return shaders;
+}
+
+SpecializationBatchHandle ShaderCompiler::precompile_specializations(
+    Span<ShaderSpecialization> specializations)
+{
+  if (!compilation_worker_ || !support_specializations_) {
+    return 0;
   }
 
   std::lock_guard lock(mutex_);
 
-  Vector<Shader *> shaders = batches_.lookup(handle)->shaders;
-  batches_.pop(handle);
-  handle = 0;
-  return shaders;
+  Batch *batch = MEM_new<Batch>(__func__);
+  batch->specializations = specializations;
+
+  BatchHandle handle = next_batch_handle_++;
+  batches_.add(handle, batch);
+
+  batch->pending_compilations = specializations.size();
+  for (int i : specializations.index_range()) {
+    compilation_queue_.push_back({batch, i});
+    compilation_worker_->wake_up();
+  }
+
+  return handle;
 }
 
-void ShaderCompilerGeneric::run_thread()
+bool ShaderCompiler::specialization_batch_is_ready(SpecializationBatchHandle &handle)
+{
+  if (handle != 0 && batch_is_ready(handle)) {
+    std::lock_guard lock(mutex_);
+
+    Batch *batch = batches_.pop(handle);
+    MEM_delete(batch);
+    handle = 0;
+  }
+
+  return handle == 0;
+}
+
+void ShaderCompiler::run_thread()
 {
   while (true) {
-    Batch *batch = nullptr;
+    Batch *batch;
+    int shader_index;
     {
-      std::unique_lock<std::mutex> lock(mutex_);
+      std::lock_guard lock(mutex_);
 
       if (compilation_queue_.empty()) {
         return;
       }
 
-      batch = compilation_queue_.front();
+      ParallelWork &work = compilation_queue_.front();
+      batch = work.batch;
+      shader_index = work.shader_index;
       compilation_queue_.pop_front();
     }
 
     /* Compile */
-    for (const shader::ShaderCreateInfo *info : batch->infos) {
-      batch->shaders.append(compile(*info, false));
+    if (!batch->is_specialization_batch()) {
+      batch->shaders[shader_index] = compile_shader(*batch->infos[shader_index]);
     }
-    batch->is_ready = true;
+    else {
+      specialize_shader(batch->specializations[shader_index]);
+    }
+
+    {
+      std::lock_guard lock(mutex_);
+      batch->pending_compilations--;
+      if (batch->is_ready() && batch->is_cancelled) {
+        batch->free_shaders();
+        MEM_delete(batch);
+      }
+    }
+
+    compilation_finished_notification_.notify_all();
   }
+}
+
+void ShaderCompiler::wait_for_all()
+{
+  std::unique_lock lock(mutex_);
+  compilation_finished_notification_.wait(lock, [&]() {
+    if (!compilation_queue_.empty()) {
+      return false;
+    }
+
+    for (Batch *batch : batches_.values()) {
+      if (!batch->is_ready()) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 }
 
 /** \} */

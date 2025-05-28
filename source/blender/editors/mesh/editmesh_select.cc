@@ -1152,7 +1152,7 @@ bool EDBM_unified_findnearest_from_raycast(ViewContext *vc,
 
       Span<float3> vert_positions;
       {
-        const Object *obedit_eval = DEG_get_evaluated_object(vc->depsgraph, obedit);
+        const Object *obedit_eval = DEG_get_evaluated(vc->depsgraph, obedit);
         const Mesh *mesh_eval = BKE_object_get_editmesh_eval_cage(obedit_eval);
         if (BKE_mesh_wrapper_vert_len(mesh_eval) == bm->totvert) {
           vert_positions = BKE_mesh_wrapper_vert_coords(mesh_eval);
@@ -2123,7 +2123,7 @@ void MESH_OT_select_interior_faces(wmOperatorType *ot)
  * Gets called via generic mouse select operator.
  * \{ */
 
-bool EDBM_select_pick(bContext *C, const int mval[2], const SelectPick_Params *params)
+bool EDBM_select_pick(bContext *C, const int mval[2], const SelectPick_Params &params)
 {
   int base_index_active = -1;
   BMVert *eve = nullptr;
@@ -2141,12 +2141,12 @@ bool EDBM_select_pick(bContext *C, const int mval[2], const SelectPick_Params *p
   bool changed = false;
   bool found = unified_findnearest(&vc, bases, &base_index_active, &eve, &eed, &efa);
 
-  if (params->sel_op == SEL_OP_SET) {
+  if (params.sel_op == SEL_OP_SET) {
     BMElem *ele = efa ? (BMElem *)efa : (eed ? (BMElem *)eed : (BMElem *)eve);
-    if ((found && params->select_passthrough) && BM_elem_flag_test(ele, BM_ELEM_SELECT)) {
+    if ((found && params.select_passthrough) && BM_elem_flag_test(ele, BM_ELEM_SELECT)) {
       found = false;
     }
-    else if (found || params->deselect_all) {
+    else if (found || params.deselect_all) {
       /* Deselect everything. */
       for (Base *base_iter : bases) {
         Object *ob_iter = base_iter->object;
@@ -2166,7 +2166,7 @@ bool EDBM_select_pick(bContext *C, const int mval[2], const SelectPick_Params *p
     BMesh *bm = em->bm;
 
     if (efa) {
-      switch (params->sel_op) {
+      switch (params.sel_op) {
         case SEL_OP_ADD: {
           BM_mesh_active_face_set(bm, efa);
 
@@ -2211,7 +2211,7 @@ bool EDBM_select_pick(bContext *C, const int mval[2], const SelectPick_Params *p
     }
     else if (eed) {
 
-      switch (params->sel_op) {
+      switch (params.sel_op) {
         case SEL_OP_ADD: {
           /* Work-around: deselect first, so we can guarantee it will
            * be active even if it was already selected. */
@@ -2251,7 +2251,7 @@ bool EDBM_select_pick(bContext *C, const int mval[2], const SelectPick_Params *p
       }
     }
     else if (eve) {
-      switch (params->sel_op) {
+      switch (params.sel_op) {
         case SEL_OP_ADD: {
           /* Work-around: deselect first, so we can guarantee it will
            * be active even if it was already selected. */
@@ -2360,14 +2360,15 @@ static void edbm_strip_selections(BMEditMesh *em)
   }
 }
 
-void EDBM_selectmode_set(BMEditMesh *em)
+void EDBM_selectmode_set(BMEditMesh *em, const short selectmode)
 {
   BMVert *eve;
   BMEdge *eed;
   BMFace *efa;
   BMIter iter;
 
-  em->bm->selectmode = em->selectmode;
+  em->selectmode = selectmode;
+  em->bm->selectmode = selectmode;
 
   /* Strip stored selection isn't relevant to the new mode. */
   edbm_strip_selections(em);
@@ -2418,6 +2419,10 @@ void EDBM_selectmode_convert(BMEditMesh *em,
                              const short selectmode_old,
                              const short selectmode_new)
 {
+  /* NOTE: it's important only the selection modes passed in a re used,
+   * not the meshes current selection mode because this is called when the
+   * selection mode is being manipulated (see: #EDBM_selectmode_toggle_multi). */
+
   BMesh *bm = em->bm;
 
   BMVert *eve;
@@ -2522,25 +2527,35 @@ void EDBM_selectmode_convert(BMEditMesh *em,
 }
 
 bool EDBM_selectmode_toggle_multi(bContext *C,
-                                  const short selectmode_new,
+                                  const short selectmode_toggle,
                                   const int action,
                                   const bool use_extend,
                                   const bool use_expand)
 {
+  BLI_assert(ELEM(selectmode_toggle, SCE_SELECT_VERTEX, SCE_SELECT_EDGE, SCE_SELECT_FACE));
   Scene *scene = CTX_data_scene(C);
   ViewLayer *view_layer = CTX_data_view_layer(C);
   ToolSettings *ts = CTX_data_tool_settings(C);
-  Object *obedit = CTX_data_edit_object(C);
-  BMEditMesh *em = nullptr;
   bool ret = false;
 
-  if (obedit && obedit->type == OB_MESH) {
-    em = BKE_editmesh_from_object(obedit);
-  }
+  short selectmode_new;
+  /* Avoid mixing up the active/iterable edit-mesh by limiting its scope. */
+  {
+    Object *obedit = CTX_data_edit_object(C);
+    BMEditMesh *em = nullptr;
 
-  if (em == nullptr) {
-    return ret;
+    if (obedit && obedit->type == OB_MESH) {
+      em = BKE_editmesh_from_object(obedit);
+    }
+
+    if (em == nullptr) {
+      return ret;
+    }
+
+    selectmode_new = em->selectmode;
   }
+  /* Assign before the new value is modified. */
+  const short selectmode_old = selectmode_new;
 
   bool only_update = false;
   switch (action) {
@@ -2549,27 +2564,27 @@ bool EDBM_selectmode_toggle_multi(bContext *C,
       break;
     case 0: /* Disable. */
       /* Check we have something to do. */
-      if ((em->selectmode & selectmode_new) == 0) {
+      if ((selectmode_old & selectmode_toggle) == 0) {
         only_update = true;
         break;
       }
-      em->selectmode &= ~selectmode_new;
+      selectmode_new &= ~selectmode_toggle;
       break;
     case 1: /* Enable. */
       /* Check we have something to do. */
-      if ((em->selectmode & selectmode_new) != 0) {
+      if ((selectmode_old & selectmode_toggle) != 0) {
         only_update = true;
         break;
       }
-      em->selectmode |= selectmode_new;
+      selectmode_new |= selectmode_toggle;
       break;
     case 2: /* Toggle. */
       /* Can't disable this flag if its the only one set. */
-      if (em->selectmode == selectmode_new) {
+      if (selectmode_old == selectmode_toggle) {
         only_update = true;
         break;
       }
-      em->selectmode ^= selectmode_new;
+      selectmode_new ^= selectmode_toggle;
       break;
     default:
       BLI_assert(0);
@@ -2579,43 +2594,41 @@ bool EDBM_selectmode_toggle_multi(bContext *C,
   const Vector<Object *> objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
       scene, view_layer, CTX_wm_view3d(C));
 
-  for (Object *ob_iter : objects) {
-    BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
-    if (em_iter != em) {
-      em_iter->selectmode = em->selectmode;
-    }
-  }
-
   if (only_update) {
+    for (Object *ob_iter : objects) {
+      BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
+      em_iter->selectmode = selectmode_new;
+    }
+
     return false;
   }
 
-  if (use_extend == 0 || em->selectmode == 0) {
+  if (use_extend == false || selectmode_new == 0) {
     if (use_expand) {
-      const short selmode_max = highest_order_bit_s(ts->selectmode);
+      const short selectmode_max = highest_order_bit_s(selectmode_old);
       for (Object *ob_iter : objects) {
         BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
-        EDBM_selectmode_convert(em_iter, selmode_max, selectmode_new);
+        EDBM_selectmode_convert(em_iter, selectmode_max, selectmode_toggle);
       }
     }
   }
 
-  switch (selectmode_new) {
+  switch (selectmode_toggle) {
     case SCE_SELECT_VERTEX:
-      if (use_extend == 0 || em->selectmode == 0) {
-        em->selectmode = SCE_SELECT_VERTEX;
+      if (use_extend == false || selectmode_new == 0) {
+        selectmode_new = SCE_SELECT_VERTEX;
       }
       ret = true;
       break;
     case SCE_SELECT_EDGE:
-      if (use_extend == 0 || em->selectmode == 0) {
-        em->selectmode = SCE_SELECT_EDGE;
+      if (use_extend == false || selectmode_new == 0) {
+        selectmode_new = SCE_SELECT_EDGE;
       }
       ret = true;
       break;
     case SCE_SELECT_FACE:
-      if (use_extend == 0 || em->selectmode == 0) {
-        em->selectmode = SCE_SELECT_FACE;
+      if (use_extend == false || selectmode_new == 0) {
+        selectmode_new = SCE_SELECT_FACE;
       }
       ret = true;
       break;
@@ -2625,12 +2638,11 @@ bool EDBM_selectmode_toggle_multi(bContext *C,
   }
 
   if (ret == true) {
-    ts->selectmode = em->selectmode;
-    em = nullptr;
+    BLI_assert(selectmode_new != 0);
+    ts->selectmode = selectmode_new;
     for (Object *ob_iter : objects) {
       BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
-      em_iter->selectmode = ts->selectmode;
-      EDBM_selectmode_set(em_iter);
+      EDBM_selectmode_set(em_iter, selectmode_new);
       DEG_id_tag_update(static_cast<ID *>(ob_iter->data),
                         ID_RECALC_SYNC_TO_EVAL | ID_RECALC_SELECT);
       WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob_iter->data);
@@ -2642,51 +2654,53 @@ bool EDBM_selectmode_toggle_multi(bContext *C,
   return ret;
 }
 
-bool EDBM_selectmode_set_multi(bContext *C, const short selectmode)
+bool EDBM_selectmode_set_multi_ex(Scene *scene, Span<Object *> objects, const short selectmode)
 {
-  BLI_assert(selectmode != 0);
-  bool changed = false;
-
-  {
-    Object *obedit = CTX_data_edit_object(C);
-    BMEditMesh *em = nullptr;
-    if (obedit && obedit->type == OB_MESH) {
-      em = BKE_editmesh_from_object(obedit);
-    }
-    if (em == nullptr) {
-      return changed;
-    }
-  }
-
-  ViewLayer *view_layer = CTX_data_view_layer(C);
-  Scene *scene = CTX_data_scene(C);
   ToolSettings *ts = scene->toolsettings;
+  bool changed = false;
+  bool changed_toolsettings = false;
 
   if (ts->selectmode != selectmode) {
     ts->selectmode = selectmode;
+    changed_toolsettings = true;
+  }
+
+  for (Object *ob_iter : objects) {
+    BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
+    if (em_iter->selectmode == selectmode) {
+      continue;
+    }
+    EDBM_selectmode_set(em_iter, selectmode);
+    DEG_id_tag_update(static_cast<ID *>(ob_iter->data), ID_RECALC_SYNC_TO_EVAL | ID_RECALC_SELECT);
+    WM_main_add_notifier(NC_GEOM | ND_SELECT, ob_iter->data);
     changed = true;
+  }
+
+  if (changed_toolsettings) {
+    WM_main_add_notifier(NC_SCENE | ND_TOOLSETTINGS, nullptr);
+    DEG_id_tag_update(&scene->id, ID_RECALC_SYNC_TO_EVAL);
+  }
+
+  return changed || changed_toolsettings;
+}
+
+bool EDBM_selectmode_set_multi(bContext *C, const short selectmode)
+{
+  BLI_assert(selectmode != 0);
+  Scene *scene = CTX_data_scene(C);
+  ViewLayer *view_layer = CTX_data_view_layer(C);
+  BKE_view_layer_synced_ensure(scene, view_layer);
+  Object *obact = BKE_view_layer_active_object_get(view_layer);
+  if (!(obact && (obact->type == OB_MESH) && (obact->mode & OB_MODE_EDIT) &&
+        (BKE_editmesh_from_object(obact) != nullptr)))
+  {
+    return false;
   }
 
   const Vector<Object *> objects = BKE_view_layer_array_from_objects_in_edit_mode_unique_data(
       scene, view_layer, CTX_wm_view3d(C));
 
-  for (Object *ob_iter : objects) {
-    BMEditMesh *em_iter = BKE_editmesh_from_object(ob_iter);
-    if (em_iter->selectmode != ts->selectmode) {
-      em_iter->selectmode = ts->selectmode;
-      EDBM_selectmode_set(em_iter);
-      DEG_id_tag_update(static_cast<ID *>(ob_iter->data),
-                        ID_RECALC_SYNC_TO_EVAL | ID_RECALC_SELECT);
-      WM_event_add_notifier(C, NC_GEOM | ND_SELECT, ob_iter->data);
-      changed = true;
-    }
-  }
-
-  if (changed) {
-    WM_main_add_notifier(NC_SCENE | ND_TOOLSETTINGS, nullptr);
-    DEG_id_tag_update(&scene->id, ID_RECALC_SYNC_TO_EVAL);
-  }
-  return changed;
+  return EDBM_selectmode_set_multi_ex(scene, objects, selectmode);
 }
 
 /**
@@ -2714,8 +2728,7 @@ static bool edbm_selectmode_sync_multi_ex(Span<Object *> objects)
     if (em_active->selectmode == em->selectmode) {
       continue;
     }
-    em->selectmode = em_active->selectmode;
-    EDBM_selectmode_set(em);
+    EDBM_selectmode_set(em, em_active->selectmode);
     changed = true;
 
     DEG_id_tag_update(static_cast<ID *>(obedit->data), ID_RECALC_SYNC_TO_EVAL | ID_RECALC_SELECT);
@@ -2733,14 +2746,11 @@ bool EDBM_selectmode_disable(Scene *scene,
   /* Not essential, but switch out of vertex mode since the
    * selected regions won't be nicely isolated after flushing. */
   if (em->selectmode & selectmode_disable) {
-    if (em->selectmode == selectmode_disable) {
-      em->selectmode = selectmode_fallback;
-    }
-    else {
-      em->selectmode &= ~selectmode_disable;
-    }
-    scene->toolsettings->selectmode = em->selectmode;
-    EDBM_selectmode_set(em);
+    const short selectmode = (em->selectmode == selectmode_disable) ?
+                                 selectmode_fallback :
+                                 (em->selectmode & ~selectmode_disable);
+    scene->toolsettings->selectmode = selectmode;
+    EDBM_selectmode_set(em, selectmode);
 
     WM_main_add_notifier(NC_SCENE | ND_TOOLSETTINGS, scene);
 
@@ -5545,11 +5555,13 @@ static bool edbm_select_by_attribute_poll(bContext *C)
   Object *obedit = CTX_data_edit_object(C);
   const Mesh *mesh = static_cast<const Mesh *>(obedit->data);
   AttributeOwner owner = AttributeOwner::from_id(&const_cast<ID &>(mesh->id));
-  const CustomDataLayer *layer = BKE_attributes_active_get(owner);
-  if (!layer) {
+  const std::optional<StringRef> name = BKE_attributes_active_name_get(owner);
+  if (!name) {
     CTX_wm_operator_poll_msg_set(C, "There must be an active attribute");
     return false;
   }
+  const CustomDataLayer *layer = BKE_attribute_search(
+      owner, *name, CD_MASK_PROP_ALL, ATTR_DOMAIN_MASK_ALL);
   if (layer->type != CD_PROP_BOOL) {
     CTX_wm_operator_poll_msg_set(C, "The active attribute must have a boolean type");
     return false;
@@ -5589,7 +5601,12 @@ static wmOperatorStatus edbm_select_by_attribute_exec(bContext *C, wmOperator * 
     BMEditMesh *em = BKE_editmesh_from_object(obedit);
     BMesh *bm = em->bm;
     AttributeOwner owner = AttributeOwner::from_id(&mesh->id);
-    const CustomDataLayer *layer = BKE_attributes_active_get(owner);
+    const std::optional<StringRef> name = BKE_attributes_active_name_get(owner);
+    if (!name) {
+      continue;
+    }
+    const CustomDataLayer *layer = BKE_attribute_search(
+        owner, *name, CD_MASK_PROP_ALL, ATTR_DOMAIN_MASK_ALL);
     if (!layer) {
       continue;
     }

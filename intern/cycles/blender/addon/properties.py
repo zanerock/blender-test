@@ -363,6 +363,12 @@ def update_render_engine(self, context):
     scene.update_render_engine()
 
 
+def update_world(self, context):
+    # Force a depsgraph update, because add-on properties dont.
+    # (at least not from the UI, see #138071)
+    context.scene.world.update_tag()
+
+
 def update_pause(self, context):
     context.area.tag_redraw()
 
@@ -844,7 +850,7 @@ class CyclesRenderSettings(bpy.types.PropertyGroup):
     film_exposure: FloatProperty(
         name="Exposure",
         description="Image brightness scale",
-        min=0.0, max=10.0,
+        min=0.0, soft_max=2**10, max=2**32,
         default=1.0,
     )
     film_transparent_glass: BoolProperty(
@@ -1110,7 +1116,7 @@ class CyclesCustomCameraSettings(bpy.types.PropertyGroup):
     def register(cls):
         bpy.types.Camera.cycles_custom = PointerProperty(
             name="Cycles Custom Camera Settings",
-            description="Parameters for custom (OSL-based) Cameras",
+            description="Parameters for custom (OSL-based) cameras",
             type=cls,
         )
 
@@ -1285,33 +1291,39 @@ class CyclesVisibilitySettings(bpy.types.PropertyGroup):
 
     camera: BoolProperty(
         name="Camera",
-        description="Object visibility for camera rays",
+        description="World visibility for camera rays",
         default=True,
+        update=update_world,
     )
     diffuse: BoolProperty(
         name="Diffuse",
-        description="Object visibility for diffuse reflection rays",
+        description="World visibility for diffuse reflection rays",
         default=True,
+        update=update_world,
     )
     glossy: BoolProperty(
         name="Glossy",
-        description="Object visibility for glossy reflection rays",
+        description="World visibility for glossy reflection rays",
         default=True,
+        update=update_world,
     )
     transmission: BoolProperty(
         name="Transmission",
-        description="Object visibility for transmission rays",
+        description="World visibility for transmission rays",
         default=True,
+        update=update_world,
     )
     shadow: BoolProperty(
         name="Shadow",
-        description="Object visibility for shadow rays",
+        description="World visibility for shadow rays",
         default=True,
+        update=update_world,
     )
     scatter: BoolProperty(
         name="Volume Scatter",
-        description="Object visibility for volume scatter rays",
+        description="World visibility for volume scatter rays",
         default=True,
+        update=update_world,
     )
 
     @classmethod

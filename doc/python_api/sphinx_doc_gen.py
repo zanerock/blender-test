@@ -420,6 +420,7 @@ INFO_DOCS_OTHER = (
     "info_advanced_blender_as_bpy.rst",
     # Included by: `info_gotcha.rst`.
     "info_gotchas_crashes.rst",
+    "info_gotchas_threading.rst",
     "info_gotchas_internal_data_and_python_objects.rst",
     "info_gotchas_operators.rst",
     "info_gotchas_meshes.rst",
@@ -2628,7 +2629,7 @@ def main():
             BPY_LOGGER.debug("    %s.py", f)
         BPY_LOGGER.debug("  %d total\n", len(EXAMPLE_SET_UNUSED))
 
-    # Eventually, build the html docs.
+    # Eventually, build the HTML docs.
     if ARGS.sphinx_build:
         import subprocess
         subprocess.call(SPHINX_BUILD)

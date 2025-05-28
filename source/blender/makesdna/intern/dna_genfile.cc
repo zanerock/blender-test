@@ -1157,7 +1157,7 @@ void DNA_struct_switch_endian(const SDNA *sdna, int struct_index, char *data)
         break;
       }
       case STRUCT_MEMBER_CATEGORY_POINTER: {
-        /* See `readfile.cc` (#bh4_from_bh8 swap endian argument),
+        /* See `readfile.cc` (#uint32_from_uint64_ptr swap endian argument),
          * this is only done when reducing the size of a pointer from 4 to 8. */
         if (sizeof(void *) < 8) {
           if (sdna->pointer_size == 8) {
@@ -2074,7 +2074,7 @@ static bool char_array_startswith_simple_name(const char *data, const int array_
   }
   for (const int i : IndexRange(string_length)) {
     const uchar c = data[i];
-    /* This is only a very simple check and does not cover more complex cases with multi-byte UTF-8
+    /* This is only a very simple check and does not cover more complex cases with multi-byte UTF8
      * characters. It's only a heuristic anyway, making a wrong decision here just means that the
      * data will be printed differently. */
     if (!std::isprint(c)) {

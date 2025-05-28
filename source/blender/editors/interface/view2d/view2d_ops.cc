@@ -354,7 +354,7 @@ static void VIEW2D_OT_pan(wmOperatorType *ot)
   ot->description = "Pan the view";
   ot->idname = "VIEW2D_OT_pan";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_pan_exec;
   ot->invoke = view_pan_invoke;
   ot->modal = view_pan_modal;
@@ -430,7 +430,7 @@ static void VIEW2D_OT_edge_pan(wmOperatorType *ot)
   ot->description = "Pan the view when the mouse is held at an edge";
   ot->idname = "VIEW2D_OT_edge_pan";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = view_edge_pan_invoke;
   ot->modal = view_edge_pan_modal;
   ot->cancel = view_edge_pan_cancel;
@@ -478,7 +478,7 @@ static void VIEW2D_OT_scroll_right(wmOperatorType *ot)
   ot->description = "Scroll the view right";
   ot->idname = "VIEW2D_OT_scroll_right";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_scrollright_exec;
   ot->poll = view_pan_poll;
 
@@ -518,7 +518,7 @@ static void VIEW2D_OT_scroll_left(wmOperatorType *ot)
   ot->description = "Scroll the view left";
   ot->idname = "VIEW2D_OT_scroll_left";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_scrollleft_exec;
   ot->poll = view_pan_poll;
 
@@ -572,7 +572,7 @@ static void VIEW2D_OT_scroll_down(wmOperatorType *ot)
   ot->description = "Scroll the view down";
   ot->idname = "VIEW2D_OT_scroll_down";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_scrolldown_exec;
   ot->poll = view_pan_poll;
 
@@ -627,7 +627,7 @@ static void VIEW2D_OT_scroll_up(wmOperatorType *ot)
   ot->description = "Scroll the view up";
   ot->idname = "VIEW2D_OT_scroll_up";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_scrollup_exec;
   ot->poll = view_pan_poll;
 
@@ -751,6 +751,7 @@ static void view_zoomstep_apply_ex(bContext *C,
   View2D *v2d = &region->v2d;
   const rctf cur_old = v2d->cur;
   const int snap_test = ED_region_snap_size_test(region);
+  const bool do_keepofs = !(v2d->flag & V2D_ZOOM_IGNORE_KEEPOFS);
 
   /* calculate amount to move view by, ensuring symmetry so the
    * old zoom level is restored after zooming back the same amount
@@ -765,12 +766,12 @@ static void view_zoomstep_apply_ex(bContext *C,
     dy = (BLI_rctf_size_y(&v2d->cur) / (1.0f + 2.0f * facy)) * facy;
   }
 
-  /* only resize view on an axis if change is allowed */
+  /* Only resize view on an axis if change is allowed. */
   if ((v2d->keepzoom & V2D_LOCKZOOM_X) == 0) {
-    if (v2d->keepofs & V2D_LOCKOFS_X) {
+    if ((v2d->keepofs & V2D_LOCKOFS_X) && do_keepofs) {
       v2d->cur.xmax -= 2 * dx;
     }
-    else if (v2d->keepofs & V2D_KEEPOFS_X) {
+    else if ((v2d->keepofs & V2D_KEEPOFS_X) && do_keepofs) {
       if (v2d->align & V2D_ALIGN_NO_POS_X) {
         v2d->cur.xmin += 2 * dx;
       }
@@ -803,10 +804,10 @@ static void view_zoomstep_apply_ex(bContext *C,
     }
   }
   if ((v2d->keepzoom & V2D_LOCKZOOM_Y) == 0) {
-    if (v2d->keepofs & V2D_LOCKOFS_Y) {
+    if ((v2d->keepofs & V2D_LOCKOFS_Y) && do_keepofs) {
       v2d->cur.ymax -= 2 * dy;
     }
-    else if (v2d->keepofs & V2D_KEEPOFS_Y) {
+    else if ((v2d->keepofs & V2D_KEEPOFS_Y) && do_keepofs) {
       if (v2d->align & V2D_ALIGN_NO_POS_Y) {
         v2d->cur.ymin += 2 * dy;
       }
@@ -930,7 +931,7 @@ static void VIEW2D_OT_zoom_in(wmOperatorType *ot)
   ot->description = "Zoom in the view";
   ot->idname = "VIEW2D_OT_zoom_in";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = view_zoomin_invoke;
   ot->exec = view_zoomin_exec;
   ot->poll = view_zoom_poll;
@@ -994,7 +995,7 @@ static void VIEW2D_OT_zoom_out(wmOperatorType *ot)
   ot->description = "Zoom out the view";
   ot->idname = "VIEW2D_OT_zoom_out";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = view_zoomout_invoke;
   ot->exec = view_zoomout_exec;
 
@@ -1390,7 +1391,7 @@ static void VIEW2D_OT_zoom(wmOperatorType *ot)
   ot->description = "Zoom in/out the view";
   ot->idname = "VIEW2D_OT_zoom";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = view_zoomdrag_exec;
   ot->invoke = view_zoomdrag_invoke;
   ot->modal = view_zoomdrag_modal;
@@ -1495,7 +1496,7 @@ static void VIEW2D_OT_zoom_border(wmOperatorType *ot)
   ot->description = "Zoom in the view to the nearest item contained in the border";
   ot->idname = "VIEW2D_OT_zoom_border";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = WM_gesture_box_invoke;
   ot->exec = view_borderzoom_exec;
   ot->modal = WM_gesture_box_modal;
@@ -1574,7 +1575,7 @@ static void VIEW2D_OT_ndof(wmOperatorType *ot)
   ot->idname = "VIEW2D_OT_ndof";
   ot->description = "Use a 3D mouse device to pan/zoom the view";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = view2d_ndof_invoke;
   ot->poll = view2d_poll;
 
@@ -1757,7 +1758,7 @@ static void VIEW2D_OT_smoothview(wmOperatorType *ot)
   ot->name = "Smooth View 2D";
   ot->idname = "VIEW2D_OT_smoothview";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = view2d_smoothview_invoke;
   ot->poll = view2d_poll;
 
@@ -2235,7 +2236,7 @@ static void VIEW2D_OT_scroller_activate(wmOperatorType *ot)
   /* flags */
   ot->flag = OPTYPE_BLOCKING;
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->invoke = scroller_activate_invoke;
   ot->modal = scroller_activate_modal;
   ot->cancel = scroller_activate_cancel;
@@ -2313,7 +2314,7 @@ static void VIEW2D_OT_reset(wmOperatorType *ot)
   ot->description = "Reset the view";
   ot->idname = "VIEW2D_OT_reset";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = reset_exec;
   ot->poll = view2d_poll;
 }

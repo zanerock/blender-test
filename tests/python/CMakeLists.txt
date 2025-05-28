@@ -4,7 +4,7 @@
 
 # Use '--write-blend=/tmp/test.blend' to view output
 
-set(TEST_SRC_DIR ${CMAKE_SOURCE_DIR}/tests/data)
+set(TEST_SRC_DIR ${CMAKE_SOURCE_DIR}/tests/files)
 set(TEST_PYTHON_DIR ${CMAKE_SOURCE_DIR}/tests/python)
 set(TEST_OUT_DIR ${CMAKE_BINARY_DIR}/tests)
 
@@ -662,7 +662,8 @@ if((WITH_CYCLES OR WITH_GPU_RENDER_TESTS) AND TEST_SRC_DIR_EXISTS)
     list(APPEND render_tests motion_blur reports volume)
   endif()
 
-  if(WITH_OPENVDB)
+  if(WITH_OPENVDB AND WITH_MOD_FLUID)
+    # Some tests in the OpenVDB folder make use of fluid simulations to generate smoke
     list(APPEND render_tests openvdb)
   endif()
 
@@ -752,10 +753,10 @@ if((WITH_CYCLES OR WITH_GPU_RENDER_TESTS) AND TEST_SRC_DIR_EXISTS)
     if(WITH_OPENGL_BACKEND)
       foreach(render_test ${gpu_render_tests})
         add_render_test(
-          eevee_next_opengl_${render_test}
-          ${CMAKE_CURRENT_LIST_DIR}/eevee_next_render_tests.py
+          eevee_opengl_${render_test}
+          ${CMAKE_CURRENT_LIST_DIR}/eevee_render_tests.py
           --testdir "${TEST_SRC_DIR}/render/${render_test}"
-          --outdir "${TEST_OUT_DIR}/eevee_next_opengl"
+          --outdir "${TEST_OUT_DIR}/eevee_opengl"
           --gpu-backend opengl
           ${_gpu_render_tests_arguments}
         )
@@ -765,10 +766,10 @@ if((WITH_CYCLES OR WITH_GPU_RENDER_TESTS) AND TEST_SRC_DIR_EXISTS)
     if(WITH_METAL_BACKEND)
       foreach(render_test ${gpu_render_tests})
         add_render_test(
-          eevee_next_metal_${render_test}
-          ${CMAKE_CURRENT_LIST_DIR}/eevee_next_render_tests.py
+          eevee_metal_${render_test}
+          ${CMAKE_CURRENT_LIST_DIR}/eevee_render_tests.py
           --testdir "${TEST_SRC_DIR}/render/${render_test}"
-          --outdir "${TEST_OUT_DIR}/eevee_next_metal"
+          --outdir "${TEST_OUT_DIR}/eevee_metal"
           --gpu-backend metal
           ${_gpu_render_tests_arguments}
         )
@@ -778,10 +779,10 @@ if((WITH_CYCLES OR WITH_GPU_RENDER_TESTS) AND TEST_SRC_DIR_EXISTS)
     if(WITH_VULKAN_BACKEND AND WITH_GPU_RENDER_TESTS_VULKAN)
       foreach(render_test ${gpu_render_tests})
         add_render_test(
-          eevee_next_vulkan_${render_test}
-          ${CMAKE_CURRENT_LIST_DIR}/eevee_next_render_tests.py
+          eevee_vulkan_${render_test}
+          ${CMAKE_CURRENT_LIST_DIR}/eevee_render_tests.py
           --testdir "${TEST_SRC_DIR}/render/${render_test}"
-          --outdir "${TEST_OUT_DIR}/eevee_next_vulkan"
+          --outdir "${TEST_OUT_DIR}/eevee_vulkan"
           --gpu-backend vulkan
           ${_gpu_render_tests_arguments}
         )
@@ -1021,6 +1022,7 @@ if(TEST_SRC_DIR_EXISTS)
     foreach_geometry_element_zone
     geometry
     grease_pencil
+    import
     instance
     repeat_zone
     mesh_primitives
@@ -1297,7 +1299,9 @@ if(WITH_UI_TESTS)
     test_undo.view3d_multi_mode_select
     test_undo.view3d_sculpt_dyntopo_and_edit
     test_undo.view3d_sculpt_dyntopo_simple
+    test_undo.view3d_sculpt_dyntopo_stroke_toggle
     test_undo.view3d_sculpt_with_memfile_step
+    test_undo.view3d_sculpt_trim
     test_undo.view3d_simple
     test_undo.view3d_texture_paint_complex
     test_undo.view3d_texture_paint_simple

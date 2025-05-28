@@ -32,7 +32,6 @@
 #include "IMB_imbuf.hh"
 #include "IMB_imbuf_types.hh"
 
-#include "GHOST_DisplayManagerWin32.hh"
 #include "GHOST_EventButton.hh"
 #include "GHOST_EventCursor.hh"
 #include "GHOST_EventKey.hh"
@@ -165,10 +164,6 @@ typedef BOOL(API *GHOST_WIN32_EnableNonClientDpiScaling)(HWND);
 
 GHOST_SystemWin32::GHOST_SystemWin32() : m_hasPerformanceCounter(false), m_freq(0)
 {
-  m_displayManager = new GHOST_DisplayManagerWin32();
-  GHOST_ASSERT(m_displayManager, "GHOST_SystemWin32::GHOST_SystemWin32(): m_displayManager==0\n");
-  m_displayManager->initialize();
-
   m_consoleStatus = true;
 
   /* Tell Windows we are per monitor DPI aware. This disables the default
@@ -246,10 +241,7 @@ static uint64_t getMessageTime(GHOST_SystemWin32 *system)
 
 uint8_t GHOST_SystemWin32::getNumDisplays() const
 {
-  GHOST_ASSERT(m_displayManager, "GHOST_SystemWin32::getNumDisplays(): m_displayManager==0\n");
-  uint8_t numDisplays;
-  m_displayManager->getNumDisplays(numDisplays);
-  return numDisplays;
+  return ::GetSystemMetrics(SM_CMONITORS);
 }
 
 void GHOST_SystemWin32::getMainDisplayDimensions(uint32_t &width, uint32_t &height) const
@@ -1225,13 +1217,13 @@ GHOST_EventCursor *GHOST_SystemWin32::processCursorEvent(GHOST_WindowWin32 *wind
                                GHOST_TABLET_DATA_NONE);
 }
 
-void GHOST_SystemWin32::processWheelEvent(GHOST_WindowWin32 *window,
-                                          WPARAM wParam,
-                                          LPARAM /*lParam*/)
+void GHOST_SystemWin32::processWheelEventVertical(GHOST_WindowWin32 *window,
+                                                  WPARAM wParam,
+                                                  LPARAM /*lParam*/)
 {
   GHOST_SystemWin32 *system = (GHOST_SystemWin32 *)getSystem();
 
-  int acc = system->m_wheelDeltaAccum;
+  int acc = system->m_wheelDeltaAccumVertical;
   int delta = GET_WHEEL_DELTA_WPARAM(wParam);
 
   if (acc * delta < 0) {
@@ -1243,10 +1235,37 @@ void GHOST_SystemWin32::processWheelEvent(GHOST_WindowWin32 *window,
   acc = abs(acc);
 
   while (acc >= WHEEL_DELTA) {
-    system->pushEvent(new GHOST_EventWheel(getMessageTime(system), window, direction));
+    system->pushEvent(new GHOST_EventWheel(
+        getMessageTime(system), window, GHOST_kEventWheelAxisVertical, direction));
     acc -= WHEEL_DELTA;
   }
-  system->m_wheelDeltaAccum = acc * direction;
+  system->m_wheelDeltaAccumVertical = acc * direction;
+}
+
+/** This is almost the same as #processWheelEventVertical. */
+void GHOST_SystemWin32::processWheelEventHorizontal(GHOST_WindowWin32 *window,
+                                                    WPARAM wParam,
+                                                    LPARAM /*lParam*/)
+{
+  GHOST_SystemWin32 *system = (GHOST_SystemWin32 *)getSystem();
+
+  int acc = system->m_wheelDeltaAccumHorizontal;
+  int delta = GET_WHEEL_DELTA_WPARAM(wParam);
+
+  if (acc * delta < 0) {
+    /* Scroll direction reversed. */
+    acc = 0;
+  }
+  acc += delta;
+  int direction = (acc >= 0) ? 1 : -1;
+  acc = abs(acc);
+
+  while (acc >= WHEEL_DELTA) {
+    system->pushEvent(new GHOST_EventWheel(
+        getMessageTime(system), window, GHOST_kEventWheelAxisHorizontal, direction));
+    acc -= WHEEL_DELTA;
+  }
+  system->m_wheelDeltaAccumHorizontal = acc * direction;
 }
 
 GHOST_EventKey *GHOST_SystemWin32::processKeyEvent(GHOST_WindowWin32 *window, RAWINPUT const &raw)
@@ -1307,13 +1326,13 @@ GHOST_EventKey *GHOST_SystemWin32::processKeyEvent(GHOST_WindowWin32 *window, RA
       /* Pass. No text if either Win key is pressed. #79702. */
     }
     /* Don't call #ToUnicodeEx on dead keys as it clears the buffer and so won't allow diacritical
-     * composition. XXX: we are not checking return of MapVirtualKeyW for high bit set, which is
+     * composition. XXX: we are not checking return of #MapVirtualKeyW for high bit set, which is
      * what is supposed to indicate dead keys. But this is working now so approach cautiously. */
     else if (MapVirtualKeyW(vk, MAPVK_VK_TO_CHAR) != 0) {
       wchar_t utf16[3] = {0};
       int r;
-      /* TODO: #ToUnicodeEx can respond with up to 4 utf16 chars (only 2 here).
-       * Could be up to 24 utf8 bytes. */
+      /* TODO: #ToUnicodeEx can respond with up to 4 UTF16 chars (only 2 here).
+       * Could be up to 24 UTF8 bytes. */
       if ((r = ToUnicodeEx(
                vk, raw.data.keyboard.MakeCode, state, utf16, 2, 0, system->m_keylayout)))
       {
@@ -1675,7 +1694,7 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, uint msg, WPARAM wParam, 
           eventHandled = true;
           ime->UpdateImeWindow(hwnd);
           ime->UpdateInfo(hwnd);
-          if (ime->eventImeData.result_len) {
+          if (ime->eventImeData.result.size()) {
             /* remove redundant IME event */
             eventManager->removeTypeEvents(GHOST_kEventImeComposition, window);
           }
@@ -2002,11 +2021,16 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, uint msg, WPARAM wParam, 
            * since DefWindowProc propagates it up the parent chain
            * until it finds a window that processes it.
            */
-          processWheelEvent(window, wParam, lParam);
+          processWheelEventVertical(window, wParam, lParam);
           eventHandled = true;
 #ifdef BROKEN_PEEK_TOUCHPAD
           PostMessage(hwnd, WM_USER, 0, 0);
 #endif
+          break;
+        }
+        case WM_MOUSEHWHEEL: {
+          processWheelEventHorizontal(window, wParam, lParam);
+          eventHandled = true;
           break;
         }
         case WM_SETCURSOR: {
@@ -2080,7 +2104,8 @@ LRESULT WINAPI GHOST_SystemWin32::s_wndProc(HWND hwnd, uint msg, WPARAM wParam, 
            * If the windows use different input queues, the message is sent asynchronously,
            * so the window is activated immediately. */
 
-          system->m_wheelDeltaAccum = 0;
+          system->m_wheelDeltaAccumVertical = 0;
+          system->m_wheelDeltaAccumHorizontal = 0;
           event = processWindowEvent(
               LOWORD(wParam) ? GHOST_kEventWindowActivate : GHOST_kEventWindowDeactivate, window);
           /* WARNING: Let DefWindowProc handle WM_ACTIVATE, otherwise WM_MOUSEWHEEL

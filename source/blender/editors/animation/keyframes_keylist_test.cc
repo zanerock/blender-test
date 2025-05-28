@@ -154,6 +154,40 @@ TEST(keylist, find_exact)
   ED_keylist_free(keylist);
 }
 
+TEST(keylist, find_closest)
+{
+  AnimKeylist *keylist = create_test_keylist();
+
+  {
+    const ActKeyColumn *closest = ED_keylist_find_closest(keylist, -1);
+    EXPECT_EQ(closest->cfra, 10.0);
+  }
+
+  {
+    const ActKeyColumn *closest = ED_keylist_find_closest(keylist, 10);
+    EXPECT_EQ(closest->cfra, 10.0);
+  }
+
+  {
+    const ActKeyColumn *closest = ED_keylist_find_closest(keylist, 14.999);
+    EXPECT_EQ(closest->cfra, 10.0);
+  }
+  {
+    /* When the distance between key columns is equal, the previous column is chosen */
+    const ActKeyColumn *closest = ED_keylist_find_closest(keylist, 15);
+    EXPECT_EQ(closest->cfra, 10.0);
+  }
+  {
+    const ActKeyColumn *closest = ED_keylist_find_closest(keylist, 15.001);
+    EXPECT_EQ(closest->cfra, 20.0);
+  }
+  {
+    const ActKeyColumn *closest = ED_keylist_find_closest(keylist, 30.001);
+    EXPECT_EQ(closest->cfra, 30.0);
+  }
+  ED_keylist_free(keylist);
+}
+
 class KeylistSummaryTest : public testing::Test {
  public:
   Main *bmain;
@@ -186,7 +220,7 @@ class KeylistSummaryTest : public testing::Test {
     bmain = BKE_main_new();
     G_MAIN = bmain; /* For BKE_animdata_free(). */
 
-    action = &static_cast<bAction *>(BKE_id_new(bmain, ID_AC, "ACÄnimåtië"))->wrap();
+    action = &BKE_id_new<bAction>(bmain, "ACÄnimåtië")->wrap();
     cube = BKE_object_add_only_object(bmain, OB_EMPTY, "Küüübus");
 
     armature_data = BKE_armature_add(bmain, "ARArmature");

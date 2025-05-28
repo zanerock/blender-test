@@ -1013,10 +1013,11 @@ struct GWL_SeatIME {
    */
   wl_surface *surface_window = nullptr;
   GHOST_TEventImeData event_ime_data = {
-      /*result_len*/ nullptr,
-      /*composite_len*/ nullptr,
-      /*result*/ nullptr,
-      /*composite*/ nullptr,
+      /** Storage for #GHOST_TEventImeData::result (the result of the `commit_string` callback). */
+      /*result*/ "",
+      /** Storage for #GHOST_TEventImeData::composite (the result of the `preedit_string`
+         callback). */
+      /*composite*/ "",
       /*cursor_position*/ -1,
       /*target_start*/ -1,
       /*target_end*/ -1,
@@ -1028,11 +1029,6 @@ struct GWL_SeatIME {
    * (an IME popup may be showing however this isn't known).
    */
   bool has_preedit = false;
-
-  /** Storage for #GHOST_TEventImeData::result (the result of the `commit_string` callback). */
-  std::string result;
-  /** Storage for #GHOST_TEventImeData::composite (the result of the `preedit_string` callback). */
-  std::string composite;
 
   /** #zwp_text_input_v3_listener::commit_string was called with a null text argument. */
   bool result_is_null = false;
@@ -1373,22 +1369,17 @@ static void gwl_seat_ime_full_reset(GWL_Seat *seat)
 
 static void gwl_seat_ime_result_reset(GWL_Seat *seat)
 {
-  seat->ime.result.clear();
-  seat->ime.result_is_null = false;
-
   GHOST_TEventImeData &event_ime_data = seat->ime.event_ime_data;
-  event_ime_data.result_len = nullptr;
-  event_ime_data.result = nullptr;
+  event_ime_data.result.clear();
+  seat->ime.result_is_null = false;
 }
 
 static void gwl_seat_ime_preedit_reset(GWL_Seat *seat)
 {
-  seat->ime.composite.clear();
-  seat->ime.composite_is_null = false;
 
   GHOST_TEventImeData &event_ime_data = seat->ime.event_ime_data;
-  event_ime_data.composite_len = nullptr;
-  event_ime_data.composite = nullptr;
+  event_ime_data.composite.clear();
+  seat->ime.composite_is_null = false;
 
   event_ime_data.cursor_position = -1;
   event_ime_data.target_start = -1;
@@ -4110,13 +4101,19 @@ static void pointer_handle_frame(void *data, wl_pointer * /*wl_pointer*/)
           }
 
           /* Done evaluating scroll input, generate the events. */
-
-          /* Discrete X axis currently unsupported. */
           if (ps.discrete_xy[0] || ps.discrete_xy[1]) {
+            if (ps.discrete_xy[0]) {
+              seat->system->pushEvent_maybe_pending(new GHOST_EventWheel(
+                  ps.has_event_ms ? ps.event_ms : seat->system->getMilliSeconds(),
+                  win,
+                  GHOST_kEventWheelAxisHorizontal,
+                  ps.discrete_xy[0]));
+            }
             if (ps.discrete_xy[1]) {
               seat->system->pushEvent_maybe_pending(new GHOST_EventWheel(
                   ps.has_event_ms ? ps.event_ms : seat->system->getMilliSeconds(),
                   win,
+                  GHOST_kEventWheelAxisVertical,
                   -ps.discrete_xy[1]));
             }
             ps.discrete_xy[0] = 0;
@@ -4949,7 +4946,10 @@ static void tablet_tool_handle_frame(void *data,
         }
         case GWL_TabletTool_EventTypes::Wheel: {
           seat->system->pushEvent_maybe_pending(
-              new GHOST_EventWheel(event_ms, win, -tablet_tool->frame_pending.wheel.clicks));
+              new GHOST_EventWheel(event_ms,
+                                   win,
+                                   GHOST_kEventWheelAxisVertical,
+                                   -tablet_tool->frame_pending.wheel.clicks));
           break;
         }
       }
@@ -5745,6 +5745,9 @@ static const zwp_primary_selection_source_v1_listener primary_selection_source_l
 #ifdef WITH_INPUT_IME
 
 class GHOST_EventIME : public GHOST_Event {
+ protected:
+  GHOST_TEventImeData event_ime_data;
+
  public:
   /**
    * Constructor.
@@ -5752,10 +5755,16 @@ class GHOST_EventIME : public GHOST_Event {
    * \param type: The type of key event.
    * \param key: The key code of the key.
    */
-  GHOST_EventIME(uint64_t msec, GHOST_TEventType type, GHOST_IWindow *window, void *customdata)
+  GHOST_EventIME(uint64_t msec,
+                 GHOST_TEventType type,
+                 GHOST_IWindow *window,
+                 GHOST_TEventImeData *customdata)
       : GHOST_Event(msec, type, window)
   {
-    this->m_data = customdata;
+    /* Make sure that we keep a copy of the IME input. Otherwise it might get lost
+     * because we overwrite it before it can be read in Blender. (See #137346). */
+    this->event_ime_data = *customdata;
+    this->m_data = &this->event_ime_data;
   }
 };
 
@@ -5819,9 +5828,7 @@ static void text_input_handle_preedit_string(void *data,
 
   seat->ime.composite_is_null = (text == nullptr);
   if (!seat->ime.composite_is_null) {
-    seat->ime.composite = text;
-    seat->ime.event_ime_data.composite = (void *)seat->ime.composite.c_str();
-    seat->ime.event_ime_data.composite_len = (void *)seat->ime.composite.size();
+    seat->ime.event_ime_data.composite = text;
 
     seat->ime.event_ime_data.cursor_position = cursor_begin;
     seat->ime.event_ime_data.target_start = cursor_begin;
@@ -5838,11 +5845,9 @@ static void text_input_handle_commit_string(void *data,
   CLOG_INFO(LOG, 2, "commit_string (text=\"%s\")", text ? text : "<null>");
 
   GWL_Seat *seat = static_cast<GWL_Seat *>(data);
-  seat->ime.result = text ? text : "";
   seat->ime.result_is_null = (text == nullptr);
-  seat->ime.event_ime_data.result = (void *)seat->ime.result.c_str();
-  seat->ime.event_ime_data.result_len = (void *)seat->ime.result.size();
-  seat->ime.event_ime_data.cursor_position = seat->ime.result.size();
+  seat->ime.event_ime_data.result = text ? text : "";
+  seat->ime.event_ime_data.cursor_position = seat->ime.event_ime_data.result.size();
 
   seat->ime.has_commit_string_callback = true;
 }
@@ -6257,7 +6262,7 @@ static void xdg_output_handle_logical_size(void *data,
   CLOG_INFO(LOG, 2, "logical_size [%d, %d]", width, height);
 
   GWL_Output *output = static_cast<GWL_Output *>(data);
-  if (output->size_logical[0] != 0 && output->size_logical[1] != 0) {
+  if (output->size_native[0] != 0 && output->size_native[1] != 0) {
     /* Original comment from SDL. */
     /* FIXME(@flibit): GNOME has a bug where the logical size does not account for
      * scale, resulting in bogus viewport sizes.
@@ -6265,9 +6270,8 @@ static void xdg_output_handle_logical_size(void *data,
      * Until this is fixed, validate that _some_ kind of scaling is being
      * done (we can't match exactly because fractional scaling can't be
      * detected otherwise), then override if necessary. */
-    if ((output->size_logical[0] == width) &&
-        (output->scale_fractional == (1 * FRACTIONAL_DENOMINATOR)))
-    {
+    int width_native = output->size_native[(output->transform & WL_OUTPUT_TRANSFORM_90) ? 1 : 0];
+    if ((width_native == width) && (output->scale_fractional == (1 * FRACTIONAL_DENOMINATOR))) {
       GHOST_PRINT("xdg_output scale did not match, overriding with wl_output scale\n");
 
 #ifdef USE_GNOME_CONFINE_HACK
@@ -6373,13 +6377,6 @@ static void output_handle_mode(void *data,
   GWL_Output *output = static_cast<GWL_Output *>(data);
   output->size_native[0] = width;
   output->size_native[1] = height;
-
-  /* Don't rotate this yet, `wl-output` coordinates are transformed in
-   * handle_done and `xdg-output` coordinates are pre-transformed. */
-  if (!output->has_size_logical) {
-    output->size_logical[0] = width;
-    output->size_logical[1] = height;
-  }
 }
 
 /**
@@ -6396,7 +6393,7 @@ static void output_handle_done(void *data, wl_output * /*wl_output*/)
 
   GWL_Output *output = static_cast<GWL_Output *>(data);
   int32_t size_native[2] = {UNPACK2(output->size_native)};
-  if (ELEM(output->transform, WL_OUTPUT_TRANSFORM_90, WL_OUTPUT_TRANSFORM_270)) {
+  if (output->transform & WL_OUTPUT_TRANSFORM_90) {
     std::swap(size_native[0], size_native[1]);
   }
 
@@ -8320,7 +8317,7 @@ void GHOST_SystemWayland::getMainDisplayDimensions(uint32_t &width, uint32_t &he
     /* We assume first output as main. */
     const GWL_Output *output = display_->outputs[0];
     int32_t size_native[2] = {UNPACK2(output->size_native)};
-    if (ELEM(output->transform, WL_OUTPUT_TRANSFORM_90, WL_OUTPUT_TRANSFORM_270)) {
+    if (output->transform & WL_OUTPUT_TRANSFORM_90) {
       std::swap(size_native[0], size_native[1]);
     }
     width = uint32_t(size_native[0]);
@@ -8344,7 +8341,7 @@ void GHOST_SystemWayland::getAllDisplayDimensions(uint32_t &width, uint32_t &hei
         xy[0] = output->position_logical[0];
         xy[1] = output->position_logical[1];
       }
-      if (ELEM(output->transform, WL_OUTPUT_TRANSFORM_90, WL_OUTPUT_TRANSFORM_270)) {
+      if (output->transform & WL_OUTPUT_TRANSFORM_90) {
         std::swap(size_native[0], size_native[1]);
       }
       xy_min[0] = std::min(xy_min[0], xy[0]);

@@ -12,6 +12,15 @@
 #include "DNA_color_types.h" /* for color management */
 #include "DNA_defs.h"
 
+#ifdef __cplusplus
+namespace blender::bke {
+struct ImageRuntime;
+}  // namespace blender::bke
+using ImageRuntimeHandle = blender::bke::ImageRuntime;
+#else
+typedef struct ImageRuntimeHandle ImageRuntimeHandle;
+#endif
+
 struct GPUTexture;
 struct MovieReader;
 struct MovieCache;
@@ -54,10 +63,8 @@ typedef struct ImageAnim {
 
 typedef struct ImageView {
   struct ImageView *next, *prev;
-  /** MAX_NAME. */
-  char name[64];
-  /** 1024 = FILE_MAX. */
-  char filepath[1024];
+  char name[/*MAX_NAME*/ 64];
+  char filepath[/*FILE_MAX*/ 1024];
 } ImageView;
 
 typedef struct ImagePackedFile {
@@ -68,14 +75,12 @@ typedef struct ImagePackedFile {
    * respectively when creating their ImagePackedFile. Must be provided for each packed image. */
   int view;
   int tile_number;
-  /** 1024 = FILE_MAX. */
-  char filepath[1024];
+  char filepath[/*FILE_MAX*/ 1024];
 } ImagePackedFile;
 
 typedef struct RenderSlot {
   struct RenderSlot *next, *prev;
-  /** 64 = MAX_NAME. */
-  char name[64];
+  char name[/*MAX_NAME*/ 64];
   struct RenderResult *render;
 } RenderSlot;
 
@@ -115,46 +120,27 @@ enum {
 /* Used to get the correct gpu texture from an Image datablock. */
 typedef enum eGPUTextureTarget {
   TEXTARGET_2D = 0,
-  TEXTARGET_2D_ARRAY,
-  TEXTARGET_TILE_MAPPING,
-  TEXTARGET_COUNT,
+  TEXTARGET_2D_ARRAY = 1,
+  TEXTARGET_TILE_MAPPING = 2,
+  TEXTARGET_COUNT = 3,
 } eGPUTextureTarget;
 
-/* Defined in BKE_image.hh. */
-struct PartialUpdateRegister;
-struct PartialUpdateUser;
-
-typedef struct Image_Runtime {
-  /* Mutex used to guarantee thread-safe access to the cached ImBuf of the corresponding image ID.
-   */
-  void *cache_mutex;
-
-  /** \brief Register containing partial updates. */
-  struct PartialUpdateRegister *partial_update_register;
-  /** \brief Partial update user for GPUTextures stored inside the Image. */
-  struct PartialUpdateUser *partial_update_user;
-
-  void *_pad;
-
-  /* The image's current update count. See deg::set_id_update_count for more information. */
-  uint64_t update_count;
-
-  /* Compositor viewer might be translated, and that translation will be stored in this runtime
-   * vector by the compositor so that the editor draw code can draw the image translated. */
-  float backdrop_offset[2];
-} Image_Runtime;
-
 typedef struct Image {
+#ifdef __cplusplus
+  /** See #ID_Type comment for why this is here. */
+  static constexpr ID_Type id_type = ID_IM;
+#endif
+
   ID id;
   struct AnimData *adt;
 
-  /** File path, 1024 = FILE_MAX. */
-  char filepath[1024];
+  /** File path. */
+  char filepath[/*FILE_MAX*/ 1024];
 
   /** Not written in file. */
   struct MovieCache *cache;
-  /** Not written in file 3 = TEXTARGET_COUNT, 2 = stereo eyes. */
-  struct GPUTexture *gputexture[3][2];
+  /** Not written in file, 2 = stereo eyes. */
+  struct GPUTexture *gputexture[/*TEXTARGET_COUNT*/ 3][2];
 
   /* sources from: */
   ListBase anims;
@@ -214,7 +200,7 @@ typedef struct Image {
   ListBase views;
   struct Stereo3dFormat *stereo3d_format;
 
-  Image_Runtime runtime;
+  ImageRuntimeHandle *runtime;
 } Image;
 
 /* **************** IMAGE ********************* */

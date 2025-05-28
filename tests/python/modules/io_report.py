@@ -131,7 +131,7 @@ class Report:
             message += """<p><tt>BLENDER_TEST_UPDATE=1 ctest -R %s</tt></p>""" % test_suite_name
             message += """<p>The reference output of new and failing tests will be updated. """ \
                        """Be sure to commit the new reference """ \
-                       """files to the tests/data git submodule afterwards.</p>"""
+                       """files to the tests/files git submodule afterwards.</p>"""
             message += """</div>"""
             message += f"Tested files: {self.tested_count}, <b>failed: {len(self.failed_list)}</b>"
         else:
@@ -490,6 +490,13 @@ class Report:
                     if obj.parent_type == 'BONE':
                         desc.write(f" par_bone:'{obj.parent_bone}'")
                 desc.write(f"\n")
+                mtx = obj.matrix_parent_inverse
+                if not is_approx_identity(mtx):
+                    desc.write(f"  - matrix_parent_inverse:\n")
+                    desc.write(f"      {fmtf(mtx[0][0])} {fmtf(mtx[0][1])} {fmtf(mtx[0][2])} {fmtf(mtx[0][3])}\n")
+                    desc.write(f"      {fmtf(mtx[1][0])} {fmtf(mtx[1][1])} {fmtf(mtx[1][2])} {fmtf(mtx[1][3])}\n")
+                    desc.write(f"      {fmtf(mtx[2][0])} {fmtf(mtx[2][1])} {fmtf(mtx[2][2])} {fmtf(mtx[2][3])}\n")
+
                 desc.write(f"  - pos {fmtf(obj.location[0])}, {fmtf(obj.location[1])}, {fmtf(obj.location[2])}\n")
                 desc.write(
                     f"  - rot {fmtrot(obj.rotation_euler[0])}, {fmtrot(obj.rotation_euler[1])}, {fmtrot(obj.rotation_euler[2])} ({obj.rotation_mode})\n")
@@ -556,7 +563,15 @@ class Report:
             desc.write(f"==== Lights: {len(bpy.data.lights)}\n")
             for light in bpy.data.lights:
                 desc.write(
-                    f"- Light '{light.name}' {light.type} col:({light.color[0]:.3f}, {light.color[1]:.3f}, {light.color[2]:.3f}) energy:{light.energy:.3f}\n")
+                    f"- Light '{light.name}' {light.type} col:({light.color[0]:.3f}, {light.color[1]:.3f}, {light.color[2]:.3f}) energy:{light.energy:.3f}")
+                if light.exposure != 0:
+                    desc.write(f" exposure:{fmtf(light.exposure)}")
+                if light.use_temperature:
+                    desc.write(
+                        f" temp:{fmtf(light.temperature)}")
+                if not light.normalize:
+                    desc.write(f" normalize_off")
+                desc.write(f"\n")
                 if isinstance(light, bpy.types.SpotLight):
                     desc.write(f"  - spot {light.spot_size:.3f} blend {light.spot_blend:.3f}\n")
                 Report._write_animdata_desc(light.animation_data, desc)

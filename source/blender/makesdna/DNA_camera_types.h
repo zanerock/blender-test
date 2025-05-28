@@ -71,6 +71,11 @@ typedef struct Camera_Runtime {
 } Camera_Runtime;
 
 typedef struct Camera {
+#ifdef __cplusplus
+  /** See #ID_Type comment for why this is here. */
+  static constexpr ID_Type id_type = ID_CA;
+#endif
+
   ID id;
   /** Animation data (must be immediately after id for utilities to use it). */
   struct AnimData *adt;
@@ -113,8 +118,7 @@ typedef struct Camera {
   /* Custom Camera properties. */
   struct Text *custom_shader;
 
-  /** 1024 = FILE_MAX. */
-  char custom_filepath[1024];
+  char custom_filepath[/*FILE_MAX*/ 1024];
 
   char custom_bytecode_hash[64];
   char *custom_bytecode;

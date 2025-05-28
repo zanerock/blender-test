@@ -252,6 +252,11 @@ struct DeferredLayerBase {
     return count;
   }
 
+  eClosureBits closure_bits_get() const
+  {
+    return closure_bits_;
+  }
+
   void gbuffer_pass_sync(Instance &inst);
 };
 
@@ -332,6 +337,11 @@ class DeferredLayer : DeferredLayerBase {
     return closure_bits_ & CLOSURE_TRANSMISSION;
   }
 
+  /* Do we compute indirect lighting inside the light eval pass. */
+  static bool do_merge_direct_indirect_eval(const Instance &inst);
+  /* Is the radiance split for the lighting pass. */
+  static bool do_split_direct_indirect_radiance(const Instance &inst);
+
   /* Returns the radiance buffer to feed the next layer. */
   GPUTexture *render(View &main_view,
                      View &render_view,
@@ -399,6 +409,11 @@ class DeferredPipeline {
   bool is_empty() const
   {
     return opaque_layer_.is_empty() && refraction_layer_.is_empty();
+  }
+
+  eClosureBits closure_bits_get() const
+  {
+    return opaque_layer_.closure_bits_get() | refraction_layer_.closure_bits_get();
   }
 
  private:

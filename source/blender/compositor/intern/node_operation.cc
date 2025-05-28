@@ -12,6 +12,8 @@
 
 #include "BKE_node.hh"
 
+#include "GPU_debug.hh"
+
 #include "COM_algorithm_compute_preview.hh"
 #include "COM_context.hh"
 #include "COM_input_descriptor.hh"
@@ -48,18 +50,27 @@ NodeOperation::NodeOperation(Context &context, DNode node) : Operation(context),
 
 void NodeOperation::evaluate()
 {
+  if (context().use_gpu()) {
+    GPU_debug_group_begin(node().bnode()->typeinfo->idname.c_str());
+  }
   const timeit::TimePoint before_time = timeit::Clock::now();
   Operation::evaluate();
   const timeit::TimePoint after_time = timeit::Clock::now();
   if (context().profiler()) {
     context().profiler()->set_node_evaluation_time(node_.instance_key(), after_time - before_time);
   }
+  if (context().use_gpu()) {
+    GPU_debug_group_end();
+  }
 }
 
 void NodeOperation::compute_preview()
 {
   if (bool(context().needed_outputs() & OutputTypes::Previews) && is_node_preview_needed(node())) {
-    compositor::compute_preview(context(), node(), *get_preview_result());
+    const Result *result = get_preview_result();
+    if (result) {
+      compositor::compute_preview(context(), node(), *result);
+    }
   }
 }
 
@@ -77,7 +88,12 @@ Result *NodeOperation::get_preview_result()
     }
   }
 
-  /* No linked outputs, find the first allocated input. */
+  /* No linked outputs, but no inputs either, so nothing to preview. */
+  if (node()->input_sockets().is_empty()) {
+    return nullptr;
+  }
+
+  /* Find the first allocated input. */
   for (const bNodeSocket *input : node()->input_sockets()) {
     if (!input->is_available()) {
       continue;

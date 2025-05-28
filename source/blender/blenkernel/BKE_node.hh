@@ -136,6 +136,13 @@ using NodeInverseElemEvalFunction =
     void (*)(blender::nodes::value_elem::InverseElemEvalParams &params);
 using NodeElemEvalFunction = void (*)(blender::nodes::value_elem::ElemEvalParams &params);
 using NodeInverseEvalFunction = void (*)(blender::nodes::inverse_eval::InverseEvalParams &params);
+using NodeInternallyLinkedInputFunction = const bNodeSocket *(*)(const bNodeTree &tree,
+                                                                 const bNode &node,
+                                                                 const bNodeSocket &output_socket);
+using NodeBlendWriteFunction = void (*)(const bNodeTree &tree,
+                                        const bNode &node,
+                                        BlendWriter &writer);
+using NodeBlendDataReadFunction = void (*)(bNodeTree &tree, bNode &node, BlendDataReader &reader);
 
 /**
  * \brief Defines a socket type.
@@ -259,8 +266,6 @@ struct bNodeType {
 
   /** Called when the node is updated in the editor. */
   void (*updatefunc)(bNodeTree *ntree, bNode *node) = nullptr;
-  /** Check and update if internal ID data has changed. */
-  void (*group_update_func)(bNodeTree *ntree, bNode *node) = nullptr;
 
   /**
    * Initialize a new node instance of this type after creation.
@@ -367,6 +372,16 @@ struct bNodeType {
   /** Get extra information that is drawn next to the node. */
   NodeExtraInfoFunction get_extra_info = nullptr;
 
+  /** Get the internally linked input socket for the case when the node is muted. */
+  NodeInternallyLinkedInputFunction internally_linked_input = nullptr;
+
+  /**
+   * Read and write the content of the node storage. Writing the storage struct itself is handled
+   * by generic code by reading and writing bNodeType::storagename.
+   */
+  NodeBlendWriteFunction blend_write_storage_content = nullptr;
+  NodeBlendDataReadFunction blend_data_read_storage_content = nullptr;
+
   /**
    * "Abstract" evaluation of the node. It tells the caller which parts of the inputs affect which
    * parts of the outputs.
@@ -395,6 +410,8 @@ struct bNodeType {
 
   /** True when the node cannot be muted. */
   bool no_muting = false;
+  /** Some nodes should ignore the inferred visibility for improved UX. */
+  bool ignore_inferred_input_socket_visibility = false;
   /** True when the node still works but it's usage is discouraged. */
   const char *deprecation_notice = nullptr;
 
@@ -529,7 +546,7 @@ Span<bNodeTreeType *> node_tree_types_get();
  * In that case the update_typeinfo function will set type-info on registration
  * and do necessary updates.
  */
-void node_tree_set_type(const bContext *C, bNodeTree &ntree);
+void node_tree_set_type(bNodeTree &ntree);
 
 bNodeTree *node_tree_add_tree(Main *bmain, StringRef name, StringRef idname);
 
@@ -611,8 +628,15 @@ void node_unregister_socket_type(bNodeSocketType &stype);
 bool node_socket_is_registered(const bNodeSocket &sock);
 StringRefNull node_socket_type_label(const bNodeSocketType &stype);
 
-std::optional<StringRefNull> node_static_socket_type(int type, int subtype);
-std::optional<StringRefNull> node_static_socket_interface_type_new(int type, int subtype);
+/* The optional dimensions argument can be provided for types that support multiple possible
+ * dimensions like Vector. It is expected to be in the range [2, 4] and if not provided, 3 will be
+ * assumed. */
+std::optional<StringRefNull> node_static_socket_type(int type,
+                                                     int subtype,
+                                                     std::optional<int> dimensions = std::nullopt);
+std::optional<StringRefNull> node_static_socket_interface_type_new(
+    int type, int subtype, std::optional<int> dimensions = std::nullopt);
+
 std::optional<StringRefNull> node_static_socket_label(int type, int subtype);
 
 Span<bNodeSocketType *> node_socket_types_get();

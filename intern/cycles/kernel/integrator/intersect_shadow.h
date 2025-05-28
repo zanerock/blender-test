@@ -16,8 +16,7 @@
 CCL_NAMESPACE_BEGIN
 
 /* Visibility for the shadow ray. */
-ccl_device_forceinline uint integrate_intersect_shadow_visibility(KernelGlobals kg,
-                                                                  ConstIntegratorShadowState state)
+ccl_device_forceinline uint integrate_intersect_shadow_visibility(ConstIntegratorShadowState state)
 {
   uint visibility = PATH_RAY_SHADOW;
 
@@ -59,7 +58,7 @@ ccl_device_forceinline int integrate_shadow_max_transparent_hits(KernelGlobals k
   const int transparent_max_bounce = kernel_data.integrator.transparent_max_bounce;
   const int transparent_bounce = INTEGRATOR_STATE(state, shadow_path, transparent_bounce);
 
-  return max(transparent_max_bounce - transparent_bounce - 1, 0);
+  return max(transparent_max_bounce - transparent_bounce, 0);
 }
 
 #ifdef __TRANSPARENT_SHADOWS__
@@ -152,9 +151,9 @@ ccl_device void integrator_intersect_shadow(KernelGlobals kg, IntegratorShadowSt
   /* Read ray from integrator state into local memory. */
   Ray ray ccl_optional_struct_init;
   integrator_state_read_shadow_ray(state, &ray);
-  integrator_state_read_shadow_ray_self(kg, state, &ray);
+  integrator_state_read_shadow_ray_self(state, &ray);
   /* Compute visibility. */
-  const uint visibility = integrate_intersect_shadow_visibility(kg, state);
+  const uint visibility = integrate_intersect_shadow_visibility(state);
 
 #ifdef __TRANSPARENT_SHADOWS__
   /* TODO: compile different kernels depending on this? Especially for OptiX
@@ -168,7 +167,7 @@ ccl_device void integrator_intersect_shadow(KernelGlobals kg, IntegratorShadowSt
 
   if (opaque_hit) {
     /* Hit an opaque surface, shadow path ends here. */
-    integrator_shadow_path_terminate(kg, state, DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
+    integrator_shadow_path_terminate(state, DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW);
     return;
   }
 
@@ -178,7 +177,7 @@ ccl_device void integrator_intersect_shadow(KernelGlobals kg, IntegratorShadowSt
    * TODO: could also write to render buffer directly if no transparent shadows?
    * Could save a kernel execution for the common case. */
   integrator_shadow_path_next(
-      kg, state, DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW, DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW);
+      state, DEVICE_KERNEL_INTEGRATOR_INTERSECT_SHADOW, DEVICE_KERNEL_INTEGRATOR_SHADE_SHADOW);
 }
 
 CCL_NAMESPACE_END

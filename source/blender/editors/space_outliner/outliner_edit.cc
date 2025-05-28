@@ -343,7 +343,7 @@ static void do_item_rename(ARegion *region,
            TSE_RNA_PROPERTY,
            TSE_RNA_ARRAY_ELEM,
            TSE_ID_BASE) ||
-      ELEM(tselem->type, TSE_SCENE_OBJECTS_BASE, TSE_GENERIC_LABEL))
+      ELEM(tselem->type, TSE_SCENE_OBJECTS_BASE, TSE_GENERIC_LABEL, TSE_GPENCIL_EFFECT_BASE))
   {
     BKE_report(reports, RPT_INFO, "Not an editable name");
   }
@@ -2004,12 +2004,12 @@ static wmOperatorStatus outliner_drivers_addsel_exec(bContext *C, wmOperator *op
 
 void OUTLINER_OT_drivers_add_selected(wmOperatorType *ot)
 {
-  /* api callbacks */
+  /* API callbacks. */
   ot->idname = "OUTLINER_OT_drivers_add_selected";
   ot->name = "Add Drivers for Selected";
   ot->description = "Add drivers to selected items";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = outliner_drivers_addsel_exec;
   ot->poll = ed_operator_outliner_datablocks_active;
 
@@ -2048,7 +2048,7 @@ void OUTLINER_OT_drivers_delete_selected(wmOperatorType *ot)
   ot->name = "Delete Drivers for Selected";
   ot->description = "Delete drivers assigned to selected items";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = outliner_drivers_deletesel_exec;
   ot->poll = ed_operator_outliner_datablocks_active;
 
@@ -2199,7 +2199,7 @@ void OUTLINER_OT_keyingset_add_selected(wmOperatorType *ot)
   ot->name = "Keying Set Add Selected";
   ot->description = "Add selected items (blue-gray rows) to active Keying Set";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = outliner_keyingset_additems_exec;
   ot->poll = ed_operator_outliner_datablocks_active;
 
@@ -2240,7 +2240,7 @@ void OUTLINER_OT_keyingset_remove_selected(wmOperatorType *ot)
   ot->name = "Keying Set Remove Selected";
   ot->description = "Remove selected items (blue-gray rows) from active Keying Set";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = outliner_keyingset_removeitems_exec;
   ot->poll = ed_operator_outliner_datablocks_active;
 
@@ -2429,20 +2429,20 @@ static void outliner_orphans_purge_ui(bContext * /*C*/, wmOperator *op)
   std::string unused_message;
   unused_message_gen(unused_message, data.num_local);
   uiLayout *column = &layout->column(true);
-  uiItemR(column, ptr, "do_local_ids", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  column->prop(ptr, "do_local_ids", UI_ITEM_NONE, std::nullopt, ICON_NONE);
   uiLayout *row = &column->row(true);
-  uiItemS_ex(row, 2.67f);
-  uiItemL(row, unused_message, ICON_NONE);
+  row->separator(2.67f);
+  row->label(unused_message, ICON_NONE);
 
   unused_message = "";
   unused_message_gen(unused_message, data.num_linked);
   column = &layout->column(true);
-  uiItemR(column, ptr, "do_linked_ids", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  column->prop(ptr, "do_linked_ids", UI_ITEM_NONE, std::nullopt, ICON_NONE);
   row = &column->row(true);
-  uiItemS_ex(row, 2.67f);
-  uiItemL(row, unused_message, ICON_NONE);
+  row->separator(2.67f);
+  row->label(unused_message, ICON_NONE);
 
-  uiItemR(layout, ptr, "do_recursive", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(ptr, "do_recursive", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 }
 
 void OUTLINER_OT_orphans_purge(wmOperatorType *ot)

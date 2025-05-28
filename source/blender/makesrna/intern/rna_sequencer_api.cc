@@ -62,7 +62,7 @@ static void rna_Strip_swap_internal(ID *id,
   const char *error_msg;
   Scene *scene = (Scene *)id;
 
-  if (blender::seq::edit_sequence_swap(scene, strip_self, strip_other, &error_msg) == false) {
+  if (blender::seq::edit_strip_swap(scene, strip_self, strip_other, &error_msg) == false) {
     BKE_report(reports, RPT_ERROR, error_msg);
   }
 }
@@ -91,7 +91,7 @@ static Strip *rna_Strip_split(
     ID *id, Strip *strip, Main *bmain, ReportList *reports, int frame, int split_method)
 {
   Scene *scene = (Scene *)id;
-  ListBase *seqbase = blender::seq::get_seqbase_by_seq(scene, strip);
+  ListBase *seqbase = blender::seq::get_seqbase_by_strip(scene, strip);
 
   const char *error_msg = nullptr;
   Strip *r_seq = blender::seq::edit_strip_split(
@@ -194,14 +194,14 @@ static Strip *rna_Strips_new_scene(ID *id,
                                    ListBase *seqbase,
                                    Main *bmain,
                                    const char *name,
-                                   Scene *sce_seq,
+                                   Scene *sce_strip,
                                    int channel,
                                    int frame_start)
 {
   Scene *scene = (Scene *)id;
   blender::seq::LoadData load_data;
   blender::seq::add_load_data_init(&load_data, name, nullptr, frame_start, channel);
-  load_data.scene = sce_seq;
+  load_data.scene = sce_strip;
   Strip *strip = blender::seq::add_scene_strip(scene, seqbase, &load_data);
 
   DEG_relations_tag_update(bmain);
@@ -215,22 +215,22 @@ static Strip *rna_Strips_editing_new_scene(ID *id,
                                            Editing *ed,
                                            Main *bmain,
                                            const char *name,
-                                           Scene *sce_seq,
+                                           Scene *sce_strip,
                                            int channel,
                                            int frame_start)
 {
-  return rna_Strips_new_scene(id, &ed->seqbase, bmain, name, sce_seq, channel, frame_start);
+  return rna_Strips_new_scene(id, &ed->seqbase, bmain, name, sce_strip, channel, frame_start);
 }
 
 static Strip *rna_Strips_meta_new_scene(ID *id,
                                         Strip *strip,
                                         Main *bmain,
                                         const char *name,
-                                        Scene *sce_seq,
+                                        Scene *sce_strip,
                                         int channel,
                                         int frame_start)
 {
-  return rna_Strips_new_scene(id, &strip->seqbase, bmain, name, sce_seq, channel, frame_start);
+  return rna_Strips_new_scene(id, &strip->seqbase, bmain, name, sce_strip, channel, frame_start);
 }
 
 static Strip *rna_Strips_new_image(ID *id,
@@ -478,8 +478,8 @@ static Strip *rna_Strips_new_effect(ID *id,
                                     int channel,
                                     int frame_start,
                                     int frame_end,
-                                    Strip *seq1,
-                                    Strip *seq2)
+                                    Strip *input1,
+                                    Strip *input2)
 {
   Scene *scene = (Scene *)id;
   Strip *strip;
@@ -493,13 +493,13 @@ static Strip *rna_Strips_new_effect(ID *id,
       }
       break;
     case 1:
-      if (seq1 == nullptr) {
+      if (input1 == nullptr) {
         BKE_report(reports, RPT_ERROR, "Strips.new_effect: effect takes 1 input strip");
         return nullptr;
       }
       break;
     case 2:
-      if (seq1 == nullptr || seq2 == nullptr) {
+      if (input1 == nullptr || input2 == nullptr) {
         BKE_report(reports, RPT_ERROR, "Strips.new_effect: effect takes 2 input strips");
         return nullptr;
       }
@@ -517,8 +517,8 @@ static Strip *rna_Strips_new_effect(ID *id,
   blender::seq::add_load_data_init(&load_data, name, nullptr, frame_start, channel);
   load_data.effect.end_frame = frame_end;
   load_data.effect.type = type;
-  load_data.effect.seq1 = seq1;
-  load_data.effect.seq2 = seq2;
+  load_data.effect.input1 = input1;
+  load_data.effect.input2 = input2;
   strip = blender::seq::add_effect_strip(scene, seqbase, &load_data);
 
   DEG_id_tag_update(&scene->id, ID_RECALC_SEQUENCER_STRIPS);
@@ -535,11 +535,11 @@ static Strip *rna_Strips_editing_new_effect(ID *id,
                                             int channel,
                                             int frame_start,
                                             int frame_end,
-                                            Strip *seq1,
-                                            Strip *seq2)
+                                            Strip *input1,
+                                            Strip *input2)
 {
   return rna_Strips_new_effect(
-      id, &ed->seqbase, reports, name, type, channel, frame_start, frame_end, seq1, seq2);
+      id, &ed->seqbase, reports, name, type, channel, frame_start, frame_end, input1, input2);
 }
 
 static Strip *rna_Strips_meta_new_effect(ID *id,
@@ -550,11 +550,11 @@ static Strip *rna_Strips_meta_new_effect(ID *id,
                                          int channel,
                                          int frame_start,
                                          int frame_end,
-                                         Strip *seq1,
-                                         Strip *seq2)
+                                         Strip *input1,
+                                         Strip *input2)
 {
   return rna_Strips_new_effect(
-      id, &strip->seqbase, reports, name, type, channel, frame_start, frame_end, seq1, seq2);
+      id, &strip->seqbase, reports, name, type, channel, frame_start, frame_end, input1, input2);
 }
 
 static void rna_Strips_remove(
@@ -570,7 +570,7 @@ static void rna_Strips_remove(
   }
 
   blender::seq::edit_flag_for_removal(scene, seqbase, strip);
-  blender::seq::edit_remove_flagged_sequences(scene, seqbase);
+  blender::seq::edit_remove_flagged_strips(scene, seqbase);
   strip_ptr->invalidate();
 
   DEG_relations_tag_update(bmain);
@@ -611,7 +611,7 @@ static StripElem *rna_StripElements_append(ID *id, Strip *strip, const char *fil
 static void rna_StripElements_pop(ID *id, Strip *strip, ReportList *reports, int index)
 {
   Scene *scene = (Scene *)id;
-  StripElem *new_seq, *se;
+  StripElem *new_se, *se;
 
   if (strip->len == 1) {
     BKE_report(reports, RPT_ERROR, "StripElements.pop: cannot pop the last element");
@@ -628,7 +628,7 @@ static void rna_StripElements_pop(ID *id, Strip *strip, ReportList *reports, int
     return;
   }
 
-  new_seq = MEM_calloc_arrayN<StripElem>(size_t(strip->len) - 1, "StripElements_pop");
+  new_se = MEM_calloc_arrayN<StripElem>(size_t(strip->len) - 1, "StripElements_pop");
   strip->len--;
 
   if (strip->len == 1) {
@@ -637,15 +637,15 @@ static void rna_StripElements_pop(ID *id, Strip *strip, ReportList *reports, int
 
   se = strip->data->stripdata;
   if (index > 0) {
-    memcpy(new_seq, se, sizeof(StripElem) * index);
+    memcpy(new_se, se, sizeof(StripElem) * index);
   }
 
   if (index < strip->len) {
-    memcpy(&new_seq[index], &se[index + 1], sizeof(StripElem) * (strip->len - index));
+    memcpy(&new_se[index], &se[index + 1], sizeof(StripElem) * (strip->len - index));
   }
 
   MEM_freeN(strip->data->stripdata);
-  strip->data->stripdata = new_seq;
+  strip->data->stripdata = new_se;
 
   WM_main_add_notifier(NC_SCENE | ND_SEQUENCER, scene);
 }
@@ -655,12 +655,6 @@ static void rna_Strip_invalidate_cache_rnafunc(ID *id, Strip *self, int type)
   switch (type) {
     case SEQ_CACHE_STORE_RAW:
       blender::seq::relations_invalidate_cache_raw((Scene *)id, self);
-      break;
-    case SEQ_CACHE_STORE_PREPROCESSED:
-      blender::seq::relations_invalidate_cache_preprocessed((Scene *)id, self);
-      break;
-    case SEQ_CACHE_STORE_COMPOSITE:
-      blender::seq::relations_invalidate_cache_composite((Scene *)id, self);
       break;
   }
 }
@@ -695,8 +689,6 @@ void RNA_api_strip(StructRNA *srna)
 
   static const EnumPropertyItem strip_cache_type_items[] = {
       {SEQ_CACHE_STORE_RAW, "RAW", 0, "Raw", ""},
-      {SEQ_CACHE_STORE_PREPROCESSED, "PREPROCESSED", 0, "Preprocessed", ""},
-      {SEQ_CACHE_STORE_COMPOSITE, "COMPOSITE", 0, "Composite", ""},
       {0, nullptr, 0, nullptr, nullptr},
   };
 
@@ -1126,8 +1118,8 @@ void RNA_api_strips(StructRNA *srna, const bool metastrip)
               "The end frame for the new strip",
               INT_MIN,
               INT_MAX);
-  RNA_def_pointer(func, "seq1", "Strip", "", "Strip 1 for effect");
-  RNA_def_pointer(func, "seq2", "Strip", "", "Strip 2 for effect");
+  RNA_def_pointer(func, "input1", "Strip", "", "First input strip for effect");
+  RNA_def_pointer(func, "input2", "Strip", "", "Second input strip for effect");
   /* return type */
   parm = RNA_def_pointer(func, "sequence", "Strip", "", "New Strip");
   RNA_def_function_return(func, parm);

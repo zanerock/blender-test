@@ -44,8 +44,8 @@ static void node_declare(NodeDeclarationBuilder &b)
 
 static void node_layout(uiLayout *layout, bContext * /*C*/, PointerRNA *ptr)
 {
-  uiItemR(layout, ptr, "data_type", UI_ITEM_NONE, "", ICON_NONE);
-  uiItemR(layout, ptr, "domain", UI_ITEM_NONE, "", ICON_NONE);
+  layout->prop(ptr, "data_type", UI_ITEM_NONE, "", ICON_NONE);
+  layout->prop(ptr, "domain", UI_ITEM_NONE, "", ICON_NONE);
 }
 
 static void node_init(bNodeTree * /*tree*/, bNode *node)
@@ -101,29 +101,6 @@ static void node_gather_link_searches(GatherLinkSearchOpParams &params)
   }
 }
 
-template<typename T> static T compute_sum(const Span<T> data)
-{
-  /* Explicitly splitting work into chunks for a couple of reasons:
-   * - Improve numerical stability. While there are even more stable algorithms (e.g. Kahan
-   *   summation), they also add more complexity to the hot code path. So far, this simple approach
-   *   seems to solve the common issues people run into.
-   * - Support computing the sum using multiple threads.
-   * - Ensure deterministic results even with floating point numbers.
-   */
-  constexpr int64_t chunk_size = 1024;
-  const int64_t chunks_num = divide_ceil_ul(data.size(), chunk_size);
-  Array<T> partial_sums(chunks_num);
-  threading::parallel_for(partial_sums.index_range(), 1, [&](const IndexRange range) {
-    for (const int64_t i : range) {
-      const int64_t start = i * chunk_size;
-      const Span<T> chunk = data.slice_safe(start, chunk_size);
-      const T partial_sum = std::accumulate(chunk.begin(), chunk.end(), T());
-      partial_sums[i] = partial_sum;
-    }
-  });
-  return std::accumulate(partial_sums.begin(), partial_sums.end(), T());
-}
-
 static float compute_variance(const Span<float> data, const float mean)
 {
   if (data.size() <= 1) {
@@ -156,17 +133,17 @@ static float median_of_sorted_span(const Span<float> data)
 
 static void node_geo_exec(GeoNodeExecParams params)
 {
-  GeometrySet geometry_set = params.get_input<GeometrySet>("Geometry");
+  GeometrySet geometry_set = params.extract_input<GeometrySet>("Geometry");
   const bNode &node = params.node();
   const eCustomDataType data_type = eCustomDataType(node.custom1);
   const AttrDomain domain = AttrDomain(node.custom2);
   Vector<const GeometryComponent *> components = geometry_set.get_components();
 
-  const Field<bool> selection_field = params.get_input<Field<bool>>("Selection");
+  const Field<bool> selection_field = params.extract_input<Field<bool>>("Selection");
 
   switch (data_type) {
     case CD_PROP_FLOAT: {
-      const Field<float> input_field = params.get_input<Field<float>>("Attribute");
+      const Field<float> input_field = params.extract_input<Field<float>>("Attribute");
       Vector<float> data;
       for (const GeometryComponent *component : components) {
         const std::optional<AttributeAccessor> attributes = component->attributes();
@@ -217,7 +194,7 @@ static void node_geo_exec(GeoNodeExecParams params)
           range = max - min;
         }
         if (sum_required || variance_required) {
-          sum = compute_sum<float>(data);
+          sum = blender::array_utils::compute_sum<float>(data);
           mean = sum / data.size();
 
           if (variance_required) {
@@ -244,7 +221,7 @@ static void node_geo_exec(GeoNodeExecParams params)
       break;
     }
     case CD_PROP_FLOAT3: {
-      const Field<float3> input_field = params.get_input<Field<float3>>("Attribute");
+      const Field<float3> input_field = params.extract_input<Field<float3>>("Attribute");
       Vector<float3> data;
       for (const GeometryComponent *component : components) {
         const std::optional<AttributeAccessor> attributes = component->attributes();
@@ -315,7 +292,7 @@ static void node_geo_exec(GeoNodeExecParams params)
           range = max - min;
         }
         if (sum_required || variance_required) {
-          sum = compute_sum(data.as_span());
+          sum = blender::array_utils::compute_sum(data.as_span());
           mean = sum / data.size();
 
           if (variance_required) {

@@ -47,12 +47,12 @@ static void node_declare(NodeDeclarationBuilder &b)
 
 static void node_layout(uiLayout *layout, bContext * /*C*/, PointerRNA *ptr)
 {
-  uiItemR(layout, ptr, "mode", UI_ITEM_NONE, "", ICON_NONE);
+  layout->prop(ptr, "mode", UI_ITEM_NONE, "", ICON_NONE);
 }
 
 static void node_layout_ex(uiLayout *layout, bContext * /*C*/, PointerRNA *ptr)
 {
-  uiItemR(layout, ptr, "keep_last_segment", UI_ITEM_NONE, std::nullopt, ICON_NONE);
+  layout->prop(ptr, "keep_last_segment", UI_ITEM_NONE, std::nullopt, ICON_NONE);
 }
 
 static void node_init(bNodeTree * /*tree*/, bNode *node)
@@ -206,7 +206,7 @@ static void node_rna(StructRNA *srna)
   RNA_def_node_boolean(srna,
                        "keep_last_segment",
                        "Keep Last Segment",
-                       "Don't collapse a curves to single points if they are shorter than the "
+                       "Do not collapse curves to single points if they are shorter than the "
                        "given length. The collapsing behavior exists for compatibility reasons.",
                        NOD_storage_boolean_accessors(keep_last_segment, 1));
 }

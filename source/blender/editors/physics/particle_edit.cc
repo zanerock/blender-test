@@ -532,7 +532,7 @@ static void PE_set_view3d_data(bContext *C, PEData *data)
 
 static bool PE_create_shape_tree(PEData *data, Object *shapeob)
 {
-  Object *shapeob_eval = DEG_get_evaluated_object(data->depsgraph, shapeob);
+  Object *shapeob_eval = DEG_get_evaluated(data->depsgraph, shapeob);
   const Mesh *mesh = BKE_object_get_evaluated_mesh(shapeob_eval);
 
   if (!mesh) {
@@ -1818,7 +1818,7 @@ void PARTICLE_OT_select_all(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_select_all";
   ot->description = "(De)select all particles' keys";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = pe_select_all_exec;
   ot->poll = PE_poll;
 
@@ -1873,7 +1873,7 @@ static bool pe_nearest_point_and_key(bContext *C,
   return found;
 }
 
-bool PE_mouse_particles(bContext *C, const int mval[2], const SelectPick_Params *params)
+bool PE_mouse_particles(bContext *C, const int mval[2], const SelectPick_Params &params)
 {
   Depsgraph *depsgraph = CTX_data_ensure_evaluated_depsgraph(C);
   Scene *scene = CTX_data_scene(C);
@@ -1891,18 +1891,18 @@ bool PE_mouse_particles(bContext *C, const int mval[2], const SelectPick_Params 
   bool changed = false;
   bool found = pe_nearest_point_and_key(C, mval, &point, &key);
 
-  if (params->sel_op == SEL_OP_SET) {
-    if ((found && params->select_passthrough) && (key->flag & PEK_SELECT)) {
+  if (params.sel_op == SEL_OP_SET) {
+    if ((found && params.select_passthrough) && (key->flag & PEK_SELECT)) {
       found = false;
     }
-    else if (found || params->deselect_all) {
+    else if (found || params.deselect_all) {
       /* Deselect everything. */
       changed |= PE_deselect_all_visible_ex(edit);
     }
   }
 
   if (found) {
-    switch (params->sel_op) {
+    switch (params.sel_op) {
       case SEL_OP_ADD: {
         if ((key->flag & PEK_SELECT) == 0) {
           key->flag |= PEK_SELECT;
@@ -2004,7 +2004,7 @@ void PARTICLE_OT_select_roots(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_select_roots";
   ot->description = "Select roots of all visible particles";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = select_roots_exec;
   ot->poll = PE_poll;
 
@@ -2079,7 +2079,7 @@ void PARTICLE_OT_select_tips(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_select_tips";
   ot->description = "Select tips of all visible particles";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = select_tips_exec;
   ot->poll = PE_poll;
 
@@ -2164,7 +2164,7 @@ void PARTICLE_OT_select_random(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_select_random";
   ot->description = "Select a randomly distributed set of hair or points";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = select_random_exec;
   ot->poll = PE_poll;
 
@@ -2208,7 +2208,7 @@ void PARTICLE_OT_select_linked(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_select_linked";
   ot->description = "Select all keys linked to already selected ones";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = select_linked_exec;
   ot->poll = PE_poll;
 
@@ -2256,7 +2256,7 @@ void PARTICLE_OT_select_linked_pick(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_select_linked_pick";
   ot->description = "Select nearest particle from mouse pointer";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = select_linked_pick_exec;
   ot->invoke = select_linked_pick_invoke;
   ot->poll = PE_poll_view3d;
@@ -2550,7 +2550,7 @@ void PARTICLE_OT_hide(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_hide";
   ot->description = "Hide selected particles";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = hide_exec;
   ot->poll = PE_poll;
 
@@ -2602,7 +2602,7 @@ void PARTICLE_OT_reveal(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_reveal";
   ot->description = "Show hidden particles";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = reveal_exec;
   ot->poll = PE_poll;
 
@@ -2672,7 +2672,7 @@ void PARTICLE_OT_select_less(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_select_less";
   ot->description = "Deselect boundary selected keys of each particle";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = select_less_exec;
   ot->poll = PE_poll;
 
@@ -2744,7 +2744,7 @@ void PARTICLE_OT_select_more(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_select_more";
   ot->description = "Select keys linked to boundary selected keys of each particle";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = select_more_exec;
   ot->poll = PE_poll;
 
@@ -2846,7 +2846,7 @@ void PARTICLE_OT_rekey(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_rekey";
   ot->description = "Change the number of keys of selected particles (root and tip keys included)";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = rekey_exec;
   ot->invoke = WM_operator_props_popup;
   ot->poll = PE_hair_poll;
@@ -3212,7 +3212,7 @@ void PARTICLE_OT_subdivide(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_subdivide";
   ot->description = "Subdivide selected particles segments (adds keys)";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = subdivide_exec;
   ot->poll = PE_hair_poll;
 
@@ -3310,7 +3310,7 @@ void PARTICLE_OT_remove_doubles(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_remove_doubles";
   ot->description = "Remove selected particles close enough of others";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = remove_doubles_exec;
   ot->poll = PE_hair_poll;
 
@@ -3369,7 +3369,7 @@ void PARTICLE_OT_weight_set(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_weight_set";
   ot->description = "Set the weight of selected keys";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = weight_set_exec;
   ot->poll = PE_hair_poll;
 
@@ -3393,8 +3393,10 @@ void PARTICLE_OT_weight_set(wmOperatorType *ot)
 /** \name Cursor Drawing
  * \{ */
 
-static void brush_drawcursor(
-    bContext *C, int x, int y, float /*x_tilt*/, float /*y_tilt*/, void * /*customdata*/)
+static void brush_drawcursor(bContext *C,
+                             const blender::int2 &xy,
+                             const blender::float2 & /*tilt*/,
+                             void * /*customdata*/)
 {
   Scene *scene = CTX_data_scene(C);
   ParticleEditSettings *pset = PE_settings(scene);
@@ -3415,7 +3417,7 @@ static void brush_drawcursor(
     GPU_line_smooth(true);
     GPU_blend(GPU_BLEND_ALPHA);
 
-    imm_draw_circle_wire_2d(pos, float(x), float(y), pe_brush_size_get(scene, brush), 40);
+    imm_draw_circle_wire_2d(pos, float(xy.x), float(xy.y), pe_brush_size_get(scene, brush), 40);
 
     GPU_blend(GPU_BLEND_NONE);
     GPU_line_smooth(false);
@@ -3498,7 +3500,7 @@ void PARTICLE_OT_delete(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_delete";
   ot->description = "Delete selected particles or keys";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = delete_exec;
   ot->invoke = WM_menu_invoke;
   ot->poll = PE_hair_poll;
@@ -3724,7 +3726,7 @@ void PARTICLE_OT_mirror(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_mirror";
   ot->description = "Duplicate and mirror the selected particles along the local X axis";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = mirror_exec;
   ot->poll = mirror_poll;
 
@@ -4168,7 +4170,7 @@ static int particle_intersect_mesh(Depsgraph *depsgraph,
   if (mesh == nullptr) {
     psys_disable_all(ob);
 
-    Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+    Object *ob_eval = DEG_get_evaluated(depsgraph, ob);
     mesh = BKE_object_get_evaluated_mesh(ob_eval);
     if (mesh == nullptr) {
       return 0;
@@ -5066,7 +5068,7 @@ void PARTICLE_OT_brush_edit(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_brush_edit";
   ot->description = "Apply a stroke of brush to the particles";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = brush_edit_exec;
   ot->invoke = brush_edit_invoke;
   ot->modal = brush_edit_modal;
@@ -5287,7 +5289,7 @@ void PARTICLE_OT_shape_cut(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_shape_cut";
   ot->description = "Cut hair to conform to the set shape object";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = shape_cut_exec;
   ot->poll = shape_cut_poll;
 
@@ -5304,7 +5306,7 @@ void PARTICLE_OT_shape_cut(wmOperatorType *ot)
 void PE_create_particle_edit(
     Depsgraph *depsgraph, Scene *scene, Object *ob, PointCache *cache, ParticleSystem *psys)
 {
-  Object *ob_eval = DEG_get_evaluated_object(depsgraph, ob);
+  Object *ob_eval = DEG_get_evaluated(depsgraph, ob);
   PTCacheEdit *edit;
   ParticleSystemModifierData *psmd = (psys) ? psys_get_modifier(ob, psys) : nullptr;
   ParticleSystemModifierData *psmd_eval = nullptr;
@@ -5482,7 +5484,7 @@ void ED_object_particle_edit_mode_enter_ex(Depsgraph *depsgraph, Scene *scene, O
     /* Make sure pointer to the evaluated modifier data is up to date,
      * with possible changes applied when object was outside of the
      * edit mode. */
-    Object *object_eval = DEG_get_evaluated_object(depsgraph, ob);
+    Object *object_eval = DEG_get_evaluated(depsgraph, ob);
     edit->psmd_eval = (ParticleSystemModifierData *)BKE_modifiers_findby_name(
         object_eval, edit->psmd->modifier.name);
     recalc_emitter_field(depsgraph, ob, edit->psys);
@@ -5554,7 +5556,7 @@ void PARTICLE_OT_particle_edit_toggle(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_particle_edit_toggle";
   ot->description = "Toggle particle edit mode";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = particle_edit_toggle_exec;
   ot->poll = particle_edit_toggle_poll;
 
@@ -5608,7 +5610,7 @@ void PARTICLE_OT_edited_clear(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_edited_clear";
   ot->description = "Undo all edition performed on the particle system";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = clear_edited_exec;
   ot->poll = particle_edit_toggle_poll;
 
@@ -5725,7 +5727,7 @@ void PARTICLE_OT_unify_length(wmOperatorType *ot)
   ot->idname = "PARTICLE_OT_unify_length";
   ot->description = "Make selected hair the same length";
 
-  /* api callbacks */
+  /* API callbacks. */
   ot->exec = unify_length_exec;
   ot->poll = PE_poll_view3d;
 

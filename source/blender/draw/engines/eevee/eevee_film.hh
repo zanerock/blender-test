@@ -55,6 +55,14 @@ class Film {
   /** For debugging purpose but could be a user option in the future. */
   static constexpr bool use_box_filter = false;
 
+  struct DepthState {
+    /** Set to 0 if reverse Z is supported, 1 otherwise. */
+    float clear_value = 1.0f;
+    /** Set to DRW_STATE_DEPTH_GREATER_EQUAL if reverse Z is supported, DRW_STATE_DEPTH_LESS_EQUAL
+     * otherwise. */
+    DRWState test_state = DRW_STATE_DEPTH_LESS_EQUAL;
+  } depth;
+
  private:
   Instance &inst_;
 
@@ -63,6 +71,10 @@ class Film {
 
   /** Are we using the compute shader/pipeline. */
   bool use_compute_;
+
+  /** Copy of v3d->shading properties used to detect viewport settings update. */
+  eViewLayerEEVEEPassType ui_render_pass_ = eViewLayerEEVEEPassType(-1);
+  std::string ui_aov_name_;
 
   /**
    * Main accumulation textures containing every render-pass except depth, cryptomatte and
@@ -176,7 +188,6 @@ class Film {
   }
 
   eViewLayerEEVEEPassType enabled_passes_get() const;
-  int cryptomatte_layer_max_get() const;
   int cryptomatte_layer_len_get() const;
 
   /** WARNING: Film and RenderBuffers use different storage types for AO and Shadow. */
