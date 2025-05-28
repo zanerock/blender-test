@@ -836,7 +836,7 @@ template<typename TexT, typename OutT> struct NanoVDBInterpolator {
 #undef SET_CUBIC_SPLINE_WEIGHTS
 
 ccl_device float4
-kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differential2 dxy)
+kernel_image_interp(KernelGlobals kg, const int id, float u, float v, differential2 duv)
 {
   const ccl_global KernelImageTexture &tex = kernel_data_fetch(image_textures, id);
   const ccl_global KernelImageInfo *info;
@@ -846,28 +846,28 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
   // needed for full image sampling. Would be simpler if everything was tiled.
   switch (tex.extension) {
     case EXTENSION_REPEAT:
-      x = x - floorf(x);
-      y = y - floorf(y);
+      u = u - floorf(u);
+      v = v - floorf(v);
       break;
     case EXTENSION_CLIP:
       // TODO: implement this somehow with interpolation
-      if (x < 0.0f || x > 1.0f || y < 0.0f || y > 1.0f) {
+      if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) {
         return zero_float4();
       }
       break;
     case EXTENSION_EXTEND:
-      x = clamp(x, 0.0f, 1.0f);
-      y = clamp(y, 0.0f, 1.0f);
+      u = clamp(u, 0.0f, 1.0f);
+      v = clamp(v, 0.0f, 1.0f);
       break;
     case EXTENSION_MIRROR:
-      // TODO: replace fmod with x - floor(x)?
-      x = fmodf(fabsf(x + (x < 0)), 2.0f);
-      if (x >= 1.0f) {
-        x = 2.0f - x - 1.0f;
+      // TODO: replace fmod with u - floor(u)?
+      u = fmodf(fabsf(u + (u < 0)), 2.0f);
+      if (u >= 1.0f) {
+        u = 2.0f - u - 1.0f;
       }
-      y = fmodf(fabsf(y + (y < 0)), 2.0f);
-      if (y >= 1.0f) {
-        y = 2.0f - y - 1.0f;
+      v = fmodf(fabsf(v + (v < 0)), 2.0f);
+      if (v >= 1.0f) {
+        v = 2.0f - v - 1.0f;
       }
       break;
     default:
@@ -875,9 +875,12 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
       return zero_float4();
   }
 
+  float2 xy = zero_float2();
+
   if (tex.tile_descriptor_offset != UINT_MAX) {
     /* Tile mapping */
-    const KernelTileDescriptor tile_descriptor = kernel_image_tile_map(kg, tex, x, y, dxy);
+    const KernelTileDescriptor tile_descriptor = kernel_image_tile_map(
+        kg, tex, make_float2(u, v), duv, xy);
 
     if (!kernel_tile_descriptor_loaded(tile_descriptor)) {
       if (tile_descriptor == KERNEL_TILE_LOAD_FAILED) {
@@ -896,8 +899,7 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
     }
 
     /* Convert to pixel space. */
-    x *= tex.width;
-    y *= tex.height;
+    xy = make_float2(u * tex.width, v * tex.height);
 
     info = &kernel_data_fetch(image_info, tex.slot);
   }
@@ -908,29 +910,29 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
 
   switch (info->data_type) {
     case IMAGE_DATA_TYPE_HALF: {
-      const float f = TextureInterpolator<half, float>::interp(*info, x, y);
+      const float f = TextureInterpolator<half, float>::interp(*info, xy.x, xy.y);
       return make_float4(f, f, f, 1.0f);
     }
     case IMAGE_DATA_TYPE_BYTE: {
-      const float f = TextureInterpolator<uchar, float>::interp(*info, x, y);
+      const float f = TextureInterpolator<uchar, float>::interp(*info, xy.x, xy.y);
       return make_float4(f, f, f, 1.0f);
     }
     case IMAGE_DATA_TYPE_USHORT: {
-      const float f = TextureInterpolator<uint16_t, float>::interp(*info, x, y);
+      const float f = TextureInterpolator<uint16_t, float>::interp(*info, xy.x, xy.y);
       return make_float4(f, f, f, 1.0f);
     }
     case IMAGE_DATA_TYPE_FLOAT: {
-      const float f = TextureInterpolator<float, float>::interp(*info, x, y);
+      const float f = TextureInterpolator<float, float>::interp(*info, xy.x, xy.y);
       return make_float4(f, f, f, 1.0f);
     }
     case IMAGE_DATA_TYPE_HALF4:
-      return TextureInterpolator<half4>::interp(*info, x, y);
+      return TextureInterpolator<half4>::interp(*info, xy.x, xy.y);
     case IMAGE_DATA_TYPE_BYTE4:
-      return TextureInterpolator<uchar4>::interp(*info, x, y);
+      return TextureInterpolator<uchar4>::interp(*info, xy.x, xy.y);
     case IMAGE_DATA_TYPE_USHORT4:
-      return TextureInterpolator<ushort4>::interp(*info, x, y);
+      return TextureInterpolator<ushort4>::interp(*info, xy.x, xy.y);
     case IMAGE_DATA_TYPE_FLOAT4:
-      return TextureInterpolator<float4>::interp(*info, x, y);
+      return TextureInterpolator<float4>::interp(*info, xy.x, xy.y);
     default:
       assert(0);
       return IMAGE_TEXTURE_MISSING_RGBA;

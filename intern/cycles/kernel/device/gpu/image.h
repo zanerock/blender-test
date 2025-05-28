@@ -272,31 +272,31 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
 
   /* Wrapping. */
   // TODO: redundant with wrapping in image sampling, but that one is currently
-  // need for full image sampling. Would be simpler if everything was tiled.
+  // needed for full image sampling. Would be simpler if everything was tiled.
   switch (tex.extension) {
     case EXTENSION_REPEAT:
-      x = x - floorf(x);
-      y = y - floorf(y);
+      u = u - floorf(u);
+      v = v - floorf(v);
       break;
     case EXTENSION_CLIP:
       // TODO: implement this somehow with interpolation
-      if (x < 0.0f || x > 1.0f || y < 0.0f || y > 1.0f) {
+      if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) {
         return zero_float4();
       }
       break;
     case EXTENSION_EXTEND:
-      x = clamp(x, 0.0f, 1.0f);
-      y = clamp(y, 0.0f, 1.0f);
+      u = clamp(u, 0.0f, 1.0f);
+      v = clamp(v, 0.0f, 1.0f);
       break;
     case EXTENSION_MIRROR:
-      // TODO: replace fmod with x - floor(x)?
-      x = fmodf(fabsf(x + (x < 0)), 2.0f);
-      if (x >= 1.0f) {
-        x = 2.0f - x - 1.0f;
+      // TODO: replace fmod with u - floor(u)?
+      u = fmodf(fabsf(u + (u < 0)), 2.0f);
+      if (u >= 1.0f) {
+        u = 2.0f - u - 1.0f;
       }
-      y = fmodf(fabsf(y + (y < 0)), 2.0f);
-      if (y >= 1.0f) {
-        y = 2.0f - y - 1.0f;
+      v = fmodf(fabsf(v + (v < 0)), 2.0f);
+      if (v >= 1.0f) {
+        v = 2.0f - v - 1.0f;
       }
       break;
     default:
@@ -304,9 +304,12 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
       return zero_float4();
   }
 
+  float2 xy = zero_float2();
+
   if (tex.tile_descriptor_offset != UINT_MAX) {
     /* Tile mapping */
-    const KernelTileDescriptor tile_descriptor = kernel_image_tile_map(kg, tex, x, y, dxy);
+    const KernelTileDescriptor tile_descriptor = kernel_image_tile_map(
+        kg, tex, make_float2(u, v), duv, xy);
 
     if (!kernel_tile_descriptor_loaded(tile_descriptor)) {
       if (tile_descriptor == KERNEL_TILE_LOAD_FAILED) {
@@ -320,8 +323,8 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
 
     /* Convert to normalized space again. */
     // TODO: avoid this, or at least turn division into multiplication
-    x /= info->width;
-    y /= info->height;
+    xy.x /= info->width;
+    xy.y /= info->height;
   }
   else {
     /* Full image sampling. */
@@ -338,11 +341,11 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
       texture_type == IMAGE_DATA_TYPE_HALF4 || texture_type == IMAGE_DATA_TYPE_USHORT4)
   {
     if (info->interpolation == INTERPOLATION_CUBIC || info->interpolation == INTERPOLATION_SMART) {
-      return kernel_image_interp_bicubic<float4>(*info, x, y);
+      return kernel_image_interp_bicubic<float4>(*info, xy.x, xy.y);
     }
     else {
       ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info->data;
-      return ccl_gpu_image_object_read_2D<float4>(tex, x, y);
+      return ccl_gpu_image_object_read_2D<float4>(tex, xy.x, xy.y);
     }
   }
   /* float, byte and half */
@@ -350,11 +353,11 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
     float f;
 
     if (info->interpolation == INTERPOLATION_CUBIC || info->interpolation == INTERPOLATION_SMART) {
-      f = kernel_image_interp_bicubic<float>(*info, x, y);
+      f = kernel_image_interp_bicubic<float>(*info, xy.x, xy.y);
     }
     else {
       ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info->data;
-      f = ccl_gpu_image_object_read_2D<float>(tex, x, y);
+      f = ccl_gpu_image_object_read_2D<float>(tex, xy.x, xy.y);
     }
 
     return make_float4(f, f, f, 1.0f);
