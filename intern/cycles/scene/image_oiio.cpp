@@ -548,15 +548,19 @@ bool OIIOImageLoader::load_pixels_tile(const ImageMetaData &metadata,
 {
   assert(metadata.tile_size != 0);
 
+  if (filehandle_failed) {
+    return false;
+  }
   if (!filehandle) {
     filehandle = unique_ptr<ImageInput>(ImageInput::create(filepath.string()));
     if (!filehandle) {
+      filehandle_failed = true;
       return false;
     }
 
-    // TODO: don't keep retrying on failure?
     ImageSpec spec = ImageSpec();
     if (!filehandle->open(filepath.string(), spec)) {
+      filehandle_failed = true;
       filehandle.reset();
       return false;
     }

@@ -42,6 +42,7 @@ class OIIOImageLoader : public ImageLoader {
  protected:
   ustring filepath;
   unique_ptr<ImageInput> filehandle;
+  bool filehandle_failed = false;
 };
 
 CCL_NAMESPACE_END
