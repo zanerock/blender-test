@@ -88,7 +88,9 @@ class BlenderSync {
   void free_data_after_sync(BL::Depsgraph &b_depsgraph);
 
   /* get parameters */
-  static SceneParams get_scene_params(BL::Scene &b_scene,
+  static SceneParams get_scene_params(BL::Preferences &b_preferences,
+                                      BL::BlendData &b_data,
+                                      BL::Scene &b_scene,
                                       const bool background,
                                       const bool use_developer_ui);
   static SessionParams get_session_params(BL::RenderEngine &b_engine,

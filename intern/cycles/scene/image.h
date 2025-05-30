@@ -28,6 +28,7 @@ class ImageManager;
 class Progress;
 class RenderStats;
 class Scene;
+class SceneParams;
 class ColorSpaceProcessor;
 class VDBImageLoader;
 
@@ -97,6 +98,13 @@ class ImageLoader {
  public:
   ImageLoader();
   virtual ~ImageLoader() = default;
+
+  /* Enable use of the texture cache for this image, if supported by the image loader. */
+  virtual bool resolve_texture_cache(const bool /*auto_generate*/,
+                                     const string & /*texture_cache_path*/)
+  {
+    return false;
+  }
 
   /* Load metadata without actual image yet, should be fast. */
   virtual bool load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata) = 0;
@@ -186,7 +194,7 @@ class ImageHandle {
  * texture images and 3D volume images. */
 class ImageManager {
  public:
-  explicit ImageManager(const DeviceInfo &info);
+  explicit ImageManager(const DeviceInfo &info, const SceneParams &params);
   ~ImageManager();
 
   ImageHandle add_image(const string &filename, const ImageParams &params);
@@ -250,6 +258,10 @@ class ImageManager {
   vector<unique_ptr<Image>> images;
   ImageCache image_cache;
   void *osl_texture_system;
+
+  bool use_texture_cache = true;
+  bool auto_texture_cache = false;
+  std::string texture_cache_path;
 
   size_t add_image_slot(unique_ptr<ImageLoader> &&loader,
                         const ImageParams &params,

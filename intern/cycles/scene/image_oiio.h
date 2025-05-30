@@ -7,6 +7,7 @@
 #include "scene/image.h"
 
 #include "util/image.h"
+#include "util/string.h"
 
 CCL_NAMESPACE_BEGIN
 
@@ -14,6 +15,8 @@ class OIIOImageLoader : public ImageLoader {
  public:
   OIIOImageLoader(const string &filepath);
   ~OIIOImageLoader() override;
+
+  bool resolve_texture_cache(const bool auto_generate, const string &texture_cache_path) override;
 
   bool load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata) override;
 
@@ -40,7 +43,10 @@ class OIIOImageLoader : public ImageLoader {
   bool equals(const ImageLoader &other) const override;
 
  protected:
-  ustring filepath;
+  const string &get_filepath() const;
+
+  string original_filepath;
+  string texture_cache_filepath;
   unique_ptr<ImageInput> filehandle;
   bool filehandle_failed = false;
 };

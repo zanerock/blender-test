@@ -292,6 +292,7 @@ typedef struct UserDef {
   /* EXR cache path */
   char render_cachedir[/*FILE_MAXDIR*/ 768];
   char textudir[/*FILE_MAXDIR*/ 768];
+  char texture_cachedir[/*FILE_MAXDIR*/ 768];
   /* Deprecated, use #UserDef.script_directories instead. */
   char pythondir_legacy[/*FILE_MAXDIR*/ 768] DNA_DEPRECATED;
   char sounddir[/*FILE_MAXDIR*/ 768];

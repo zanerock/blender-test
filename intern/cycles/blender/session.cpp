@@ -111,7 +111,7 @@ void BlenderSession::create_session()
   const SessionParams session_params = BlenderSync::get_session_params(
       b_engine, b_userpref, b_scene, background);
   const SceneParams scene_params = BlenderSync::get_scene_params(
-      b_scene, background, use_developer_ui);
+      b_userpref, b_data, b_scene, background, use_developer_ui);
   const bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
   /* reset status/progress */
@@ -198,7 +198,7 @@ void BlenderSession::reset_session(BL::BlendData &b_data, BL::Depsgraph &b_depsg
   const SessionParams session_params = BlenderSync::get_session_params(
       b_engine, b_userpref, b_scene, background);
   const SceneParams scene_params = BlenderSync::get_scene_params(
-      b_scene, background, use_developer_ui);
+      b_userpref, b_data, b_scene, background, use_developer_ui);
 
   if (scene->params.modified(scene_params) || session->params.modified(session_params) ||
       !this->b_render.use_persistent_data())
@@ -781,7 +781,7 @@ void BlenderSession::synchronize(BL::Depsgraph &b_depsgraph_)
   const SessionParams session_params = BlenderSync::get_session_params(
       b_engine, b_userpref, b_scene, background);
   const SceneParams scene_params = BlenderSync::get_scene_params(
-      b_scene, background, use_developer_ui);
+      b_userpref, b_data, b_scene, background, use_developer_ui);
   const bool session_pause = BlenderSync::get_session_pause(b_scene, background);
 
   if (session->params.modified(session_params) || scene->params.modified(scene_params)) {

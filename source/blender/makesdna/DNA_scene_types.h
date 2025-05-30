@@ -815,7 +815,10 @@ typedef struct RenderData {
   char seq_rend_type;
   /** Flag use for sequence render/draw. */
   char seq_flag;
-  char _pad5[3];
+  char _pad5[1];
+
+  /* Texture cache */
+  short texture_cache_size;
 
   /* Render simplify. */
   short simplify_subsurf;
@@ -2287,6 +2290,8 @@ enum {
   R_SCEMODE_UNUSED_19 = 1 << 19, /* cleared */
   R_EXR_CACHE_FILE = 1 << 20,
   R_MULTIVIEW = 1 << 21,
+  R_USE_TEXTURE_CACHE = 1 << 22,
+  R_TEXTURE_CACHE_AUTO_GENERATE = 1 << 23,
 };
 
 /** #RenderData::stamp */

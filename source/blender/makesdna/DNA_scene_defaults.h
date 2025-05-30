@@ -100,7 +100,7 @@
     /* BakeData */ \
     .bake = _DNA_DEFAULT_BakeData, \
  \
-    .scemode = R_DOCOMP | R_DOSEQ | R_EXTENSION, \
+    .scemode = R_DOCOMP | R_DOSEQ | R_EXTENSION | R_USE_TEXTURE_CACHE | R_TEXTURE_CACHE_AUTO_GENERATE, \
  \
     .pic = "//", \
  \
@@ -119,6 +119,8 @@
     .simplify_subsurf = 6, \
     .simplify_particles = 1.0f, \
     .simplify_volumes = 1.0f, \
+ \
+    .texture_cache_size = 8192, \
  \
     .border.xmin = 0.0f, \
     .border.ymin = 0.0f, \

@@ -588,6 +588,15 @@ bool path_is_directory(const string &path)
   return S_ISDIR(st.st_mode);
 }
 
+bool path_is_file(const string &path)
+{
+  path_stat_t st;
+  if (path_stat(path, &st) != 0) {
+    return false;
+  }
+  return !S_ISDIR(st.st_mode);
+}
+
 static void path_files_md5_hash_recursive(MD5Hash &hash, const string &dir)
 {
   if (path_exists(dir)) {
@@ -644,10 +653,10 @@ static bool create_directories_recursivey(const string &path)
   return path_is_directory(path);
 }
 
-void path_create_directories(const string &filepath)
+bool path_create_directories(const string &filepath)
 {
   const string path = path_dirname(filepath);
-  create_directories_recursivey(path);
+  return create_directories_recursivey(path);
 }
 
 bool path_write_binary(const string &path, const vector<uint8_t> &binary)

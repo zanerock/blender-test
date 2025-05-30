@@ -34,6 +34,7 @@ const UserDef U_default = {
     .fontdir = "//",
     .renderdir = "//",
     .render_cachedir = "",
+    .texture_cachedir = "texture_cache",
     .textudir = "//",
     .script_directories = {NULL, NULL},
     .sounddir = "//",

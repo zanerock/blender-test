@@ -521,7 +521,7 @@ static inline string blender_absolute_path(BL::BlendData &b_data, BL::ID &b_id, 
   if (path.size() >= 2 && path[0] == '/' && path[1] == '/') {
     string dirname;
 
-    if (b_id.library()) {
+    if (b_id && b_id.library()) {
       BL::ID b_library_id(b_id.library());
       dirname = blender_absolute_path(b_data, b_library_id, b_id.library().filepath());
     }

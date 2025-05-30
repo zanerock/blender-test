@@ -270,11 +270,15 @@ bool ImageLoader::is_vdb_loader() const
 
 /* Image Manager */
 
-ImageManager::ImageManager(const DeviceInfo &info)
+ImageManager::ImageManager(const DeviceInfo &info, const SceneParams &params)
 {
   need_update_ = true;
   osl_texture_system = nullptr;
   animation_frame = 0;
+
+  use_texture_cache = params.use_texture_cache;
+  auto_texture_cache = params.auto_texture_cache;
+  texture_cache_path = params.texture_cache_path;
 
   /* Set image limits */
   features.has_nanovdb = info.has_nanovdb;
@@ -431,6 +435,11 @@ size_t ImageManager::add_image_slot(unique_ptr<ImageLoader> &&loader,
                                     const bool builtin)
 {
   size_t slot;
+
+  /* Change image to use tx file if supported. */
+  if (use_texture_cache) {
+    loader->resolve_texture_cache(auto_texture_cache, texture_cache_path);
+  }
 
   const thread_scoped_lock device_lock(images_mutex);
 
@@ -972,7 +981,7 @@ void ImageManager::device_load_image(Device *device,
   tex.transform_3d = img->metadata.transform_3d;
   tex.average_color = img->metadata.average_color;
 
-  if (img->metadata.tile_size) {
+  if (use_texture_cache && img->metadata.tile_size) {
     assert(is_power_of_two(img->metadata.tile_size));
 
     device_load_image_tiled(scene, slot);

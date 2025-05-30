@@ -7,15 +7,137 @@
 #include "util/image.h"
 #include "util/log.h"
 #include "util/path.h"
+#include "util/string.h"
 #include "util/texture.h"
 #include "util/types_base.h"
 #include "util/unique_ptr.h"
 
+#include <OpenImageIO/filesystem.h>
+#include <OpenImageIO/imagebufalgo.h>
+
 CCL_NAMESPACE_BEGIN
 
-OIIOImageLoader::OIIOImageLoader(const string &filepath) : filepath(filepath) {}
+OIIOImageLoader::OIIOImageLoader(const string &filepath) : original_filepath(filepath) {}
 
 OIIOImageLoader::~OIIOImageLoader() = default;
+
+static bool texture_cache_file_outdated(const string &filepath, const string &tx_filepath)
+{
+  if (!path_is_file(tx_filepath)) {
+    return true;
+  }
+
+  std::time_t in_time = OIIO::Filesystem::last_write_time(filepath);
+  std::time_t out_time = OIIO::Filesystem::last_write_time(tx_filepath);
+
+  /* TODO: Compare metadata? maketx:full_command_line? */
+
+  if (in_time == out_time) {
+    VLOG_INFO << "Using texture cache file: " << tx_filepath;
+    return false;
+  }
+
+  VLOG_INFO << "Texture cache file is outdated: " << tx_filepath;
+  return true;
+}
+
+bool OIIOImageLoader::resolve_texture_cache(const bool auto_generate,
+                                            const string &texture_cache_path)
+{
+  /* Nothing to do if file doesn't even exist. */
+  const string &filepath = get_filepath();
+
+  if (!path_exists(filepath)) {
+    return false;
+  }
+
+  /* TODO: progress display for users. */
+  /* TODO: delay auto generating in case image is not used. */
+  /* TODO: check if it's is a texture cache file we can actually use? */
+  /* TODO: different filenames for different wrap modes, colorspace, etc? */
+  /* TODO: avoid overwriting other file types? */
+  const char *ext = ".tx";
+  if (string_endswith(filepath, ext)) {
+    return true;
+  }
+
+  /* TODO: check if path_is_relative function properly handles things like network drives. */
+  const string tx_filename = path_filename(filepath) + ext;
+  const string tx_filepath = path_join(path_is_relative(texture_cache_path) ?
+                                           path_join(path_dirname(filepath), texture_cache_path) :
+                                           texture_cache_path,
+                                       tx_filename);
+  if (!texture_cache_file_outdated(filepath, tx_filepath)) {
+    texture_cache_filepath = tx_filepath;
+    return true;
+  }
+
+  /* Check in the same directory. */
+  if (!texture_cache_path.empty()) {
+    const string tx_local_filepath = filepath + ext;
+    if (!texture_cache_file_outdated(filepath, tx_local_filepath)) {
+      texture_cache_filepath = tx_local_filepath;
+      return true;
+    }
+  }
+
+  /* Check in default subdirectory. */
+  /* TODO: not sure if we should do this. */
+  const char *default_texture_cache_dir = "texture_cache";
+  if (texture_cache_path != default_texture_cache_dir) {
+    const string tx_default_filepath = path_join(
+        path_join(path_dirname(filepath), default_texture_cache_dir), tx_filename);
+    if (!texture_cache_file_outdated(filepath, tx_default_filepath)) {
+      texture_cache_filepath = tx_default_filepath;
+      return true;
+    }
+  }
+
+  if (!auto_generate) {
+    return false;
+  }
+
+  /* Auto generate. */
+  VLOG_INFO << "Auto generating texture cache file: " << tx_filepath;
+
+  if (!path_create_directories(tx_filepath)) {
+    VLOG_WARNING << "Failed to create directory for texture cache: " << path_dirname(tx_filepath);
+    return false;
+  }
+
+  /* TODO: Create ImageCache to limit memory usage, enable forcefloat? */
+  /* TODO: MakeTxEnvLatl support. */
+  ImageSpec configspec;
+  configspec.attribute("maketx:constant_color_detect", true);
+  configspec.attribute("maketx:monochrome_detect", true);
+  configspec.attribute("maketx:compute_average", true);
+  configspec.attribute("maketx:fixnan", true);
+  /* TODO: temporarily resize to power of two until we can load other resolutions. */
+  configspec.attribute("maketx:resize", true);
+  /* TODO: configspec.attribute("maketx:filtername", filtername); */
+  /* TODO: configspec.attribute("maketx:prman_options", true); */
+  /* TODO: configspec.attribute("maketx:unpremult", associate_alpha); */
+  /* TODO: configspec.attribute("maketx:incolorspace", colorspace); */
+  /* TODO: configspec.attribute("maketx:wrapmodes", "black,black"); */
+  /* TODO: configspec.attribute("maketx:full_command_line", full_command_line); */
+  /* TODO: configspec.attribtue("maketx:set_full_to_pixels", true); */
+
+  OIIO::ImageBufAlgo::MakeTextureMode mode = OIIO::ImageBufAlgo::MakeTxTexture;
+  std::stringstream outstream;
+
+  if (!OIIO::ImageBufAlgo::make_texture(mode, filepath, tx_filepath, configspec, &outstream)) {
+    /* TODO: this will contain non-errors as well. OIIO::geterror() gets just the errors but is not
+     * thread safe. */
+    VLOG_WARNING << "Failed to generate tx file: " << outstream.str();
+    return false;
+  }
+
+  /* Stamp with same time as input image file to detect updates. */
+  OIIO::Filesystem::last_write_time(tx_filepath, OIIO::Filesystem::last_write_time(filepath));
+  assert(path_is_file(tx_filepath));
+  texture_cache_filepath = tx_filepath;
+  return true;
+}
 
 static bool load_metadata_color(const ImageSpec &spec, const char *name, float4 &r_color)
 {
@@ -62,24 +184,25 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
                                     ImageMetaData &metadata)
 {
   /* Perform preliminary checks, with meaningful logging. */
-  if (!path_exists(filepath.string())) {
-    VLOG_WARNING << "File " << filepath.string() << " does not exist.";
+  const string &filepath = get_filepath();
+  if (!path_exists(filepath)) {
+    VLOG_WARNING << "File " << filepath << " does not exist.";
     return false;
   }
-  if (path_is_directory(filepath.string())) {
-    VLOG_WARNING << "File " << filepath.string() << " is a directory, can't use as image.";
+  if (path_is_directory(filepath)) {
+    VLOG_WARNING << "File " << filepath << " is a directory, can't use as image.";
     return false;
   }
 
-  unique_ptr<ImageInput> in(ImageInput::create(filepath.string()));
+  unique_ptr<ImageInput> in(ImageInput::create(filepath));
   if (!in) {
-    VLOG_WARNING << "File " << filepath.string() << " failed to open.";
+    VLOG_WARNING << "File " << filepath << " failed to open.";
     return false;
   }
 
   ImageSpec spec;
-  if (!in->open(filepath.string(), spec)) {
-    VLOG_WARNING << "File " << filepath.string() << " failed to open.";
+  if (!in->open(filepath, spec)) {
+    VLOG_WARNING << "File " << filepath << " failed to open.";
     return false;
   }
 
@@ -285,7 +408,8 @@ static bool oiio_load_pixels_full(const ImageMetaData &metadata,
 bool OIIOImageLoader::load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels)
 {
   /* load image from file through OIIO */
-  unique_ptr<ImageInput> in = unique_ptr<ImageInput>(ImageInput::create(filepath.string()));
+  const string &filepath = get_filepath();
+  unique_ptr<ImageInput> in = unique_ptr<ImageInput>(ImageInput::create(filepath));
   if (!in) {
     return false;
   }
@@ -298,7 +422,7 @@ bool OIIOImageLoader::load_pixels_full(const ImageMetaData &metadata, uint8_t *p
    * much precision loss when we load it as half float to do a color-space transform. */
   config.attribute("oiio:UnassociatedAlpha", 1);
 
-  if (!in->open(filepath.string(), spec, config)) {
+  if (!in->open(filepath, spec, config)) {
     return false;
   }
 
@@ -604,14 +728,15 @@ bool OIIOImageLoader::load_pixels_tile(const ImageMetaData &metadata,
     return false;
   }
   if (!filehandle) {
-    filehandle = unique_ptr<ImageInput>(ImageInput::create(filepath.string()));
+    const string &filepath = get_filepath();
+    filehandle = unique_ptr<ImageInput>(ImageInput::create(filepath));
     if (!filehandle) {
       filehandle_failed = true;
       return false;
     }
 
     ImageSpec spec = ImageSpec();
-    if (!filehandle->open(filepath.string(), spec)) {
+    if (!filehandle->open(filepath, spec)) {
       filehandle_failed = true;
       filehandle.reset();
       return false;
@@ -671,18 +796,23 @@ void OIIOImageLoader::drop_file_handle()
 
 string OIIOImageLoader::name() const
 {
-  return path_filename(filepath.string());
+  return path_filename(get_filepath());
+}
+
+const string &OIIOImageLoader::get_filepath() const
+{
+  return (texture_cache_filepath.empty()) ? original_filepath : texture_cache_filepath;
 }
 
 ustring OIIOImageLoader::osl_filepath() const
 {
-  return filepath;
+  return ustring(get_filepath());
 }
 
 bool OIIOImageLoader::equals(const ImageLoader &other) const
 {
   const OIIOImageLoader &other_loader = (const OIIOImageLoader &)other;
-  return filepath == other_loader.filepath;
+  return original_filepath == other_loader.original_filepath;
 }
 
 CCL_NAMESPACE_END

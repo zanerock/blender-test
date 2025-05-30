@@ -841,7 +841,9 @@ void BlenderSync::free_data_after_sync(BL::Depsgraph &b_depsgraph)
 
 /* Scene Parameters */
 
-SceneParams BlenderSync::get_scene_params(BL::Scene &b_scene,
+SceneParams BlenderSync::get_scene_params(BL::Preferences &b_preferences,
+                                          BL::BlendData &b_data,
+                                          BL::Scene &b_scene,
                                           const bool background,
                                           const bool use_developer_ui)
 {
@@ -890,6 +892,11 @@ SceneParams BlenderSync::get_scene_params(BL::Scene &b_scene,
   params.bvh_layout = DebugFlags().cpu.bvh_layout;
 
   params.background = background;
+  BL::ID dummy_id(PointerRNA_NULL);
+  params.use_texture_cache = b_scene.render().use_texture_cache();
+  params.auto_texture_cache = b_scene.render().use_auto_generate_texture_cache();
+  params.texture_cache_path = blender_absolute_path(
+      b_data, dummy_id, b_preferences.filepaths().texture_cache_directory());
 
   return params;
 }
