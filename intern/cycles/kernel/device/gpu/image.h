@@ -265,7 +265,7 @@ ccl_device_noinline OutT kernel_image_interp_nanovdb(const ccl_global KernelImag
 #endif
 
 ccl_device float4
-kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differential2 dxy)
+kernel_image_interp(KernelGlobals kg, const int id, float u, float v, differential2 duv)
 {
   const ccl_global KernelImageTexture &tex = kernel_data_fetch(image_textures, id);
   const ccl_global KernelImageInfo *info;
@@ -304,10 +304,9 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
       return zero_float4();
   }
 
-  float2 xy = zero_float2();
-
   if (tex.tile_descriptor_offset != UINT_MAX) {
     /* Tile mapping */
+    float2 xy = zero_float2();
     const KernelTileDescriptor tile_descriptor = kernel_image_tile_map(
         kg, tex, make_float2(u, v), duv, xy);
 
@@ -323,8 +322,8 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
 
     /* Convert to normalized space again. */
     // TODO: avoid this, or at least turn division into multiplication
-    xy.x /= info->width;
-    xy.y /= info->height;
+    u = xy.x / info->width;
+    v = xy.y / info->height;
   }
   else {
     /* Full image sampling. */
@@ -341,11 +340,11 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
       texture_type == IMAGE_DATA_TYPE_HALF4 || texture_type == IMAGE_DATA_TYPE_USHORT4)
   {
     if (info->interpolation == INTERPOLATION_CUBIC || info->interpolation == INTERPOLATION_SMART) {
-      return kernel_image_interp_bicubic<float4>(*info, xy.x, xy.y);
+      return kernel_image_interp_bicubic<float4>(*info, u, v);
     }
     else {
       ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info->data;
-      return ccl_gpu_image_object_read_2D<float4>(tex, xy.x, xy.y);
+      return ccl_gpu_image_object_read_2D<float4>(tex, u, v);
     }
   }
   /* float, byte and half */
@@ -353,11 +352,11 @@ kernel_image_interp(KernelGlobals kg, const int id, float x, float y, differenti
     float f;
 
     if (info->interpolation == INTERPOLATION_CUBIC || info->interpolation == INTERPOLATION_SMART) {
-      f = kernel_image_interp_bicubic<float>(*info, xy.x, xy.y);
+      f = kernel_image_interp_bicubic<float>(*info, u, v);
     }
     else {
       ccl_gpu_image_object_2D tex = (ccl_gpu_image_object_2D)info->data;
-      f = ccl_gpu_image_object_read_2D<float>(tex, xy.x, xy.y);
+      f = ccl_gpu_image_object_read_2D<float>(tex, u, v);
     }
 
     return make_float4(f, f, f, 1.0f);
