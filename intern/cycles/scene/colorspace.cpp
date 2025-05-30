@@ -283,7 +283,9 @@ template<typename T> inline void cast_from_float4(T *data, const float4 value)
 template<typename T, bool compress_as_srgb = false>
 inline void processor_apply_pixels_rgba(const OCIO::Processor *processor,
                                         T *pixels,
-                                        const size_t num_pixels)
+                                        const int64_t width,
+                                        const int64_t height,
+                                        const int64_t y_stride)
 {
   /* TODO: implement faster version for when we know the conversion
    * is a simple matrix transform between linear spaces. In that case
@@ -291,42 +293,51 @@ inline void processor_apply_pixels_rgba(const OCIO::Processor *processor,
   const OCIO::ConstCPUProcessorRcPtr device_processor = processor->getDefaultCPUProcessor();
 
   /* Process large images in chunks to keep temporary memory requirement down. */
-  const size_t chunk_size = std::min((size_t)(16 * 1024 * 1024), num_pixels);
-  vector<float4> float_pixels(chunk_size);
+  const int64_t chunk_rows = divide_up(std::min((int64_t)(16 * 1024 * 1024), width * height),
+                                       width);
+  vector<float4> float_pixels(chunk_rows * width);
 
-  for (size_t j = 0; j < num_pixels; j += chunk_size) {
-    const size_t width = std::min(chunk_size, num_pixels - j);
+  for (int64_t row = 0; row < height; row += chunk_rows) {
+    const int64_t num_rows = std::min(chunk_rows, height - row);
 
-    for (size_t i = 0; i < width; i++) {
-      float4 value = cast_to_float4(pixels + 4 * (j + i));
+    for (int64_t j = 0; j < num_rows; j++) {
+      T *pixel = pixels + (row + j) * y_stride * 4;
+      float4 *float_pixel = float_pixels.data() + j * width;
+      for (int64_t i = 0; i < width; i++, pixel += 4, float_pixel++) {
+        float4 value = cast_to_float4(pixel);
 
-      if (!(value.w <= 0.0f || value.w == 1.0f)) {
-        const float inv_alpha = 1.0f / value.w;
-        value.x *= inv_alpha;
-        value.y *= inv_alpha;
-        value.z *= inv_alpha;
+        if (!(value.w <= 0.0f || value.w == 1.0f)) {
+          const float inv_alpha = 1.0f / value.w;
+          value.x *= inv_alpha;
+          value.y *= inv_alpha;
+          value.z *= inv_alpha;
+        }
+
+        *float_pixel = value;
       }
-
-      float_pixels[i] = value;
     }
 
-    const OCIO::PackedImageDesc desc((float *)float_pixels.data(), width, 1, 4);
+    const OCIO::PackedImageDesc desc((float *)float_pixels.data(), num_rows * width, 1, 4);
     device_processor->apply(desc);
 
-    for (size_t i = 0; i < width; i++) {
-      float4 value = float_pixels[i];
+    for (int64_t j = 0; j < num_rows; j++) {
+      T *pixel = pixels + (row + j) * y_stride * 4;
+      float4 *float_pixel = float_pixels.data() + j * width;
+      for (int64_t i = 0; i < width; i++, pixel += 4, float_pixel++) {
+        float4 value = *float_pixel;
 
-      if (compress_as_srgb) {
-        value = color_linear_to_srgb_v4(value);
+        if (compress_as_srgb) {
+          value = color_linear_to_srgb_v4(value);
+        }
+
+        if (!(value.w <= 0.0f || value.w == 1.0f)) {
+          value.x *= value.w;
+          value.y *= value.w;
+          value.z *= value.w;
+        }
+
+        cast_from_float4(pixel, value);
       }
-
-      if (!(value.w <= 0.0f || value.w == 1.0f)) {
-        value.x *= value.w;
-        value.y *= value.w;
-        value.z *= value.w;
-      }
-
-      cast_from_float4(pixels + 4 * (j + i), value);
     }
   }
 }
@@ -334,37 +345,40 @@ inline void processor_apply_pixels_rgba(const OCIO::Processor *processor,
 template<typename T, bool compress_as_srgb = false>
 inline void processor_apply_pixels_grayscale(const OCIO::Processor *processor,
                                              T *pixels,
-                                             const size_t num_pixels)
+                                             const int64_t width,
+                                             const int64_t height,
+                                             const int64_t y_stride)
 {
   const OCIO::ConstCPUProcessorRcPtr device_processor = processor->getDefaultCPUProcessor();
 
   /* Process large images in chunks to keep temporary memory requirement down. */
-  const size_t chunk_size = std::min((size_t)(16 * 1024 * 1024), num_pixels);
-  vector<float> float_pixels(chunk_size * 3);
+  const int64_t chunk_rows = divide_up(std::min((int64_t)(16 * 1024 * 1024), width * height),
+                                       width);
+  vector<float> float_pixels(chunk_rows * width * 3);
 
-  for (size_t j = 0; j < num_pixels; j += chunk_size) {
-    const size_t width = std::min(chunk_size, num_pixels - j);
+  for (int64_t row = 0; row < height; row += chunk_rows) {
+    const int64_t num_rows = std::min(chunk_rows, height - row);
 
     /* Convert to 3 channels, since that's the minimum required by OpenColorIO. */
-    {
-      const T *pixel = pixels + j;
-      float *fpixel = float_pixels.data();
-      for (size_t i = 0; i < width; i++, pixel++, fpixel += 3) {
+    for (int64_t j = 0; j < num_rows; j++) {
+      T *pixel = pixels + (row + j) * y_stride;
+      float *float_pixel = float_pixels.data() + j * width * 3;
+      for (int64_t i = 0; i < width; i++, pixel++, float_pixel += 3) {
         const float f = util_image_cast_to_float<T>(*pixel);
-        fpixel[0] = f;
-        fpixel[1] = f;
-        fpixel[2] = f;
+        float_pixel[0] = f;
+        float_pixel[1] = f;
+        float_pixel[2] = f;
       }
     }
 
-    const OCIO::PackedImageDesc desc((float *)float_pixels.data(), width, 1, 3);
+    const OCIO::PackedImageDesc desc((float *)float_pixels.data(), num_rows * width, 1, 3);
     device_processor->apply(desc);
 
-    {
-      T *pixel = pixels + j;
-      const float *fpixel = float_pixels.data();
-      for (size_t i = 0; i < width; i++, pixel++, fpixel += 3) {
-        float f = average(make_float3(fpixel[0], fpixel[1], fpixel[2]));
+    for (int64_t j = 0; j < num_rows; j++) {
+      T *pixel = pixels + (row + j) * y_stride;
+      float *float_pixel = float_pixels.data() + j * width * 3;
+      for (int64_t i = 0; i < width; i++, pixel++, float_pixel += 3) {
+        float f = average(make_float3(float_pixel[0], float_pixel[1], float_pixel[2]));
         if (compress_as_srgb) {
           f = color_linear_to_srgb(f);
         }
@@ -377,8 +391,13 @@ inline void processor_apply_pixels_grayscale(const OCIO::Processor *processor,
 #endif
 
 template<typename T>
-void ColorSpaceManager::to_scene_linear(
-    ustring colorspace, T *pixels, const size_t num_pixels, bool is_rgba, bool compress_as_srgb)
+void ColorSpaceManager::to_scene_linear(ustring colorspace,
+                                        T *pixels,
+                                        const int64_t width,
+                                        const int64_t height,
+                                        const int64_t y_stride,
+                                        bool is_rgba,
+                                        bool compress_as_srgb)
 {
 #ifdef WITH_OCIO
   const OCIO::Processor *processor = (const OCIO::Processor *)get_processor(colorspace);
@@ -387,28 +406,30 @@ void ColorSpaceManager::to_scene_linear(
     if (is_rgba) {
       if (compress_as_srgb) {
         /* Compress output as sRGB. */
-        processor_apply_pixels_rgba<T, true>(processor, pixels, num_pixels);
+        processor_apply_pixels_rgba<T, true>(processor, pixels, width, height, y_stride);
       }
       else {
         /* Write output as scene linear directly. */
-        processor_apply_pixels_rgba<T>(processor, pixels, num_pixels);
+        processor_apply_pixels_rgba<T>(processor, pixels, width, height, y_stride);
       }
     }
     else {
       if (compress_as_srgb) {
         /* Compress output as sRGB. */
-        processor_apply_pixels_grayscale<T, true>(processor, pixels, num_pixels);
+        processor_apply_pixels_grayscale<T, true>(processor, pixels, width, height, y_stride);
       }
       else {
         /* Write output as scene linear directly. */
-        processor_apply_pixels_grayscale<T>(processor, pixels, num_pixels);
+        processor_apply_pixels_grayscale<T>(processor, pixels, width, height, y_stride);
       }
     }
   }
 #else
   (void)colorspace;
   (void)pixels;
-  (void)num_pixels;
+  (void)width;
+  (void)height;
+  (void)y_stride;
   (void)is_rgba;
   (void)compress_as_srgb;
 #endif
@@ -477,9 +498,13 @@ void ColorSpaceManager::init_fallback_config()
 }
 
 /* Template instantiations so we don't have to inline functions. */
-template void ColorSpaceManager::to_scene_linear(ustring, uchar *, size_t, bool, bool);
-template void ColorSpaceManager::to_scene_linear(ustring, ushort *, size_t, bool, bool);
-template void ColorSpaceManager::to_scene_linear(ustring, half *, size_t, bool, bool);
-template void ColorSpaceManager::to_scene_linear(ustring, float *, size_t, bool, bool);
+template void ColorSpaceManager::to_scene_linear(
+    ustring, uchar *, int64_t, int64_t, int64_t, bool, bool);
+template void ColorSpaceManager::to_scene_linear(
+    ustring, ushort *, int64_t, int64_t, int64_t, bool, bool);
+template void ColorSpaceManager::to_scene_linear(
+    ustring, half *, int64_t, int64_t, int64_t, bool, bool);
+template void ColorSpaceManager::to_scene_linear(
+    ustring, float *, int64_t, int64_t, int64_t, bool, bool);
 
 CCL_NAMESPACE_END

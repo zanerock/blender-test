@@ -344,6 +344,12 @@ void ImageManager::load_image_metadata(Image *img)
                                   metadata.type != IMAGE_DATA_TYPE_NANOVDB_FPN ||
                                   metadata.type != IMAGE_DATA_TYPE_NANOVDB_FP16));
 
+  /* Convert average color to scene linear colorspace. */
+  if (!is_zero(metadata.average_color) && metadata.colorspace != u_colorspace_raw) {
+    ColorSpaceManager::to_scene_linear(
+        metadata.colorspace, &metadata.average_color.x, 1, 1, 1, true, false);
+  }
+
   img->need_metadata = false;
 }
 
@@ -504,52 +510,70 @@ ImageManager::Image *ImageManager::get_image_slot(const size_t slot)
 template<typename StorageType>
 static bool conform_pixels_to_metadata_type(const ImageManager::Image *img,
                                             StorageType *pixels,
-                                            const int64_t num_pixels)
+                                            const int64_t width,
+                                            const int64_t height,
+                                            const int64_t x_stride,
+                                            const int64_t y_stride)
 {
   /* The kernel can handle 1 and 4 channel images. Anything that is not a single
    * channel image is converted to RGBA format. */
   const ImageMetaData &metadata = img->metadata;
   const int channels = metadata.channels;
-  const bool is_rgba = (metadata.type == IMAGE_DATA_TYPE_FLOAT4 ||
+  const bool is_rgba = (metadata.type == IMAGE_DATA_TYPE_BYTE4 ||
+                        metadata.type == IMAGE_DATA_TYPE_USHORT4 ||
                         metadata.type == IMAGE_DATA_TYPE_HALF4 ||
-                        metadata.type == IMAGE_DATA_TYPE_BYTE4 ||
-                        metadata.type == IMAGE_DATA_TYPE_USHORT4);
+                        metadata.type == IMAGE_DATA_TYPE_FLOAT4);
 
   if (is_rgba) {
     const StorageType one = util_image_cast_from_float<StorageType>(1.0f);
 
     if (channels == 2) {
       /* Grayscale + alpha to RGBA. */
-      for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
-        pixels[i * 4 + 3] = pixels[i * 2 + 1];
-        pixels[i * 4 + 2] = pixels[i * 2 + 0];
-        pixels[i * 4 + 1] = pixels[i * 2 + 0];
-        pixels[i * 4 + 0] = pixels[i * 2 + 0];
+      for (int64_t j = height - 1; j > 0; j--) {
+        StorageType *out_pixels = pixels + j * y_stride * 4;
+        StorageType *in_pixels = pixels + j * y_stride * x_stride;
+        for (int64_t i = width - 1; i > 0; i--) {
+          out_pixels[i * 4 + 3] = in_pixels[i * x_stride + 1];
+          out_pixels[i * 4 + 2] = in_pixels[i * x_stride + 0];
+          out_pixels[i * 4 + 1] = in_pixels[i * x_stride + 0];
+          out_pixels[i * 4 + 0] = in_pixels[i * x_stride + 0];
+        }
       }
     }
     else if (channels == 3) {
       /* RGB to RGBA. */
-      for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
-        pixels[i * 4 + 3] = one;
-        pixels[i * 4 + 2] = pixels[i * 3 + 2];
-        pixels[i * 4 + 1] = pixels[i * 3 + 1];
-        pixels[i * 4 + 0] = pixels[i * 3 + 0];
+      for (int64_t j = height - 1; j > 0; j--) {
+        StorageType *out_pixels = pixels + j * y_stride * 4;
+        StorageType *in_pixels = pixels + j * y_stride * x_stride;
+        for (int64_t i = width - 1; i > 0; i--) {
+          out_pixels[i * 4 + 3] = one;
+          out_pixels[i * 4 + 2] = in_pixels[i * x_stride + 2];
+          out_pixels[i * 4 + 1] = in_pixels[i * x_stride + 1];
+          out_pixels[i * 4 + 0] = in_pixels[i * x_stride + 0];
+        }
       }
     }
     else if (channels == 1) {
       /* Grayscale to RGBA. */
-      for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
-        pixels[i * 4 + 3] = one;
-        pixels[i * 4 + 2] = pixels[i];
-        pixels[i * 4 + 1] = pixels[i];
-        pixels[i * 4 + 0] = pixels[i];
+      for (int64_t j = height - 1; j > 0; j--) {
+        StorageType *out_pixels = pixels + j * y_stride * 4;
+        StorageType *in_pixels = pixels + j * y_stride * x_stride;
+        for (int64_t i = width - 1; i > 0; i--) {
+          out_pixels[i * 4 + 3] = one;
+          out_pixels[i * 4 + 2] = in_pixels[i * x_stride];
+          out_pixels[i * 4 + 1] = in_pixels[i * x_stride];
+          out_pixels[i * 4 + 0] = in_pixels[i * x_stride];
+        }
       }
     }
 
     /* Disable alpha if requested by the user. */
     if (img->params.alpha_type == IMAGE_ALPHA_IGNORE) {
-      for (int64_t i = num_pixels - 1, pixel = 0; pixel < num_pixels; pixel++, i--) {
-        pixels[i * 4 + 3] = one;
+      for (int64_t j = 0; j < height; j++) {
+        StorageType *out_pixels = pixels + j * y_stride * 4;
+        for (int64_t i = 0; i < width; i++) {
+          out_pixels[i * 4 + 3] = one;
+        }
       }
     }
   }
@@ -557,7 +581,7 @@ static bool conform_pixels_to_metadata_type(const ImageManager::Image *img,
   if (metadata.colorspace != u_colorspace_raw && metadata.colorspace != u_colorspace_srgb) {
     /* Convert to scene linear. */
     ColorSpaceManager::to_scene_linear(
-        metadata.colorspace, pixels, num_pixels, is_rgba, metadata.compress_as_srgb);
+        metadata.colorspace, pixels, width, height, y_stride, is_rgba, metadata.compress_as_srgb);
   }
 
   /* Make sure we don't have buggy values. */
@@ -566,23 +590,27 @@ static bool conform_pixels_to_metadata_type(const ImageManager::Image *img,
      * finite. This way we avoid possible artifacts caused by fully changed
      * hue. */
     if (is_rgba) {
-      for (int64_t i = 0; i < num_pixels; i += 4) {
-        StorageType *pixel = &pixels[i * 4];
-        if (!isfinite(pixel[0]) || !isfinite(pixel[1]) || !isfinite(pixel[2]) ||
-            !isfinite(pixel[3]))
-        {
-          pixel[0] = 0;
-          pixel[1] = 0;
-          pixel[2] = 0;
-          pixel[3] = 0;
+      for (int64_t j = 0; j < height; j++) {
+        StorageType *pixel = pixels + j * y_stride * 4;
+        for (int64_t i = 0; i < width; i++, pixel += 4) {
+          if (!isfinite(pixel[0]) || !isfinite(pixel[1]) || !isfinite(pixel[2]) ||
+              !isfinite(pixel[3]))
+          {
+            pixel[0] = 0;
+            pixel[1] = 0;
+            pixel[2] = 0;
+            pixel[3] = 0;
+          }
         }
       }
     }
     else {
-      for (int64_t i = 0; i < num_pixels; ++i) {
-        StorageType *pixel = &pixels[i];
-        if (!isfinite(pixel[0])) {
-          pixel[0] = 0;
+      for (int64_t j = 0; j < height; j++) {
+        StorageType *pixel = pixels + j * y_stride;
+        for (int64_t i = 0; i < width; i++, pixel++) {
+          if (!isfinite(pixel[0])) {
+            pixel[0] = 0;
+          }
         }
       }
     }
@@ -593,22 +621,28 @@ static bool conform_pixels_to_metadata_type(const ImageManager::Image *img,
 
 static bool conform_pixels_to_metadata(const ImageManager::Image *img,
                                        void *pixels,
-                                       const int64_t num_pixels)
+                                       const int64_t width,
+                                       const int64_t height,
+                                       const int64_t x_stride,
+                                       const int64_t y_stride)
 {
   switch (img->metadata.type) {
-    case IMAGE_DATA_TYPE_FLOAT4:
-    case IMAGE_DATA_TYPE_FLOAT:
-      return conform_pixels_to_metadata_type<float>(img, static_cast<float *>(pixels), num_pixels);
     case IMAGE_DATA_TYPE_BYTE4:
     case IMAGE_DATA_TYPE_BYTE:
-      return conform_pixels_to_metadata_type<uchar>(img, static_cast<uchar *>(pixels), num_pixels);
-    case IMAGE_DATA_TYPE_HALF4:
-    case IMAGE_DATA_TYPE_HALF:
-      return conform_pixels_to_metadata_type<half>(img, static_cast<half *>(pixels), num_pixels);
+      return conform_pixels_to_metadata_type<uchar>(
+          img, static_cast<uchar *>(pixels), width, height, x_stride, y_stride);
     case IMAGE_DATA_TYPE_USHORT:
     case IMAGE_DATA_TYPE_USHORT4:
       return conform_pixels_to_metadata_type<uint16_t>(
-          img, static_cast<uint16_t *>(pixels), num_pixels);
+          img, static_cast<uint16_t *>(pixels), width, height, x_stride, y_stride);
+    case IMAGE_DATA_TYPE_HALF4:
+    case IMAGE_DATA_TYPE_HALF:
+      return conform_pixels_to_metadata_type<half>(
+          img, static_cast<half *>(pixels), width, height, x_stride, y_stride);
+    case IMAGE_DATA_TYPE_FLOAT4:
+    case IMAGE_DATA_TYPE_FLOAT:
+      return conform_pixels_to_metadata_type<float>(
+          img, static_cast<float *>(pixels), width, height, x_stride, y_stride);
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT:
     case IMAGE_DATA_TYPE_NANOVDB_FLOAT3:
     case IMAGE_DATA_TYPE_NANOVDB_FPN:
@@ -632,6 +666,7 @@ bool ImageManager::file_load_image(Device *device, Image *img, const int texture
   const int width = img->metadata.width;
   const int height = img->metadata.height;
   const int depth = img->metadata.depth;
+  const int channels = img->metadata.channels;
 
   /* Read pixels. */
   vector<StorageType> pixels_storage;
@@ -664,12 +699,11 @@ bool ImageManager::file_load_image(Device *device, Image *img, const int texture
     return false;
   }
 
-  const int64_t num_pixels = ((int64_t)width) * height * depth;
   if (!img->loader->load_pixels_full(img->metadata, (uint8_t *)pixels)) {
     return false;
   }
 
-  const bool is_rgba = conform_pixels_to_metadata(img, pixels, num_pixels);
+  const bool is_rgba = conform_pixels_to_metadata(img, pixels, width, height, channels, width);
 
   /* Scale image down if needed. */
   if (!pixels_storage.empty()) {
@@ -869,6 +903,7 @@ void ImageManager::device_update_image_requested(Device *device, Scene *scene, I
                                                    tile_descriptor);
 
         const size_t pixel_bytes = mem.data_elements * datatype_size(mem.data_type);
+        /* TODO: Handle case where channels > 4. */
         const size_t x_stride = pixel_bytes;
         const size_t y_stride = mem.data_width * pixel_bytes;
         const size_t x_offset = kernel_tile_descriptor_offset(tile_descriptor) * tile_size_padded *
@@ -888,7 +923,12 @@ void ImageManager::device_update_image_requested(Device *device, Scene *scene, I
                                                       img->params.extension,
                                                       pixels);
 
-        conform_pixels_to_metadata(img, pixels, w * h);
+        conform_pixels_to_metadata(img,
+                                   pixels,
+                                   w + KERNEL_IMAGE_TEX_PADDING * 2,
+                                   h + KERNEL_IMAGE_TEX_PADDING * 2,
+                                   mem.data_elements,
+                                   mem.data_width);
 
         tile_descriptors[i] = (ok) ? tile_descriptor : KERNEL_TILE_LOAD_FAILED;
         scene->dscene.image_texture_tile_descriptors.tag_modified();
