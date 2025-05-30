@@ -9,6 +9,7 @@
 #include "scene/scene.h"
 #include "scene/stats.h"
 
+#include "util/color.h"
 #include "util/image.h"
 #include "util/image_impl.h"
 #include "util/log.h"
@@ -350,8 +351,13 @@ void ImageManager::load_image_metadata(Image *img)
 
   /* Convert average color to scene linear colorspace. */
   if (!is_zero(metadata.average_color) && metadata.colorspace != u_colorspace_raw) {
-    ColorSpaceManager::to_scene_linear(
-        metadata.colorspace, &metadata.average_color.x, 1, 1, 1, true, false);
+    if (metadata.colorspace == u_colorspace_srgb) {
+      metadata.average_color = color_srgb_to_linear_v4(metadata.average_color);
+    }
+    else {
+      ColorSpaceManager::to_scene_linear(
+          metadata.colorspace, &metadata.average_color.x, 1, 1, 1, true, false);
+    }
   }
 
   img->need_metadata = false;
