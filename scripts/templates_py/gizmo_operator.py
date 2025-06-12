@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2017-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # Example of an operator which uses gizmos to control its properties.
 #
 # Usage: Run this script, then in mesh edit-mode press F3

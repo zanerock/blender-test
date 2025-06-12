@@ -1,3 +1,7 @@
+/* SPDX-FileCopyrightText: 2025-2025 Blender Authors
+ *
+ * SPDX-License-Identifier: MIT-0 */
+
 /* A basic perspective camera. */
 
 shader camera(float focal_length = 90.0,

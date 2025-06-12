@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2015-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # This sample script demonstrates a dynamic EnumProperty with custom icons.
 # The EnumProperty is populated dynamically with thumbnails of the contents of
 # a chosen directory in 'enum_previews_from_directory_items'.

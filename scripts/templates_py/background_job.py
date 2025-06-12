@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2010-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # This script is an example of how you can run blender from the command line
 # (in background mode with no interface) to automate tasks, in this example it
 # creates a text object, camera and light, then renders and/or saves it.

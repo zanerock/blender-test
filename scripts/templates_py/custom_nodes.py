@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2013-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 import bpy
 from bpy.types import NodeTree, Node, NodeSocket, NodeTreeInterfaceSocket
 from bl_ui import node_add_menu

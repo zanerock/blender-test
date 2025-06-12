@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2021-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # This sample shows an efficient way of doing image processing
 # over Blender's images using Python.
 

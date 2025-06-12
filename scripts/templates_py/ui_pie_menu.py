@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2014-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 import bpy
 from bpy.types import Menu
 

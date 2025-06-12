@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2009-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 import bpy
 
 

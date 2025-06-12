@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2018-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # This example adds an object mode tool to the toolbar.
 # This is just the circle-select and lasso tools tool.
 import bpy

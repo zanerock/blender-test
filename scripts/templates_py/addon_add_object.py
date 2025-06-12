@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2010-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # To make this add-on installable, create an extension with it:
 # https://docs.blender.org/manual/en/latest/advanced/extensions/getting_started.html
 

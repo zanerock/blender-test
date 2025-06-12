@@ -1,6 +1,6 @@
-/* SPDX-FileCopyrightText: 2011-2025 Blender Foundation
+/* SPDX-FileCopyrightText: 2011-2025 Blender Authors
  *
- * SPDX-License-Identifier: Apache-2.0 */
+ * SPDX-License-Identifier: MIT-0 */
 
 /* A panorama camera implementing a full cubemap projection. */
 

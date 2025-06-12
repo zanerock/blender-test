@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2011-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 import bpy
 import bmesh
 from bpy_extras.object_utils import AddObjectHelper

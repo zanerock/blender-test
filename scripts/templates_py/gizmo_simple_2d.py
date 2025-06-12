@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # Example of a group that lets you move an object in the 3D view
 # using the default translate transform operator.
 #

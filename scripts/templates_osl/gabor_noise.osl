@@ -1,3 +1,6 @@
+/* SPDX-FileCopyrightText: 2013-2025 Blender Authors
+ *
+ * SPDX-License-Identifier: MIT-0 */
 
 shader gabor_noise(
 	point Point = P,

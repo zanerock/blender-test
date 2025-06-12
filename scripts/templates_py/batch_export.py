@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2011-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # exports each selected object into its own file
 
 import bpy

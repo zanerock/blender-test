@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2012-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # This stub runs a python script relative to the currently open
 # blend file, useful when editing scripts externally.
 

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2017-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # Example of a group that edits a single property
 # using the predefined gizmo arrow.
 #

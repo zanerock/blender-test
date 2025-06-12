@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2012-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # This example assumes we have a mesh object selected
 
 import bpy

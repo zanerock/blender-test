@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2023-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 import bpy
 from bl_ui.generic_ui_list import draw_ui_list
 

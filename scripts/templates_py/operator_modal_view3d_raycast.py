@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2012-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 import bpy
 from bpy_extras import view3d_utils
 

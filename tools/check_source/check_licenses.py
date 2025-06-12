@@ -504,7 +504,6 @@ def main() -> None:
             source_paths_exclude=(
                 # Directories:
                 "./extern",
-                "./scripts/templates_osl",
                 "./tools",
                 # Exclude library sources (GIT-LFS).
                 "./lib",
@@ -549,9 +548,6 @@ def main() -> None:
                 # Just data.
                 "./doc/python_api/examples",
                 "./scripts/presets",
-                "./scripts/templates_py",
-
-
             ),
         ),
     )

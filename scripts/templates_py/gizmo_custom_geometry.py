@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2017-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # Example of a custom widget that defines its own geometry.
 #
 # Usage: Select a light in the 3D view and drag the arrow at it's rear

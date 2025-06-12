@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2015-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # This sample script demonstrates how to place a custom icon on a button or
 # menu entry.
 #

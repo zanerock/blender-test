@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2017-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 # Example of a gizmo that activates an operator
 # using the predefined dial gizmo to change the camera roll.
 #

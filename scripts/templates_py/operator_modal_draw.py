@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2010-2025 Blender Authors
+#
+# SPDX-License-Identifier: MIT-0
+
 import bpy
 import blf
 import gpu
