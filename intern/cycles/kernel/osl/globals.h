@@ -90,7 +90,6 @@ struct OSLThreadData {
 
   OSL::PerThreadInfo *osl_thread_info = nullptr;
   OSL::ShadingContext *context = nullptr;
-  OIIO::TextureSystem::Perthread *oiio_thread_info = nullptr;
 
   OSLThreadData(OSLGlobals *globals, const int thread_index);
   ~OSLThreadData();

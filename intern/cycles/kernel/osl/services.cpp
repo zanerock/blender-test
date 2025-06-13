@@ -13,7 +13,6 @@
 
 #include <cstring>
 
-#include "scene/colorspace.h"
 #include "scene/object.h"
 
 #include "util/log.h"
@@ -125,17 +124,15 @@ ustring OSLRenderServices::u_focal_distance("cam:focal_distance");
 
 ImageManager *OSLRenderServices::image_manager = nullptr;
 
-OSLRenderServices::OSLRenderServices(OSL::TextureSystem *texture_system, const int device_type)
-    : OSL::RendererServices(texture_system), device_type_(device_type)
+OSLRenderServices::OSLRenderServices(const int device_type)
+    /* Dummy texture system pointer so OSL doesn't create its own. Such an opaque texture system
+     * pointer is supported and normally would be done with the OSL_NO_DEFAULT_TEXTURESYSTEM
+     * build option, but we want to work with OSL builds that don't have it. */
+    : OSL::RendererServices(reinterpret_cast<OSL::TextureSystem *>(1)), device_type_(device_type)
 {
 }
 
-OSLRenderServices::~OSLRenderServices()
-{
-  if (m_texturesys) {
-    VLOG_INFO << "OSL texture system stats:\n" << m_texturesys->getstats();
-  }
-}
+OSLRenderServices::~OSLRenderServices() = default;
 
 int OSLRenderServices::supports(string_view feature) const
 {
@@ -1050,96 +1047,61 @@ OSL::TextureSystem::TextureHandle *OSLRenderServices::get_texture_handle(
 OSL::TextureSystem::TextureHandle *OSLRenderServices::get_texture_handle(
     OSL::ustring filename, OSL::ShadingContext * /*context*/, const OSL::TextureOpt * /*options*/)
 {
-  OSLTextureHandleMap::iterator it = textures.find(filename);
+  /* TODO: Move UDIM to image itself so it works on CPU for arbitrary filenames, and on GPU. */
+  auto [it, inserted] = textures.find_or_insert(filename,
+                                                OSLTextureHandle(OSLTextureHandle::IMAGE));
 
+  if (inserted) {
+    /* Load new textures using image manager. */
+    /* TODO: we assume this only runs at preprocessing time and not at render time, so
+     * that we do not have to wait for the handle to be valid. Is that correct? */
+    const ImageHandle handle = image_manager->add_image(filename.string(), ImageParams());
+    OSLTextureHandle *texture_handle = const_cast<OSLTextureHandle *>(&it->second);
+    *texture_handle = OSLTextureHandle(handle);
+  }
+
+  /* Construct texture handle for existing textures. */
   if (device_type_ == DEVICE_CPU) {
-    /* For non-OIIO textures, just return a pointer to our own OSLTextureHandle. */
-    if (it != textures.end()) {
-      if (it->second.type != OSLTextureHandle::OIIO) {
-        return (OSL::TextureSystem::TextureHandle *)(&it->second);
-      }
-    }
-
-    /* Get handle from OpenImageIO. */
-    OSL::TextureSystem *ts = m_texturesys;
-    OSL::TextureSystem::TextureHandle *handle = ts->get_texture_handle(to_ustring(filename));
-    if (handle == nullptr) {
-      return nullptr;
-    }
-
-    /* Insert new OSLTextureHandle if needed. */
-    if (it == textures.end()) {
-      textures.insert(filename, OSLTextureHandle(OSLTextureHandle::OIIO));
-      it = textures.find(filename);
-    }
-
-    /* Assign OIIO texture handle and return.
-     * OIIO::unordered_map_concurrent always returns a const handle even if the underlying
-     * std::unordered_map supports updating values just fine. */
-    const_cast<OSLTextureHandle &>(it->second).oiio_handle = handle;
+    /* Point on CPU. */
     return (OSL::TextureSystem::TextureHandle *)(&it->second);
   }
 
-  /* Construct GPU texture handle for existing textures. */
-  if (it != textures.end()) {
-    switch (it->second.type) {
-      case OSLTextureHandle::OIIO:
-        return nullptr;
-      case OSLTextureHandle::SVM:
-        if (!it->second.handle.empty() && it->second.handle.get_manager() != image_manager) {
-          it.clear();
-          break;
-        }
-        return reinterpret_cast<OSL::TextureSystem::TextureHandle *>(OSL_TEXTURE_HANDLE_TYPE_SVM |
-                                                                     it->second.svm_slots[0].y);
-      case OSLTextureHandle::IES:
-        if (!it->second.handle.empty() && it->second.handle.get_manager() != image_manager) {
-          it.clear();
-          break;
-        }
-        return reinterpret_cast<OSL::TextureSystem::TextureHandle *>(OSL_TEXTURE_HANDLE_TYPE_IES |
-                                                                     it->second.svm_slots[0].y);
-      case OSLTextureHandle::AO:
-        return reinterpret_cast<OSL::TextureSystem::TextureHandle *>(
-            OSL_TEXTURE_HANDLE_TYPE_AO_OR_BEVEL | 1);
-      case OSLTextureHandle::BEVEL:
-        return reinterpret_cast<OSL::TextureSystem::TextureHandle *>(
-            OSL_TEXTURE_HANDLE_TYPE_AO_OR_BEVEL | 2);
-    }
+  /* Packed SVM index on GPU. */
+  switch (it->second.type) {
+    case OSLTextureHandle::IMAGE:
+      return reinterpret_cast<OSL::TextureSystem::TextureHandle *>(OSL_TEXTURE_HANDLE_TYPE_SVM |
+                                                                   it->second.svm_slots[0].y);
+    case OSLTextureHandle::IES:
+      return reinterpret_cast<OSL::TextureSystem::TextureHandle *>(OSL_TEXTURE_HANDLE_TYPE_IES |
+                                                                   it->second.svm_slots[0].y);
+    case OSLTextureHandle::AO:
+      return reinterpret_cast<OSL::TextureSystem::TextureHandle *>(
+          OSL_TEXTURE_HANDLE_TYPE_AO_OR_BEVEL | 1);
+    case OSLTextureHandle::BEVEL:
+      return reinterpret_cast<OSL::TextureSystem::TextureHandle *>(
+          OSL_TEXTURE_HANDLE_TYPE_AO_OR_BEVEL | 2);
   }
 
-  if (!image_manager) {
-    return nullptr;
-  }
-
-  /* Load new textures using SVM image manager. */
-  const ImageHandle handle = image_manager->add_image(filename.string(), ImageParams());
-  if (handle.empty()) {
-    return nullptr;
-  }
-
-  if (!textures.insert(filename, OSLTextureHandle(handle))) {
-    return nullptr;
-  }
-
-  return reinterpret_cast<OSL::TextureSystem::TextureHandle *>(OSL_TEXTURE_HANDLE_TYPE_SVM |
-                                                               handle.svm_slot());
+  assert(0);
+  return nullptr;
 }
 
 bool OSLRenderServices::good(OSL::TextureSystem::TextureHandle *texture_handle)
 {
+  /* TODO: this check may not be enough. */
   OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
+  return handle->type != OSLTextureHandle::IMAGE && handle->svm_slots[0].y != -1;
+}
 
-  if (handle->oiio_handle) {
-    OSL::TextureSystem *ts = m_texturesys;
-    return ts->good(handle->oiio_handle);
-  }
-  return true;
+bool OSLRenderServices::is_udim(OSL::TextureSystem::TextureHandle *texture_handle)
+{
+  OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
+  return handle->type == OSLTextureHandle::IMAGE && handle->svm_slots[0].w != -1;
 }
 
 bool OSLRenderServices::texture(OSLUStringHash filename,
                                 TextureHandle *texture_handle,
-                                TexturePerthread *texture_thread_info,
+                                TexturePerthread * /*texture_thread_info*/,
                                 OSL::TextureOpt &options,
                                 OSL::ShaderGlobals *sg,
                                 float s,
@@ -1150,19 +1112,26 @@ bool OSLRenderServices::texture(OSLUStringHash filename,
                                 const float dtdy,
                                 const int nchannels,
                                 float *result,
-                                float *dresultds,
-                                float *dresultdt,
+                                float * /*dresultds*/,
+                                float * /*dresultdt*/,
                                 OSLUStringHash * /*errormessage*/)
 {
+  if (texture_handle == nullptr) {
+    if (texture_filenames_seen.insert(filename).second) {
+      LOG(WARNING) << "Open Shading Langaueg texture call can not resolve " << filename.c_str()
+                   << ", filename must be a constant";
+    }
+    return false;
+  }
+
   OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
-  const OSLTextureHandle::Type texture_type = (handle) ? handle->type : OSLTextureHandle::OIIO;
   ShaderGlobals *globals = reinterpret_cast<ShaderGlobals *>(sg);
   ShaderData *sd = globals->sd;
   const ThreadKernelGlobalsCPU *kernel_globals = globals->kg;
   const IntegratorStateCPU *state = globals->path_state;
   bool status = false;
 
-  switch (texture_type) {
+  switch (handle->type) {
     case OSLTextureHandle::BEVEL: {
 #ifdef __SHADER_RAYTRACE__
       /* Bevel shader hack. */
@@ -1201,14 +1170,14 @@ bool OSLRenderServices::texture(OSLUStringHash filename,
 #endif
       break;
     }
-    case OSLTextureHandle::SVM: {
+    case OSLTextureHandle::IMAGE: {
       int id = -1;
       if (handle->svm_slots[0].w == -1) {
-        /* Packed single texture. */
+        /* Single texture. */
         id = handle->svm_slots[0].y;
       }
       else {
-        /* Packed tiled texture. */
+        /* Tiled texture. */
         const int tx = (int)s;
         const int ty = (int)t;
         const int tile = 1001 + 10 * ty + tx;
@@ -1231,8 +1200,8 @@ bool OSLRenderServices::texture(OSLUStringHash filename,
         rgba = IMAGE_TEXTURE_MISSING_RGBA;
       }
       else {
-        rgba = kernel_image_interp(
-            kernel_globals, id, s, 1.0f - t, primitive_uv_differential(kernel_globals, sd));
+        const differential2 duv = {{dsdx, dtdx}, {dsdy, dtdy}};
+        rgba = kernel_image_interp(kernel_globals, id, s, 1.0f - t, duv);
       }
 
       result[0] = rgba[0];
@@ -1254,54 +1223,6 @@ bool OSLRenderServices::texture(OSLUStringHash filename,
       status = true;
       break;
     }
-    case OSLTextureHandle::OIIO: {
-      /* OpenImageIO texture cache. */
-      OSL::TextureSystem *ts = m_texturesys;
-
-      if (handle && handle->oiio_handle) {
-        if (texture_thread_info == nullptr) {
-          texture_thread_info = kernel_globals->osl.oiio_thread_info;
-        }
-
-        status = ts->texture(handle->oiio_handle,
-                             texture_thread_info,
-                             options,
-                             s,
-                             t,
-                             dsdx,
-                             dtdx,
-                             dsdy,
-                             dtdy,
-                             nchannels,
-                             result,
-                             dresultds,
-                             dresultdt);
-      }
-      else {
-        status = ts->texture(to_ustring(filename),
-                             options,
-                             s,
-                             t,
-                             dsdx,
-                             dtdx,
-                             dsdy,
-                             dtdy,
-                             nchannels,
-                             result,
-                             dresultds,
-                             dresultdt);
-      }
-
-      if (!status) {
-        /* This might be slow, but prevents error messages leak and
-         * other nasty stuff happening. */
-        ts->geterror();
-      }
-      else if (handle && handle->processor) {
-        ColorSpaceManager::to_scene_linear(handle->processor, result, nchannels);
-      }
-      break;
-    }
   }
 
   if (!status) {
@@ -1321,29 +1242,35 @@ bool OSLRenderServices::texture(OSLUStringHash filename,
 
 bool OSLRenderServices::texture3d(OSLUStringHash filename,
                                   TextureHandle *texture_handle,
-                                  TexturePerthread *texture_thread_info,
-                                  OSL::TextureOpt &options,
+                                  TexturePerthread * /*texture_thread_info*/,
+                                  OSL::TextureOpt & /*options*/,
                                   OSL::ShaderGlobals *sg,
                                   const OSL::Vec3 &P,
-                                  const OSL::Vec3 &dPdx,
-                                  const OSL::Vec3 &dPdy,
-                                  const OSL::Vec3 &dPdz,
+                                  const OSL::Vec3 & /*dPdx*/,
+                                  const OSL::Vec3 & /*dPdy*/,
+                                  const OSL::Vec3 & /*dPdz*/,
                                   const int nchannels,
                                   float *result,
-                                  float *dresultds,
-                                  float *dresultdt,
-                                  float *dresultdr,
+                                  float * /*dresultds*/,
+                                  float * /*dresultdt*/,
+                                  float * /*dresultdr*/,
                                   OSLUStringHash * /*errormessage*/)
 {
+  if (texture_handle == nullptr) {
+    if (texture_filenames_seen.insert(filename).second) {
+      LOG(WARNING) << "Open Shading Langaueg texture3d call can not resolve " << filename.c_str()
+                   << ", filename must be a constant";
+    }
+    return false;
+  }
+
   OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
-  const OSLTextureHandle::Type texture_type = (handle) ? handle->type : OSLTextureHandle::OIIO;
   ShaderGlobals *globals = reinterpret_cast<ShaderGlobals *>(sg);
   const ThreadKernelGlobalsCPU *kernel_globals = globals->kg;
   bool status = false;
 
-  switch (texture_type) {
-    case OSLTextureHandle::SVM: {
-      /* Packed texture. */
+  switch (handle->type) {
+    case OSLTextureHandle::IMAGE: {
       const int slot = handle->svm_slots[0].y;
       const float3 P_float3 = make_float3(P.x, P.y, P.z);
       float4 rgba = kernel_image_interp_3d(kernel_globals, slot, P_float3, INTERPOLATION_NONE);
@@ -1359,52 +1286,6 @@ bool OSLRenderServices::texture3d(OSLUStringHash filename,
         result[3] = rgba[3];
       }
       status = true;
-      break;
-    }
-    case OSLTextureHandle::OIIO: {
-      /* OpenImageIO texture cache. */
-      OSL::TextureSystem *ts = m_texturesys;
-
-      if (handle && handle->oiio_handle) {
-        if (texture_thread_info == nullptr) {
-          texture_thread_info = kernel_globals->osl.oiio_thread_info;
-        }
-
-        status = ts->texture3d(handle->oiio_handle,
-                               texture_thread_info,
-                               options,
-                               P,
-                               dPdx,
-                               dPdy,
-                               dPdz,
-                               nchannels,
-                               result,
-                               dresultds,
-                               dresultdt,
-                               dresultdr);
-      }
-      else {
-        status = ts->texture3d(to_ustring(filename),
-                               options,
-                               P,
-                               dPdx,
-                               dPdy,
-                               dPdz,
-                               nchannels,
-                               result,
-                               dresultds,
-                               dresultdt,
-                               dresultdr);
-      }
-
-      if (!status) {
-        /* This might be slow, but prevents error messages leak and
-         * other nasty stuff happening. */
-        ts->geterror();
-      }
-      else if (handle && handle->processor) {
-        ColorSpaceManager::to_scene_linear(handle->processor, result, nchannels);
-      }
       break;
     }
     case OSLTextureHandle::IES:
@@ -1432,43 +1313,28 @@ bool OSLRenderServices::texture3d(OSLUStringHash filename,
 
 bool OSLRenderServices::environment(OSLUStringHash filename,
                                     TextureHandle *texture_handle,
-                                    TexturePerthread *thread_info,
-                                    OSL::TextureOpt &options,
-                                    OSL::ShaderGlobals *sg,
-                                    const OSL::Vec3 &R,
-                                    const OSL::Vec3 &dRdx,
-                                    const OSL::Vec3 &dRdy,
+                                    TexturePerthread * /*thread_info*/,
+                                    OSL::TextureOpt & /*options*/,
+                                    OSL::ShaderGlobals * /*sg*/,
+                                    const OSL::Vec3 & /*R*/,
+                                    const OSL::Vec3 & /*dRdx*/,
+                                    const OSL::Vec3 & /*dRdy*/,
                                     const int nchannels,
                                     float *result,
-                                    float *dresultds,
-                                    float *dresultdt,
+                                    float * /*dresultds*/,
+                                    float * /*dresultdt*/,
                                     OSLUStringHash * /*errormessage*/)
 {
-  OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
-  OSL::TextureSystem *ts = m_texturesys;
-  ShaderGlobals *globals = reinterpret_cast<ShaderGlobals *>(sg);
-  bool status = false;
-
-  if (handle && handle->oiio_handle) {
-    if (thread_info == nullptr) {
-      thread_info = globals->kg->osl.oiio_thread_info;
+  if (texture_handle == nullptr) {
+    if (texture_filenames_seen.insert(filename).second) {
+      LOG(WARNING) << "Open Shading Langaueg environment call can not resolve " << filename.c_str()
+                   << ", filename must be a constant";
     }
+    return false;
+  }
 
-    status = ts->environment(handle->oiio_handle,
-                             thread_info,
-                             options,
-                             R,
-                             dRdx,
-                             dRdy,
-                             nchannels,
-                             result,
-                             dresultds,
-                             dresultdt);
-  }
-  else {
-    status = ts->environment(
-        to_ustring(filename), options, R, dRdx, dRdy, nchannels, result, dresultds, dresultdt);
-  }
+  /* TODO: implementation. */
+  bool status = false;
 
   if (!status) {
     if (nchannels == 3 || nchannels == 4) {
@@ -1481,46 +1347,30 @@ bool OSLRenderServices::environment(OSLUStringHash filename,
       }
     }
   }
-  else if (handle && handle->processor) {
-    ColorSpaceManager::to_scene_linear(handle->processor, result, nchannels);
-  }
 
   return status;
 }
 
 bool OSLRenderServices::get_texture_info(OSLUStringHash filename,
                                          TextureHandle *texture_handle,
-                                         TexturePerthread *texture_thread_info,
+                                         TexturePerthread * /*texture_thread_info*/,
                                          OSL::ShaderGlobals * /*sg*/,
-                                         const int subimage,
-                                         OSLUStringHash dataname,
-                                         const TypeDesc datatype,
-                                         void *data,
+                                         const int /*subimage*/,
+                                         OSLUStringHash /*dataname*/,
+                                         const TypeDesc /*datatype*/,
+                                         void * /*data*/,
                                          OSLUStringHash * /*errormessage*/)
 {
-  OSLTextureHandle *handle = (OSLTextureHandle *)texture_handle;
-  OSL::TextureSystem *ts = m_texturesys;
-
-  if (handle) {
-    /* No texture info for other texture types. */
-    if (handle->type != OSLTextureHandle::OIIO) {
-      return false;
+  if (texture_handle == nullptr) {
+    if (texture_filenames_seen.insert(filename).second) {
+      LOG(WARNING) << "Open Shading Langaueg gettextureinfo call can not resolve "
+                   << filename.c_str() << ", filename must be a constant";
     }
-
-    if (handle->oiio_handle) {
-      /* Get texture info from OpenImageIO. */
-      return ts->get_texture_info(handle->oiio_handle,
-                                  texture_thread_info,
-                                  subimage,
-                                  to_ustring(dataname),
-                                  datatype,
-                                  data);
-    }
+    return false;
   }
 
-  /* Get texture info from OpenImageIO, slower using filename. */
-  return ts->get_texture_info(
-      to_ustring(filename), subimage, to_ustring(dataname), datatype, data);
+  /* TODO: implementation. */
+  return false;
 }
 
 int OSLRenderServices::pointcloud_search(OSL::ShaderGlobals * /*sg*/,

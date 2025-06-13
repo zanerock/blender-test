@@ -99,13 +99,6 @@ int ImageHandle::svm_slot(const int slot_index) const
     return -1;
   }
 
-  if (manager->osl_texture_system) {
-    ImageManager::Image *img = manager->get_image_slot(slots[slot_index]);
-    if (!img->loader->osl_filepath().empty()) {
-      return -1;
-    }
-  }
-
   return slots[slot_index];
 }
 
@@ -246,11 +239,6 @@ void ImageMetaData::detect_colorspace()
 
 ImageLoader::ImageLoader() = default;
 
-ustring ImageLoader::osl_filepath() const
-{
-  return ustring();
-}
-
 int ImageLoader::get_tile_number() const
 {
   return 0;
@@ -274,7 +262,6 @@ bool ImageLoader::is_vdb_loader() const
 ImageManager::ImageManager(const DeviceInfo &info, const SceneParams &params)
 {
   need_update_ = true;
-  osl_texture_system = nullptr;
   animation_frame = 0;
 
   use_texture_cache = params.use_texture_cache;
@@ -290,11 +277,6 @@ ImageManager::~ImageManager()
   for (size_t slot = 0; slot < images.size(); slot++) {
     assert(!images[slot]);
   }
-}
-
-void ImageManager::set_osl_texture_system(void *texture_system)
-{
-  osl_texture_system = texture_system;
 }
 
 bool ImageManager::set_animation_frame_update(const int frame)
@@ -474,7 +456,7 @@ size_t ImageManager::add_image_slot(unique_ptr<ImageLoader> &&loader,
   img->params = params;
   img->loader = std::move(loader);
   img->need_metadata = true;
-  img->need_load = !(osl_texture_system && !img->loader->osl_filepath().empty());
+  img->need_load = true;
   img->builtin = builtin;
   img->users = 1;
   img->texture_slot = KERNEL_IMAGE_TEX_NONE;
@@ -1015,15 +997,6 @@ void ImageManager::device_free_image(Scene *scene, size_t slot)
   Image *img = images[slot].get();
   if (img == nullptr) {
     return;
-  }
-
-  if (osl_texture_system) {
-#ifdef WITH_OSL
-    const ustring filepath = img->loader->osl_filepath();
-    if (!filepath.empty()) {
-      ((OSL::TextureSystem *)osl_texture_system)->invalidate(filepath);
-    }
-#endif
   }
 
   if (img->texture_slot != KERNEL_IMAGE_TEX_NONE) {

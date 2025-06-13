@@ -6,7 +6,6 @@
 
 #include "scene/background.h"
 #include "scene/camera.h"
-#include "scene/colorspace.h"
 #include "scene/light.h"
 #include "scene/osl.h"
 #include "scene/scene.h"
@@ -36,7 +35,6 @@ CCL_NAMESPACE_BEGIN
 
 /* Shared Texture and Shading System */
 
-std::shared_ptr<OSL::TextureSystem> ts_shared;
 thread_mutex ts_shared_mutex;
 
 map<DeviceType, std::shared_ptr<OSL::ShadingSystem>> ss_shared;
@@ -52,7 +50,6 @@ OSLManager::OSLManager(Device *device) : device_(device), need_update_(true) {}
 OSLManager::~OSLManager()
 {
   shading_system_free();
-  texture_system_free();
 }
 
 void OSLManager::free_memory()
@@ -71,14 +68,6 @@ void OSLManager::reset(Scene * /*scene*/)
 {
   shading_system_free();
   tag_update();
-}
-
-OSL::TextureSystem *OSLManager::get_texture_system()
-{
-  if (!ts) {
-    texture_system_init();
-  }
-  return ts.get();
 }
 
 OSL::ShadingSystem *OSLManager::get_shading_system(Device *sub_device)
@@ -121,7 +110,7 @@ bool OSLManager::need_update() const
   return need_update_;
 }
 
-void OSLManager::device_update_pre(Device *device, Scene *scene)
+void OSLManager::device_update_pre(Device * /*device*/, Scene *scene)
 {
   if (!need_update()) {
     return;
@@ -137,10 +126,6 @@ void OSLManager::device_update_pre(Device *device, Scene *scene)
       services->textures.insert(OSLUStringHash("@bevel"),
                                 OSLTextureHandle(OSLTextureHandle::BEVEL));
     });
-
-    if (device->info.type == DEVICE_CPU) {
-      scene->image_manager->set_osl_texture_system((void *)get_texture_system());
-    }
   }
 }
 
@@ -151,8 +136,9 @@ void OSLManager::device_update_post(Device *device,
 {
   /* Create the camera shader. */
   if (need_update() && !scene->camera->script_name.empty()) {
-    if (progress.get_cancel())
+    if (progress.get_cancel()) {
       return;
+    }
 
     foreach_osl_device(device, [this, scene](Device *sub_device, OSLGlobals *og) {
       OSL::ShadingSystem *ss = get_shading_system(sub_device);
@@ -256,7 +242,6 @@ void OSLManager::device_update_post(Device *device,
         OSL::ShadingSystem *ss = get_shading_system(sub_device);
 
         og->ss = ss;
-        og->ts = get_texture_system();
         og->services = static_cast<OSLRenderServices *>(ss->renderer());
 
         /* load kernels */
@@ -298,44 +283,6 @@ void OSLManager::device_free(Device *device, DeviceScene * /*dscene*/, Scene *sc
   });
 }
 
-void OSLManager::texture_system_init()
-{
-  /* create texture system, shared between different renders to reduce memory usage */
-  const thread_scoped_lock lock(ts_shared_mutex);
-
-  if (!ts_shared) {
-#  if OIIO_VERSION_MAJOR >= 3
-    ts_shared = OSL::TextureSystem::create(false);
-#  else
-    ts_shared = std::shared_ptr<OSL::TextureSystem>(
-        OSL::TextureSystem::create(false),
-        [](OSL::TextureSystem *ts) { OSL::TextureSystem::destroy(ts); });
-#  endif
-
-    ts_shared->attribute("automip", 1);
-    ts_shared->attribute("autotile", 64);
-    ts_shared->attribute("gray_to_rgb", 1);
-
-    /* effectively unlimited for now, until we support proper mipmap lookups */
-    ts_shared->attribute("max_memory_MB", 16384);
-  }
-
-  /* make local copy to increase use count */
-  ts = ts_shared;
-}
-
-void OSLManager::texture_system_free()
-{
-  ts.reset();
-
-  /* if ts_shared is the only reference to the underlying texture system,
-   * no users remain, so free it. */
-  const thread_scoped_lock lock(ts_shared_mutex);
-  if (ts_shared.use_count() == 1) {
-    ts_shared.reset();
-  }
-}
-
 void OSLManager::shading_system_init()
 {
   /* No need to do anything if we already have shading systems. */
@@ -350,8 +297,7 @@ void OSLManager::shading_system_init()
     const DeviceType device_type = sub_device->info.type;
 
     if (!ss_shared[device_type]) {
-      OSLRenderServices *services = util_aligned_new<OSLRenderServices>(get_texture_system(),
-                                                                        device_type);
+      OSLRenderServices *services = util_aligned_new<OSLRenderServices>(device_type);
 #  ifdef _WIN32
       /* Annoying thing, Cycles stores paths in UTF8 code-page, so it can
        * operate with file paths with any character. This requires to use wide
@@ -366,8 +312,13 @@ void OSLManager::shading_system_init()
       const string shader_path = path_get("shader");
 #  endif
 
+      /* Dummy texture system pointer so OSL doesn't create its own. Such an opaque texture system
+       * pointer is supported and normally would be done with the OSL_NO_DEFAULT_TEXTURESYSTEM
+       * build option, but we want to work with OSL builds that don't have it. */
+      auto *ts = reinterpret_cast<OSL::TextureSystem *>(1);
+
       auto ss = std::shared_ptr<OSL::ShadingSystem>(
-          new OSL::ShadingSystem(services, get_texture_system(), &errhandler),
+          new OSL::ShadingSystem(services, ts, &errhandler),
           [](auto *ss) { util_aligned_delete(static_cast<OSLRenderServices *>(ss->renderer())); });
       ss->attribute("lockgeom", 1);
       ss->attribute("commonspace", "world");
@@ -1580,25 +1531,16 @@ void OSLCompiler::compile(Shader *shader)
   }
 }
 
-void OSLCompiler::parameter_texture(const char *name, ustring filename, ustring colorspace)
-{
-  /* Textured loaded through the OpenImageIO texture cache. For this
-   * case we need to do runtime color space conversion. */
-  OSLTextureHandle handle(OSLTextureHandle::OIIO);
-  handle.processor = ColorSpaceManager::get_processor(colorspace);
-  services->textures.insert(OSLUStringHash(filename), handle);
-  parameter(name, filename);
-}
-
 void OSLCompiler::parameter_texture(const char *name, const ImageHandle &handle)
 {
   /* Texture loaded through SVM image texture system. We generate a unique
    * name, which ends up being used in OSLRenderServices::get_texture_handle
    * to get handle again. Note that this name must be unique between multiple
    * render sessions as the render services are shared. */
+
+  /* TODO: use full file path as key to deduplicate OIIO images? */
   const ustring filename(string_printf("@svm%d", texture_shared_unique_id++).c_str());
-  services->textures.insert(OSLUStringHash(filename),
-                            OSLTextureHandle(OSLTextureHandle::SVM, handle.get_svm_slots()));
+  services->textures.insert(OSLUStringHash(filename), OSLTextureHandle(handle));
   parameter(name, filename);
 }
 

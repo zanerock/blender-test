@@ -804,11 +804,6 @@ const string &OIIOImageLoader::get_filepath() const
   return (texture_cache_filepath.empty()) ? original_filepath : texture_cache_filepath;
 }
 
-ustring OIIOImageLoader::osl_filepath() const
-{
-  return ustring(get_filepath());
-}
-
 bool OIIOImageLoader::equals(const ImageLoader &other) const
 {
   const OIIOImageLoader &other_loader = (const OIIOImageLoader &)other;

@@ -371,6 +371,7 @@ void ImageTextureNode::compile(SVMCompiler &compiler)
   ShaderOutput *alpha_out = output("Alpha");
 
   if (handle.empty()) {
+    // TODO: Use for OSL as well, or don't bother culling with texture cache?
     cull_tiles(compiler.scene, compiler.current_graph);
     ImageManager *image_manager = compiler.scene->image_manager.get();
     handle = image_manager->add_image(filename.string(), image_params(), tiles);
@@ -459,15 +460,8 @@ void ImageTextureNode::compile(OSLCompiler &compiler)
   const ImageMetaData metadata = handle.metadata();
   const bool is_float = metadata.is_float();
   const bool compress_as_srgb = metadata.compress_as_srgb;
-  const ustring known_colorspace = metadata.colorspace;
 
-  if (handle.svm_slot() == -1) {
-    compiler.parameter_texture(
-        "filename", filename, compress_as_srgb ? u_colorspace_raw : known_colorspace);
-  }
-  else {
-    compiler.parameter_texture("filename", handle);
-  }
+  compiler.parameter_texture("filename", handle);
 
   const bool unassociate_alpha = !(ColorSpaceManager::colorspace_is_data(colorspace) ||
                                    alpha_type == IMAGE_ALPHA_CHANNEL_PACKED ||
@@ -611,15 +605,8 @@ void EnvironmentTextureNode::compile(OSLCompiler &compiler)
   const ImageMetaData metadata = handle.metadata();
   const bool is_float = metadata.is_float();
   const bool compress_as_srgb = metadata.compress_as_srgb;
-  const ustring known_colorspace = metadata.colorspace;
 
-  if (handle.svm_slot() == -1) {
-    compiler.parameter_texture(
-        "filename", filename, compress_as_srgb ? u_colorspace_raw : known_colorspace);
-  }
-  else {
-    compiler.parameter_texture("filename", handle);
-  }
+  compiler.parameter_texture("filename", handle);
 
   compiler.parameter(this, "projection");
   compiler.parameter(this, "interpolation");

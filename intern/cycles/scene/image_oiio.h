@@ -38,8 +38,6 @@ class OIIOImageLoader : public ImageLoader {
 
   string name() const override;
 
-  ustring osl_filepath() const override;
-
   bool equals(const ImageLoader &other) const override;
 
  protected:

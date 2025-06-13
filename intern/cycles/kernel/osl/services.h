@@ -18,6 +18,8 @@
 
 #include <OpenImageIO/unordered_map_concurrent.h>
 
+#include "util/concurrent_set.h"
+
 #include "scene/image.h"
 
 #include "kernel/osl/compat.h"
@@ -45,28 +47,27 @@ struct ThreadKernelGlobalsCPU;
  * stored as follows: x:tile_a, y:svm_slot_a, z:tile_b, w:svm_slot_b etc. */
 
 struct OSLTextureHandle {
-  enum Type { OIIO, SVM, IES, BEVEL, AO };
+  enum Type { IMAGE, IES, BEVEL, AO };
 
   OSLTextureHandle(Type type, const vector<int4> &svm_slots) : type(type), svm_slots(svm_slots) {}
 
-  OSLTextureHandle(Type type = OIIO, const int svm_slot = -1)
+  OSLTextureHandle(Type type, const int svm_slot = -1)
       : OSLTextureHandle(type, {make_int4(0, svm_slot, -1, -1)})
   {
   }
 
   OSLTextureHandle(const ImageHandle &handle)
-      : type(SVM), svm_slots(handle.get_svm_slots()), handle(handle)
+      : type(IMAGE), svm_slots(handle.get_svm_slots()), handle(handle)
   {
   }
 
   Type type;
   vector<int4> svm_slots;
-  OSL::TextureSystem::TextureHandle *oiio_handle = nullptr;
-  ColorSpaceProcessor *processor = nullptr;
   ImageHandle handle;
 };
 
 using OSLTextureHandleMap = OIIO::unordered_map_concurrent<OSLUStringHash, OSLTextureHandle>;
+using OSLTextureFilenameMap = concurrent_set<OSLUStringHash>;
 
 /* OSL Render Services
  *
@@ -74,7 +75,7 @@ using OSLTextureHandleMap = OIIO::unordered_map_concurrent<OSLUStringHash, OSLTe
 
 class OSLRenderServices : public OSL::RendererServices {
  public:
-  OSLRenderServices(OSL::TextureSystem *texture_system, const int device_type);
+  OSLRenderServices(const int device_type);
   ~OSLRenderServices() override;
 
   static void register_closures(OSL::ShadingSystem *ss);
@@ -190,6 +191,7 @@ class OSLRenderServices : public OSL::RendererServices {
                                                         const OSL::TextureOpt *options) override;
 
   bool good(OSL::TextureSystem::TextureHandle *texture_handle) override;
+  bool is_udim(OSL::TextureSystem::TextureHandle *texture_handle) override;
 
   bool texture(OSLUStringHash filename,
                OSL::TextureSystem::TextureHandle *texture_handle,
@@ -335,6 +337,11 @@ class OSLRenderServices : public OSL::RendererServices {
    * and is required because texture handles are cached as part of the shared
    * shading system. */
   OSLTextureHandleMap textures;
+
+  /* We don't support lookup by filename without handle, which is required anyway
+   * for GPU, and simplifies the implementation on CPU. This keeps track of the
+   * ones we have seen to emit a warning only once. */
+  OSLTextureFilenameMap texture_filenames_seen;
 
   static ImageManager *image_manager;
 

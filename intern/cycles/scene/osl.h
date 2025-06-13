@@ -89,21 +89,15 @@ class OSLManager {
 
  private:
 #ifdef WITH_OSL
-  void texture_system_init();
-  void texture_system_free();
-
   void shading_system_init();
   void shading_system_free();
 
   void foreach_shading_system(const std::function<void(OSL::ShadingSystem *)> &callback);
   void foreach_render_services(const std::function<void(OSLRenderServices *)> &callback);
 
-  OSL::TextureSystem *get_texture_system();
-
   Device *device_;
   map<string, OSLShaderInfo> loaded_shaders;
 
-  std::shared_ptr<OSL::TextureSystem> ts;
   map<DeviceType, std::shared_ptr<OSL::ShadingSystem>> ss_map;
 
   bool need_update_;
@@ -174,7 +168,6 @@ class OSLCompiler {
 
   void parameter_attribute(const char *name, ustring s);
 
-  void parameter_texture(const char *name, ustring filename, ustring colorspace);
   void parameter_texture(const char *name, const ImageHandle &handle);
   void parameter_texture_ies(const char *name, const int svm_slot);
 
