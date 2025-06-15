@@ -20,8 +20,6 @@ BLOCKLIST_ALL = [
     "hair_instancer_uv.blend",
     "principled_hair_directcoloring.blend",
     "visibility_particles.blend",
-    # Temporarily blocked for 4.4 lib upgrade, due to PNG alpha minor difference.
-    "image_log_osl.blend",
 ]
 
 # Blocklist for device + build configuration that does not support OSL at all.
@@ -41,19 +39,6 @@ BLOCKLIST_OSL_ALL = BLOCKLIST_OSL_LIMITED + [
     # AOVs are not supported. See 73266
     'aov_position.blend',
     'render_passes_aov.*.blend',
-    # Image sampling is different from SVM. There are OSL variants of these tests
-    'image_byte.*.blend',
-    'image_float.*.blend',
-    'image_half.*.blend',
-    'image_mapping_.*_closest.blend',
-    'image_mapping_.*_cubic.blend',
-    'image_mapping_.*_linear.blend',
-    'image_alpha_blend.blend',
-    'image_alpha_channel_packed.blend',
-    'image_alpha_ignore.blend',
-    'image_log.blend',
-    'image_non_color.blend',
-    'image_mapping_udim.blend',
     # Tests that need investigating into why they're failing:
     # Noise differences due to Principled BSDF mixing/layering used in some of these scenes
     'render_passes_.*.blend',
@@ -67,7 +52,6 @@ BLOCKLIST_OPTIX = [
 
 # Blocklist for OSL tests that fail with the OptiX OSL backend.
 BLOCKLIST_OPTIX_OSL_LIMITED = [
-    'image_.*_osl.blend',
     # OptiX OSL doesn't support the trace function
     'osl_trace_shader.blend',
 ]
@@ -85,8 +69,6 @@ BLOCKLIST_OPTIX_OSL_ALL = BLOCKLIST_OPTIX_OSL_LIMITED + [
     'dicing_camera.blend',
     'offscreen_dicing.blend',
     'panorama_dicing.blend',
-    # The mapping of the UDIM texture is incorrect. Need to investigate why.
-    'image_mapping_udim_packed.blend',
     # Error during rendering. Need to investigate why.
     'points_volume.blend',
 ]
@@ -105,7 +87,6 @@ if platform.system() == "Darwin":
 
 BLOCKLIST_GPU = [
     # Uninvestigated differences with GPU.
-    'image_log.blend',
     'glass_mix_40964.blend',
     'filter_glossy_refraction_45609.blend',
     'smoke_color.blend',
