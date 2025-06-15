@@ -25,7 +25,7 @@ SkyLoader::SkyLoader(const float sun_elevation,
 
 SkyLoader::~SkyLoader() = default;
 
-bool SkyLoader::load_metadata(const ImageDeviceFeatures & /*features*/, ImageMetaData &metadata)
+bool SkyLoader::load_metadata(ImageMetaData &metadata)
 {
   metadata.width = 512;
   metadata.height = 128;

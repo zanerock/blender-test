@@ -1496,7 +1496,7 @@ void blo_do_versions_userdef(UserDef *userdef)
     }
   }
 
-  if (!USER_VERSION_ATLEAST(405, 83)) {
+  if (!USER_VERSION_ATLEAST(500, 1)) {
     STRNCPY(userdef->texture_cachedir, U_default.texture_cachedir);
   }
 

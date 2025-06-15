@@ -22,7 +22,7 @@ class SkyLoader : public ImageLoader {
             float ozone_density);
   ~SkyLoader() override;
 
-  bool load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata) override;
+  bool load_metadata(ImageMetaData &metadata) override;
 
   bool load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels) override;
 

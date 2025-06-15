@@ -7,10 +7,43 @@
 
 #include "kernel/globals.h"
 
+#include "util/defines.h"
 #include "util/math_fast.h"
 #include "util/texture.h"
 
 CCL_NAMESPACE_BEGIN
+
+ccl_device_forceinline bool kernel_image_tile_wrap(const ExtensionType extension, float2 &uv)
+{
+  /* Wrapping. */
+  switch (extension) {
+    case EXTENSION_REPEAT:
+      uv = uv - floor(uv);
+      return true;
+    case EXTENSION_CLIP:
+      // TODO: this is not exactly the same as full image wrapping
+      return (uv.x >= 0.0f && uv.x <= 1.0f && uv.y >= 0.0f && uv.y <= 1.0f);
+    case EXTENSION_EXTEND:
+      uv = clamp(uv, zero_float2(), one_float2());
+      return true;
+    case EXTENSION_MIRROR: {
+      // TODO: replace fmod with uv.x - floor(uv.x)?
+      uv.x = fmodf(fabsf(uv.x), 2.0f);
+      if (uv.x >= 1.0f) {
+        uv.x = 2.0f - uv.x;
+      }
+      uv.y = fmodf(fabsf(uv.y), 2.0f);
+      if (uv.y >= 1.0f) {
+        uv.y = 2.0f - uv.y;
+      }
+      return true;
+    }
+    default:
+      break;
+  }
+
+  return false;
+}
 
 /* From UV coordinates in 0..1 range, compute tile and pixel coordinates. */
 ccl_device_forceinline KernelTileDescriptor

@@ -178,22 +178,7 @@ bool ImageHandle::operator==(const ImageHandle &other) const
 
 /* Image MetaData */
 
-ImageMetaData::ImageMetaData()
-    : channels(0),
-      width(0),
-      height(0),
-      depth(0),
-      byte_size(0),
-      type(IMAGE_DATA_NUM_TYPES),
-      colorspace(u_colorspace_raw),
-      colorspace_file_format(""),
-      use_transform_3d(false),
-      compress_as_srgb(false),
-      associate_alpha(false),
-      tile_size(0),
-      average_color(zero_float4())
-{
-}
+ImageMetaData::ImageMetaData() = default;
 
 bool ImageMetaData::operator==(const ImageMetaData &other) const
 {
@@ -209,7 +194,7 @@ bool ImageMetaData::is_float() const
           type == IMAGE_DATA_TYPE_HALF || type == IMAGE_DATA_TYPE_HALF4);
 }
 
-void ImageMetaData::detect_colorspace()
+void ImageMetaData::finalize(const ImageAlphaType alpha_type)
 {
   /* Convert used specified color spaces to one we know how to handle. */
   colorspace = ColorSpaceManager::detect_known_colorspace(
@@ -231,6 +216,22 @@ void ImageMetaData::detect_colorspace()
     }
     else if (type == IMAGE_DATA_TYPE_BYTE4 || type == IMAGE_DATA_TYPE_USHORT4) {
       type = IMAGE_DATA_TYPE_HALF4;
+    }
+  }
+
+  /* For typical RGBA images we let OIIO convert to associated alpha,
+   * but some types we want to leave the RGB channels untouched. */
+  associate_alpha = associate_alpha && !(ColorSpaceManager::colorspace_is_data(colorspace) ||
+                                         alpha_type == IMAGE_ALPHA_IGNORE ||
+                                         alpha_type == IMAGE_ALPHA_CHANNEL_PACKED);
+
+  /* Convert average color to scene linear colorspace. */
+  if (!is_zero(average_color) && colorspace != u_colorspace_raw) {
+    if (colorspace == u_colorspace_srgb) {
+      average_color = color_srgb_to_linear_v4(average_color);
+    }
+    else {
+      ColorSpaceManager::to_scene_linear(colorspace, &average_color.x, 1, 1, 1, true, false);
     }
   }
 }
@@ -259,7 +260,7 @@ bool ImageLoader::is_vdb_loader() const
 
 /* Image Manager */
 
-ImageManager::ImageManager(const DeviceInfo &info, const SceneParams &params)
+ImageManager::ImageManager(const DeviceInfo & /*info*/, const SceneParams &params)
 {
   need_update_ = true;
   animation_frame = 0;
@@ -267,9 +268,6 @@ ImageManager::ImageManager(const DeviceInfo &info, const SceneParams &params)
   use_texture_cache = params.use_texture_cache;
   auto_texture_cache = params.auto_texture_cache;
   texture_cache_path = params.texture_cache_path;
-
-  /* Set image limits */
-  features.has_nanovdb = info.has_nanovdb;
 }
 
 ImageManager::~ImageManager()
@@ -310,37 +308,14 @@ void ImageManager::load_image_metadata(Image *img)
   metadata = ImageMetaData();
   metadata.colorspace = img->params.colorspace;
 
-  if (img->loader->load_metadata(features, metadata)) {
+  if (img->loader->load_metadata(metadata)) {
     assert(metadata.type != IMAGE_DATA_NUM_TYPES);
   }
   else {
     metadata.type = IMAGE_DATA_TYPE_BYTE4;
   }
 
-  metadata.detect_colorspace();
-
-  /* For typical RGBA images we let OIIO convert to associated alpha,
-   * but some types we want to leave the RGB channels untouched. */
-  metadata.associate_alpha = metadata.associate_alpha &&
-                             !(ColorSpaceManager::colorspace_is_data(img->params.colorspace) ||
-                               img->params.alpha_type == IMAGE_ALPHA_IGNORE ||
-                               img->params.alpha_type == IMAGE_ALPHA_CHANNEL_PACKED);
-
-  assert(features.has_nanovdb || (metadata.type != IMAGE_DATA_TYPE_NANOVDB_FLOAT ||
-                                  metadata.type != IMAGE_DATA_TYPE_NANOVDB_FLOAT3 ||
-                                  metadata.type != IMAGE_DATA_TYPE_NANOVDB_FPN ||
-                                  metadata.type != IMAGE_DATA_TYPE_NANOVDB_FP16));
-
-  /* Convert average color to scene linear colorspace. */
-  if (!is_zero(metadata.average_color) && metadata.colorspace != u_colorspace_raw) {
-    if (metadata.colorspace == u_colorspace_srgb) {
-      metadata.average_color = color_srgb_to_linear_v4(metadata.average_color);
-    }
-    else {
-      ColorSpaceManager::to_scene_linear(
-          metadata.colorspace, &metadata.average_color.x, 1, 1, 1, true, false);
-    }
-  }
+  metadata.finalize(img->params.alpha_type);
 
   img->need_metadata = false;
 }
@@ -426,7 +401,7 @@ size_t ImageManager::add_image_slot(unique_ptr<ImageLoader> &&loader,
 
   /* Change image to use tx file if supported. */
   if (use_texture_cache) {
-    loader->resolve_texture_cache(auto_texture_cache, texture_cache_path);
+    loader->resolve_texture_cache(auto_texture_cache, texture_cache_path, params.alpha_type);
   }
 
   const thread_scoped_lock device_lock(images_mutex);
@@ -526,10 +501,10 @@ static bool conform_pixels_to_metadata_type(const ImageManager::Image *img,
 
     if (channels == 2) {
       /* Grayscale + alpha to RGBA. */
-      for (int64_t j = height - 1; j > 0; j--) {
+      for (int64_t j = height - 1; j >= 0; j--) {
         StorageType *out_pixels = pixels + j * y_stride * 4;
         StorageType *in_pixels = pixels + j * y_stride * x_stride;
-        for (int64_t i = width - 1; i > 0; i--) {
+        for (int64_t i = width - 1; i >= 0; i--) {
           out_pixels[i * 4 + 3] = in_pixels[i * x_stride + 1];
           out_pixels[i * 4 + 2] = in_pixels[i * x_stride + 0];
           out_pixels[i * 4 + 1] = in_pixels[i * x_stride + 0];
@@ -539,10 +514,10 @@ static bool conform_pixels_to_metadata_type(const ImageManager::Image *img,
     }
     else if (channels == 3) {
       /* RGB to RGBA. */
-      for (int64_t j = height - 1; j > 0; j--) {
+      for (int64_t j = height - 1; j >= 0; j--) {
         StorageType *out_pixels = pixels + j * y_stride * 4;
         StorageType *in_pixels = pixels + j * y_stride * x_stride;
-        for (int64_t i = width - 1; i > 0; i--) {
+        for (int64_t i = width - 1; i >= 0; i--) {
           out_pixels[i * 4 + 3] = one;
           out_pixels[i * 4 + 2] = in_pixels[i * x_stride + 2];
           out_pixels[i * 4 + 1] = in_pixels[i * x_stride + 1];
@@ -552,10 +527,10 @@ static bool conform_pixels_to_metadata_type(const ImageManager::Image *img,
     }
     else if (channels == 1) {
       /* Grayscale to RGBA. */
-      for (int64_t j = height - 1; j > 0; j--) {
+      for (int64_t j = height - 1; j >= 0; j--) {
         StorageType *out_pixels = pixels + j * y_stride * 4;
         StorageType *in_pixels = pixels + j * y_stride * x_stride;
-        for (int64_t i = width - 1; i > 0; i--) {
+        for (int64_t i = width - 1; i >= 0; i--) {
           out_pixels[i * 4 + 3] = one;
           out_pixels[i * 4 + 2] = in_pixels[i * x_stride];
           out_pixels[i * 4 + 1] = in_pixels[i * x_stride];
@@ -725,18 +700,16 @@ bool ImageManager::file_load_image(Device *device, Image *img, const int texture
                              &scaled_height,
                              &scaled_depth);
 
-    StorageType *texture_pixels;
-
-    texture_pixels = image_cache
-                         .alloc_full(device,
-                                     img->metadata.type,
-                                     img->params.interpolation,
-                                     img->params.extension,
-                                     width,
-                                     height,
-                                     img->texture_slot)
-                         .data<StorageType>();
-    memcpy(texture_pixels, &scaled_pixels[0], scaled_pixels.size() * sizeof(StorageType));
+    StorageType *texture_pixels = image_cache
+                                      .alloc_full(device,
+                                                  img->metadata.type,
+                                                  img->params.interpolation,
+                                                  img->params.extension,
+                                                  scaled_width,
+                                                  scaled_height,
+                                                  img->texture_slot)
+                                      .data<StorageType>();
+    std::copy_n(scaled_pixels.data(), scaled_pixels.size(), texture_pixels);
   }
 
   return true;

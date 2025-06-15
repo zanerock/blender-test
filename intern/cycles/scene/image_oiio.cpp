@@ -4,6 +4,7 @@
 
 #include "scene/image_oiio.h"
 
+#include "scene/image.h"
 #include "util/image.h"
 #include "util/log.h"
 #include "util/path.h"
@@ -42,7 +43,8 @@ static bool texture_cache_file_outdated(const string &filepath, const string &tx
 }
 
 bool OIIOImageLoader::resolve_texture_cache(const bool auto_generate,
-                                            const string &texture_cache_path)
+                                            const string &texture_cache_path,
+                                            const ImageAlphaType alpha_type)
 {
   /* Nothing to do if file doesn't even exist. */
   const string &filepath = get_filepath();
@@ -122,6 +124,12 @@ bool OIIOImageLoader::resolve_texture_cache(const bool auto_generate,
   /* TODO: configspec.attribute("maketx:full_command_line", full_command_line); */
   /* TODO: configspec.attribtue("maketx:set_full_to_pixels", true); */
 
+  /* TODO: make associate alpha match Blender logic exactly. */
+  ImageMetaData metadata;
+  load_metadata(metadata);
+  metadata.finalize(alpha_type);
+  configspec.attribute("maketx:ignore_unassoc", !metadata.associate_alpha);
+
   OIIO::ImageBufAlgo::MakeTextureMode mode = OIIO::ImageBufAlgo::MakeTxTexture;
   std::stringstream outstream;
 
@@ -180,8 +188,7 @@ static bool load_metadata_color(const ImageSpec &spec, const char *name, float4 
   }
 }
 
-bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
-                                    ImageMetaData &metadata)
+bool OIIOImageLoader::load_metadata(ImageMetaData &metadata)
 {
   /* Perform preliminary checks, with meaningful logging. */
   const string &filepath = get_filepath();
@@ -201,7 +208,12 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
   }
 
   ImageSpec spec;
-  if (!in->open(filepath, spec)) {
+  ImageSpec config = ImageSpec();
+
+  /* Load without automatic OIIO alpha conversion. */
+  config.attribute("oiio:UnassociatedAlpha", 1);
+
+  if (!in->open(filepath, spec, config)) {
     VLOG_WARNING << "File " << filepath << " failed to open.";
     return false;
   }
@@ -281,10 +293,7 @@ bool OIIOImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
 
   if (spec.tile_width) {
     // TODO: only do for particular file formats?
-    if (metadata.associate_alpha) {
-      VLOG_DEBUG << "Image " << name() << "has tiles, but expected associated alpha";
-    }
-    else if (!is_power_of_two(spec.tile_width)) {
+    if (!is_power_of_two(spec.tile_width)) {
       VLOG_DEBUG << "Image " << name() << "has tiles, but tile size not power of two ("
                  << spec.tile_width << ")";
     }

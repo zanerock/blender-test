@@ -138,7 +138,7 @@ VDBImageLoader::VDBImageLoader(const string &grid_name) : grid_name(grid_name) {
 
 VDBImageLoader::~VDBImageLoader() = default;
 
-bool VDBImageLoader::load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata)
+bool VDBImageLoader::load_metadata(ImageMetaData &metadata)
 {
 #ifdef WITH_OPENVDB
   if (!grid) {
@@ -155,7 +155,7 @@ bool VDBImageLoader::load_metadata(const ImageDeviceFeatures &features, ImageMet
 
   /* Set data type. */
 #  ifdef WITH_NANOVDB
-  if (features.has_nanovdb) {
+  {
     /* NanoVDB expects no inactive leaf nodes. */
 #    if 0
     openvdb::FloatGrid &pruned_grid = *openvdb::gridPtrCast<openvdb::FloatGrid>(grid);

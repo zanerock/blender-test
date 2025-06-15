@@ -23,7 +23,7 @@ class BlenderImageLoader : public ImageLoader {
                      const int tile_number,
                      const bool is_preview_render);
 
-  bool load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata) override;
+  bool load_metadata(ImageMetaData &metadata) override;
   bool load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels) override;
   string name() const override;
   bool equals(const ImageLoader &other) const override;
@@ -39,7 +39,7 @@ class BlenderPointDensityLoader : public ImageLoader {
  public:
   BlenderPointDensityLoader(BL::Depsgraph depsgraph, BL::ShaderNodeTexPointDensity b_node);
 
-  bool load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata) override;
+  bool load_metadata(ImageMetaData &metadata) override;
   bool load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels) override;
   string name() const override;
   bool equals(const ImageLoader &other) const override;

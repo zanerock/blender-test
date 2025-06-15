@@ -58,38 +58,32 @@ class ImageParams {
 class ImageMetaData {
  public:
   /* Set by ImageLoader.load_metadata(). */
-  int channels;
-  int64_t width, height, depth;
-  int64_t byte_size;
-  ImageDataType type;
+  int channels = 0;
+  int64_t width = 0, height = 0, depth = 0;
+  int64_t byte_size = 0;
+  ImageDataType type = IMAGE_DATA_NUM_TYPES;
 
   /* Optional color space, defaults to raw. */
-  ustring colorspace;
+  ustring colorspace = u_colorspace_raw;
   string colorspace_file_hint;
-  const char *colorspace_file_format;
+  const char *colorspace_file_format = "";
 
   /* Optional transform for 3D images. */
-  bool use_transform_3d;
-  Transform transform_3d;
+  bool use_transform_3d = false;
+  Transform transform_3d = transform_identity();
 
   /* Automatically set. */
-  bool compress_as_srgb;
-  bool associate_alpha;
+  bool compress_as_srgb = false;
+  bool associate_alpha = false;
 
   /* Tiling */
-  uint32_t tile_size;
-  float4 average_color;
+  uint32_t tile_size = 0;
+  float4 average_color = zero_float4();
 
   ImageMetaData();
   bool operator==(const ImageMetaData &other) const;
   bool is_float() const;
-  void detect_colorspace();
-};
-
-/* Information about supported features that Image loaders can use. */
-class ImageDeviceFeatures {
- public:
-  bool has_nanovdb;
+  void finalize(const ImageAlphaType alpha_type);
 };
 
 /* Image loader base class, that can be subclassed to load image data
@@ -101,13 +95,14 @@ class ImageLoader {
 
   /* Enable use of the texture cache for this image, if supported by the image loader. */
   virtual bool resolve_texture_cache(const bool /*auto_generate*/,
-                                     const string & /*texture_cache_path*/)
+                                     const string & /*texture_cache_path*/,
+                                     const ImageAlphaType /*alpha_type*/)
   {
     return false;
   }
 
   /* Load metadata without actual image yet, should be fast. */
-  virtual bool load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata) = 0;
+  virtual bool load_metadata(ImageMetaData &metadata) = 0;
 
   /* Load full image pixels. */
   virtual bool load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels) = 0;
@@ -245,8 +240,6 @@ class ImageManager {
 
  private:
   bool need_update_;
-
-  ImageDeviceFeatures features;
 
   thread_mutex device_mutex;
   thread_mutex images_mutex;

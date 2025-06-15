@@ -42,8 +42,7 @@ BlenderImageLoader::BlenderImageLoader(Image *b_image,
   }
 }
 
-bool BlenderImageLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
-                                       ImageMetaData &metadata)
+bool BlenderImageLoader::load_metadata(ImageMetaData &metadata)
 {
   bool is_float = false;
 
@@ -259,8 +258,7 @@ BlenderPointDensityLoader::BlenderPointDensityLoader(BL::Depsgraph b_depsgraph,
 {
 }
 
-bool BlenderPointDensityLoader::load_metadata(const ImageDeviceFeatures & /*features*/,
-                                              ImageMetaData &metadata)
+bool BlenderPointDensityLoader::load_metadata(ImageMetaData &metadata)
 {
   metadata.channels = 4;
   metadata.width = b_node.resolution();

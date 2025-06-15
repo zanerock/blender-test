@@ -841,46 +841,17 @@ kernel_image_interp(KernelGlobals kg, const int id, float u, float v, differenti
   const ccl_global KernelImageTexture &tex = kernel_data_fetch(image_textures, id);
   const ccl_global KernelImageInfo *info;
 
-  /* Wrapping. */
-  // TODO: redundant with wrapping in image sampling, but that one is currently
-  // needed for full image sampling. Would be simpler if everything was tiled.
-  switch (tex.extension) {
-    case EXTENSION_REPEAT:
-      u = u - floorf(u);
-      v = v - floorf(v);
-      break;
-    case EXTENSION_CLIP:
-      // TODO: implement this somehow with interpolation
-      if (u < 0.0f || u > 1.0f || v < 0.0f || v > 1.0f) {
-        return zero_float4();
-      }
-      break;
-    case EXTENSION_EXTEND:
-      u = clamp(u, 0.0f, 1.0f);
-      v = clamp(v, 0.0f, 1.0f);
-      break;
-    case EXTENSION_MIRROR:
-      // TODO: replace fmod with u - floor(u)?
-      u = fmodf(fabsf(u + (u < 0)), 2.0f);
-      if (u >= 1.0f) {
-        u = 2.0f - u - 1.0f;
-      }
-      v = fmodf(fabsf(v + (v < 0)), 2.0f);
-      if (v >= 1.0f) {
-        v = 2.0f - v - 1.0f;
-      }
-      break;
-    default:
-      kernel_assert(0);
-      return zero_float4();
-  }
-
   float2 xy = zero_float2();
 
   if (tex.tile_descriptor_offset != UINT_MAX) {
+    /* Wrapping. */
+    float2 uv = make_float2(u, v);
+    if (!kernel_image_tile_wrap(ExtensionType(tex.extension), uv)) {
+      return zero_float4();
+    }
+
     /* Tile mapping */
-    const KernelTileDescriptor tile_descriptor = kernel_image_tile_map(
-        kg, tex, make_float2(u, v), duv, xy);
+    const KernelTileDescriptor tile_descriptor = kernel_image_tile_map(kg, tex, uv, duv, xy);
 
     if (!kernel_tile_descriptor_loaded(tile_descriptor)) {
       if (tile_descriptor == KERNEL_TILE_LOAD_FAILED) {
@@ -899,9 +870,8 @@ kernel_image_interp(KernelGlobals kg, const int id, float u, float v, differenti
     }
 
     /* Convert to pixel space. */
-    xy = make_float2(u * tex.width, v * tex.height);
-
     info = &kernel_data_fetch(image_info, tex.slot);
+    xy = make_float2(u * info->width, v * info->height);
   }
 
   if (UNLIKELY(!info->data)) {

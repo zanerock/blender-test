@@ -24,7 +24,7 @@ class BlenderSmokeLoader : public ImageLoader {
         *static_cast<const ::Mesh *>(b_ob.data().ptr.data), texspace_loc, texspace_size);
   }
 
-  bool load_metadata(const ImageDeviceFeatures & /*features*/, ImageMetaData &metadata) override
+  bool load_metadata(ImageMetaData &metadata) override
   {
     if (!b_domain) {
       return false;

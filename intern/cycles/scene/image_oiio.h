@@ -16,9 +16,11 @@ class OIIOImageLoader : public ImageLoader {
   OIIOImageLoader(const string &filepath);
   ~OIIOImageLoader() override;
 
-  bool resolve_texture_cache(const bool auto_generate, const string &texture_cache_path) override;
+  bool resolve_texture_cache(const bool auto_generate,
+                             const string &texture_cache_path,
+                             const ImageAlphaType alpha_type) override;
 
-  bool load_metadata(const ImageDeviceFeatures &features, ImageMetaData &metadata) override;
+  bool load_metadata(ImageMetaData &metadata) override;
 
   bool load_pixels_full(const ImageMetaData &metadata, uint8_t *pixels) override;
 
